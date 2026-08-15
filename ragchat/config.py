@@ -13,6 +13,15 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
+# Load .env (gitignored) if present, so local secrets don't need to be exported
+# in the shell. python-dotenv is installed; failure to load is non-fatal.
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv()
+except Exception:
+    pass
+
 import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -26,10 +35,18 @@ EVAL_DIR = ROOT / "eval"
 
 class Settings:
     def __init__(self) -> None:
+        # Endpoint + key. Default now points at Google's OpenAI-compatible
+        # endpoint so a Gemini AI Studio key works directly. To use the class
+        # proxy instead, set PROXY_BASE_URL back to the proxy /v1 and supply
+        # ANTHROPIC_AUTH_TOKEN. GEMINI_API_KEY is the Gemini Studio key;
+        # ANTHROPIC_AUTH_TOKEN is kept as a fallback for the class proxy.
         self.proxy_base_url = os.environ.get(
-            "PROXY_BASE_URL", "https://llmproxy.mrchloep.com/v1"
+            "PROXY_BASE_URL",
+            "https://generativelanguage.googleapis.com/v1beta/openai/",
         )
-        self.api_key = os.environ.get("ANTHROPIC_AUTH_TOKEN", "")
+        self.api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get(
+            "ANTHROPIC_AUTH_TOKEN", ""
+        )
         self.db_url = os.environ.get("DATABASE_URL", f"sqlite:///{DB_PATH}")
         self.session_secret = os.environ.get("SESSION_SECRET", "dev-session-secret")
         self.allowed_root = Path(

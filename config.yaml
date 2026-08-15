@@ -3,9 +3,14 @@ chunking:
   chunk_size: 512
   splitter: recursive
 embedding:
-  model: text-embedding-005
+  # Google Gemini embedding model (3072-dim) served via the OpenAI-compatible
+  # endpoint. Switching from text-embedding-005 auto-creates a fresh per-(user,
+  # model) Chroma collection (see ragchat/store.py), so no manual reindex flag
+  # is needed — but the eval corpus will be re-indexed under the new dimension.
+  model: gemini-embedding
 generation:
-  llm_model: qwen3.8-max
+  # Google Gemini chat model served via the OpenAI-compatible endpoint.
+  llm_model: gemini-2.5-flash
   temperature: 0.0
   # Web augmentation is a FALLBACK ONLY (PRD F13): when on, web results are
   # appended as labeled [web] chunks only when the user's own documents do

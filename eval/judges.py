@@ -9,8 +9,12 @@ from __future__ import annotations
 import re
 
 from ragchat.embeddings import openai_client
+from ragchat.config import settings
 
-JUDGE_MODEL = "qwen3.8-max"
+# Judge model follows the deployment default (now gemini-2.5-flash on Google's
+# endpoint). Was previously hard-coded to qwen3.8-max which would 404 on the
+# Gemini endpoint — derive it from settings so it tracks config.yaml.
+JUDGE_MODEL = settings.default_llm_model
 
 
 def _judge(prompt: str) -> str:
