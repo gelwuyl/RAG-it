@@ -7,6 +7,11 @@ embedding:
 generation:
   llm_model: qwen3.8-max
   temperature: 0.0
+  # Web augmentation is a FALLBACK ONLY (PRD F13): when on, web results are
+  # appended as labeled [web] chunks only when the user's own documents do
+  # not clear the relevance threshold. It never overrides a grounded answer.
+  # Default off so answers stay strictly grounded in the user's documents.
+  web_augmentation: false
 query:
   query_rewrite: true
 retrieval:

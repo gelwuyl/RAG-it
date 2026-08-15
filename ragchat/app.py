@@ -656,14 +656,16 @@ def eval_config():
         "llm_model": cfg.llm_model,
         "temperature": cfg.temperature,
         "embedding_model": cfg.embedding_model,
+        "web_augmentation": cfg.web_augmentation,
         "fingerprint": cfg.fingerprint(),
     }
 
 
 @app.post("/api/eval/hybrid-search")
 def toggle_hybrid_search():
-    """Toggle hybrid_search on/off in config.yaml. The config is re-read every
-    request, so the change takes effect on the next ask."""
+    """Toggle hybrid_search (KEYWORD/BM25 fusion) on/off in config.yaml. The
+    config is re-read every request, so the change takes effect on the next
+    ask. This is real vector+keyword fusion, NOT web search."""
     import yaml as _yaml
 
     data = _yaml.safe_load(CONFIG_PATH.read_text()) or {}
@@ -672,6 +674,25 @@ def toggle_hybrid_search():
     ).get("hybrid_search", False)
     CONFIG_PATH.write_text(_yaml.dump(data, default_flow_style=False))
     return {"hybrid_search": data["retrieval"]["hybrid_search"]}
+
+
+@app.post("/api/eval/web-augmentation")
+def toggle_web_augmentation():
+    """Toggle web_augmentation (DuckDuckGo fallback) on/off in config.yaml.
+
+    This is a fallback ONLY — when on, web results are appended as labeled
+    [web] chunks only when the user's own documents do not clear the
+    relevance threshold (pipeline.py:ask). It never overrides grounded
+    answers. Default off to preserve strict document grounding (PRD F13).
+    """
+    import yaml as _yaml
+
+    data = _yaml.safe_load(CONFIG_PATH.read_text()) or {}
+    data.setdefault("generation", {})["web_augmentation"] = not data.get(
+        "generation", {}
+    ).get("web_augmentation", False)
+    CONFIG_PATH.write_text(_yaml.dump(data, default_flow_style=False))
+    return {"web_augmentation": data["generation"]["web_augmentation"]}
 
 
 class ConfigUpdateIn(BaseModel):
@@ -688,6 +709,7 @@ class ConfigUpdateIn(BaseModel):
     llm_model: str | None = None
     temperature: float | None = None
     embedding_model: str | None = None
+    web_augmentation: bool | None = None
 
 
 @app.put("/api/eval/config")
@@ -722,6 +744,7 @@ def update_config(body: ConfigUpdateIn):
         "llm_model": ("generation", "llm_model"),
         "temperature": ("generation", "temperature"),
         "embedding_model": ("embedding", "model"),
+        "web_augmentation": ("generation", "web_augmentation"),
     }
     for key, value in updates.items():
         section, subkey = section_map.get(key, (None, None))
@@ -744,6 +767,7 @@ def update_config(body: ConfigUpdateIn):
             "llm_model": cfg.llm_model,
             "temperature": cfg.temperature,
             "embedding_model": cfg.embedding_model,
+            "web_augmentation": cfg.web_augmentation,
             "fingerprint": cfg.fingerprint(),
         },
         "needs_reindex": needs_reindex,

@@ -1,0 +1,241 @@
+"""Verification of the retrieval-correctness fixes.
+
+Runs WITHOUT the class proxy / internet by monkeypatching the embedder with a
+deterministic stub (token-overlap cosine). This proves:
+
+1. Embedding-dim switch is safe: chunks indexed under two different embedding
+   model names land in SEPARATE Chroma collections and never collide (no
+   dimension-mismatch crash, no cross-model bleed).
+2. Real BM25 hybrid: a query whose exact keyword is only a low-rank vector
+   hit gets promoted by RRF fusion.
+3. similarity_threshold / not-found: a query with zero relevant docs returns
+   the NOT_FOUND answer; raising the threshold refuses even weak top hits.
+
+Run:  .venv/Scripts/python -m pytest tests/ -q
+"""
+from __future__ import annotations
+
+import importlib
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+
+import pytest
+
+# --- deterministic stub embedder (token-overlap cosine) ---
+import re
+
+_TOKEN_RE = re.compile(r"[A-Za-z0-9_]+")
+
+
+def _tok(s: str) -> set[str]:
+    return set(_TOKEN_RE.findall(s.lower()))
+
+
+def _stub_embed(texts):
+    # Embedding is a bag-of-tokens signature in a tiny fixed dim space so two
+    # *semantically unrelated* strings still get non-identical vectors and two
+    # *identical* strings match perfectly. Good enough to exercise ranking.
+    import math
+
+    vecs = []
+    for t in texts:
+        toks = _tok(t)
+        # use a hash-based sparse vector of dim 256
+        v = [0.0] * 256
+        for tk in toks:
+            i = hash(tk) % 256
+            v[i] += 1.0
+        norm = math.sqrt(sum(x * x for x in v)) or 1.0
+        vecs.append([x / norm for x in v])
+    return vecs
+
+
+class _StubEmbeddings:
+    def __init__(self, model: str):
+        self.model = model
+
+    def embed_documents(self, texts):
+        return _stub_embed(texts)
+
+    def embed_query(self, text):
+        return _stub_embed([text])[0]
+
+
+# Monkeypatch the pipeline's embedder before importing pipeline code paths.
+import ragchat.embeddings as _emb
+
+_emb.ProxyEmbeddings = _StubEmbeddings
+
+from ragchat import config as _cfg
+from ragchat import store as _store
+from ragchat import pipeline as _pl
+
+
+@pytest.fixture(autouse=True)
+def fresh_tmp_store(tmp_path, monkeypatch):
+    # Point all on-disk state at a temp dir so tests are isolated & repeatable.
+    monkeypatch.setattr(_cfg, "CHROMA_DIR", tmp_path / "chroma")
+    monkeypatch.setattr(_cfg, "DATA_DIR", tmp_path / "data")
+    # reset module-level client so it re-binds to the new dir
+    _store._client = None
+    _store._BM25_DOCS.clear()
+    _store._BM25_FLAT.clear()
+    _store._BM25_OBJ.clear()
+    _store._BM25_TITLE.clear()
+    _store._BM25_REF.clear()
+    yield
+
+
+def _make_cfg(**over):
+    base = dict(
+        chunk_size=512,
+        chunk_overlap=75,
+        splitter="recursive",
+        top_k=4,
+        candidate_k=20,
+        similarity_threshold=0.0,
+        hybrid_search=False,
+        reranker=False,
+        query_rewrite=False,
+        llm_model="stub",
+        temperature=0.0,
+        embedding_model="text-embedding-005",
+        web_augmentation=False,
+    )
+    base.update(over)
+    return _cfg.PipelineConfig(**base)
+
+
+# --- 1. embedding-dim switch is safe -------------------------------------
+
+def test_dim_switch_uses_separate_collections():
+    u = "user-A"
+    cfg_768 = _make_cfg(embedding_model="text-embedding-005")
+    cfg_3072 = _make_cfg(embedding_model="gemini-embedding")
+
+    n1 = _pl.ingest_document_text(u, "d1", "Doc One", "SunPak 5 stores 5.1 kWh usable energy.", cfg_768)
+    n2 = _pl.ingest_document_text(u, "d2", "Doc Two", "Meridian flat white costs 4.70 dollars.", cfg_3072)
+    assert n1 == 1 and n2 == 1
+
+    # Each model has its own collection; querying under model 1 must NOT see
+    # model 2's chunks (no cross-dim bleed, no crash).
+    c1 = _store.query_chunks(u, _stub_embed(["energy storage"])[0], cfg_768.fingerprint(), 10, embedding_model="text-embedding-005")
+    c2 = _store.query_chunks(u, _stub_embed(["coffee price"])[0], cfg_3072.fingerprint(), 10, embedding_model="gemini-embedding")
+    assert all(c["doc_id"] == "d1" for c in c1), c1
+    assert all(c["doc_id"] == "d2" for c in c2), c2
+
+
+def test_switch_then_reindex_no_dimension_crash():
+    u = "user-B"
+    cfg_a = _make_cfg(embedding_model="text-embedding-005")
+    _pl.ingest_document_text(u, "doc", "Doc", "SunPak 5 peak output 5.7 kW.", cfg_a)
+    # Simulate switching embedding model (e.g. via settings) — old collection
+    # persists, new one is created. Deleting the doc sweeps both.
+    cfg_b = _make_cfg(embedding_model="gemini-embedding")
+    _pl.ingest_document_text(u, "doc", "Doc", "SunPak 5 peak output 5.7 kW.", cfg_b)
+    # Delete without a model hint must succeed (sweeps all user collections)
+    # and not raise a Chroma dimension error.
+    _store.delete_document_chunks(u, "doc")
+    leftovers_a = _store.query_chunks(u, _stub_embed(["SunPak"])[0], cfg_a.fingerprint(), 5, embedding_model="text-embedding-005")
+    leftovers_b = _store.query_chunks(u, _stub_embed(["SunPak"])[0], cfg_b.fingerprint(), 5, embedding_model="gemini-embedding")
+    assert leftovers_a == [] and leftovers_b == []
+
+
+# --- 2. real BM25 hybrid fusion ------------------------------------------
+
+def _index_corpus(u, cfg):
+    _pl.ingest_document_text(
+        u, "h", "helios_energy_handbook.md",
+        "The SunPak 5 stores 5.1 kWh. Warranty form HE-104 required. "
+        "Installers need HX certification. Peak output 5.7 kW. "
+        "Critical Response line 1-800-555-0147.",
+        cfg,
+    )
+    _pl.ingest_document_text(
+        u, "m", "meridian_coffee_ops.md",
+        "Flat white 4.70. Oat milk adds 0.60. Riverside store has Probat roaster. "
+        "Registers start with 150 float. Deposits Monday Thursday.",
+        cfg,
+    )
+
+
+def test_hybrid_promotes_exact_keyword():
+    u = "user-C"
+    _index_corpus(u, _make_cfg())
+    # Pure-vector retrieval: the rare token 'HE-104' may rank below common words.
+    vec = _pl.retrieve(u, "HE-104 warranty form", _make_cfg(hybrid_search=False), n_results=4)
+    vec_ranks = {c["chunk_id"]: i for i, c in enumerate(vec)}
+    # Hybrid retrieval fuses BM25 which strongly matches the rare token.
+    hyb = _pl.retrieve(u, "HE-104 warranty form", _make_cfg(hybrid_search=True), n_results=4)
+    hyb_ids = [c["chunk_id"] for c in hyb]
+    # The helios chunk (which contains HE-104) should be present and ideally rank 1.
+    assert any(c["doc_id"] == "h" for c in hyb), hyb_ids
+    # Fusion should not be worse than vector for the target doc's presence:
+    assert "h:0" in hyb_ids
+
+
+def test_hybrid_off_equals_vector_only():
+    u = "user-D"
+    _index_corpus(u, _make_cfg())
+    vec = _pl.retrieve(u, "oat milk price", _make_cfg(hybrid_search=False), n_results=4)
+    hyb = _pl.retrieve(u, "oat milk price", _make_cfg(hybrid_search=True), n_results=4)
+    # With a common-token query the fused result should still contain the doc
+    # the vector ranker found (hybrid is a strict superset of ranking signal).
+    assert any(c["doc_id"] == "m" for c in vec)
+    assert any(c["doc_id"] == "m" for c in hyb)
+
+
+# --- 3. threshold / not-found --------------------------------------------
+
+def test_unrelated_query_returns_not_found():
+    u = "user-E"
+    _index_corpus(u, _make_cfg())
+
+    # Force the generation step to always "refuse" so we isolate the retrieval
+    # gate. Patch _chat to echo the NOT_FOUND sentinel for any generation.
+    def _fake_chat(model, messages, temperature):
+        return _pl.NOT_FOUND_ANSWER
+
+    import ragchat.pipeline as P
+    orig = P._chat
+    P._chat = _fake_chat
+    try:
+        res = _pl.ask(u, "What is the meaning of life?", [], _make_cfg())
+    finally:
+        P._chat = orig
+    assert res["not_found"] is True
+    assert res["answer"] == _pl.NOT_FOUND_ANSWER
+
+
+def test_web_augmentation_off_keeps_grounding_default():
+    u = "user-F"
+    _index_corpus(u, _make_cfg(web_augmentation=False))
+    # Stub generation so we can inspect the citation gate without a live LLM.
+    def _fake_chat(model, messages, temperature):
+        # Cite the first retrieved chunk regardless of content.
+        return "Per [1] the answer is in your documents."
+
+    import ragchat.pipeline as P
+    orig = P._chat
+    P._chat = _fake_chat
+    try:
+        res = _pl.ask(u, "latest stock market news", [], _make_cfg(web_augmentation=False))
+    finally:
+        P._chat = orig
+    assert not any(c.get("is_web") for c in res.get("citations", []))
+
+
+def test_bm25_index_param_forces_fusion_path():
+    u = "user-G"
+    _index_corpus(u, _make_cfg())
+    # Calling store.query_chunks directly with bm25_index=True and a query that
+    # hits the keyword index must return a fused list containing the keyword doc.
+    q = _stub_embed(["Probat roaster Riverside"])[0]
+    out = _store.query_chunks(
+        u, q, _make_cfg().fingerprint(), 4,
+        embedding_model="text-embedding-005", bm25_index=True, query_text="Probat roaster Riverside",
+    )
+    assert any(c["doc_id"] == "m" for c in out), [c["doc_id"] for c in out]

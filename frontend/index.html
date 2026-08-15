@@ -71,8 +71,8 @@
           <div class="pane-footer">
             <button id="reindex-btn" class="btn btn-small" title="Re-chunk all sources under the current config">Re-index all</button>
             <div class="hybrid-row">
-              <span class="hybrid-label">Web search</span>
-              <button id="hybrid-toggle" class="btn btn-small" title="Toggle web search augmentation on/off">Off</button>
+              <span class="hybrid-label" title="Vector + BM25 keyword fusion (real hybrid search, not web)">Keyword fusion</span>
+              <button id="hybrid-toggle" class="btn btn-small" title="Toggle BM25 keyword fusion on/off (improves exact-match retrieval; never adds web text)">Off</button>
             </div>
           </div>
         </aside>
@@ -167,7 +167,7 @@
               </select>
             </div>
             <div class="field">
-              <label for="set-hybrid-search">Web search</label>
+              <label for="set-hybrid-search">Keyword fusion (BM25)</label>
               <select id="set-hybrid-search">
                 <option value="false">Off</option>
                 <option value="true">On</option>

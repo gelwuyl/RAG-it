@@ -41,9 +41,25 @@ class Settings:
         self.google_redirect_uri = os.environ.get("GOOGLE_REDIRECT_URI", "")
         # Default generation model; overridden by config.yaml
         self.default_llm_model = os.environ.get("RAG_LLM_MODEL", "qwen3.8-max")
-        self.default_embedding_model = os.environ.get(
-            "RAG_EMBEDDING_MODEL", "text-embedding-005"
+        # Default embedding model name as exposed by the proxy. The proxy serves
+        # "text-embedding-005" (768d) and "gemini-embedding" (3072d). We normalize
+        # to the bare modelspec so the same physical model from different env
+        # overrides still collides to one Chroma collection.
+        self.default_embedding_model = normalize_embedding_model(
+            os.environ.get("RAG_EMBEDDING_MODEL", "text-embedding-005")
         )
+
+
+def normalize_embedding_model(name: str) -> str:
+    """Map a possibly-prefixed proxy embedding modelspec to its bare name.
+
+    A bare name or one already under the proxy path both resolve to the same
+    Chroma collection, so re-pointing RAG_EMBEDDING_MODEL at the identical
+    model does not create a duplicate (empty) index.
+    """
+    return name.replace("text-embedding-3-small/", "").replace(
+        "models/", ""
+    ) or "text-embedding-005"
 
 
 settings = Settings()
@@ -68,9 +84,15 @@ class PipelineConfig:
     llm_model: str
     temperature: float
     embedding_model: str
+    web_augmentation: bool
 
     def fingerprint(self) -> str:
-        """Hash of the index-affecting settings (PRD F18)."""
+        """Hash of the index-affecting settings (PRD F18).
+
+        Note: web_augmentation is NOT in the fingerprint — web results are
+        never embedded into the vector store, so they do not affect chunk
+        storage or retrieval from a user's own documents.
+        """
         raw = f"{self.chunk_size}|{self.chunk_overlap}|{self.splitter}|{self.embedding_model}"
         return hashlib.sha1(raw.encode()).hexdigest()[:12]
 
@@ -98,4 +120,5 @@ def load_config() -> PipelineConfig:
         llm_model=str(g.get("llm_model", settings.default_llm_model)),
         temperature=float(g.get("temperature", 0.0)),
         embedding_model=str(e.get("model", settings.default_embedding_model)),
+        web_augmentation=bool(g.get("web_augmentation", False)),
     )

@@ -253,6 +253,9 @@ async function refreshHybridToggle() {
   }
 }
 
+// Footer toggle controls real BM25 keyword fusion (vector + keyword RRF).
+// It is NOT web search — document grounding is unaffected. Web augmentation
+// is a separate, default-off fallback exposed elsewhere.
 $("hybrid-toggle").onclick = async () => {
   try {
     const r = await api("/api/eval/hybrid-search", { method: "POST" });
@@ -260,11 +263,11 @@ $("hybrid-toggle").onclick = async () => {
     if (r.hybrid_search) {
       btn.textContent = "On";
       btn.classList.add("on");
-      toast("Web search ON — answers will include web results");
+      toast("Keyword fusion ON — exact IDs/names surface better");
     } else {
       btn.textContent = "Off";
       btn.classList.remove("on");
-      toast("Web search OFF — answers from your documents only");
+      toast("Keyword fusion OFF — vector-only retrieval");
     }
   } catch (e) {
     toast(e.message, true);

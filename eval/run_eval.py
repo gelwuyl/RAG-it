@@ -25,7 +25,7 @@ sys.path.insert(0, str(ROOT))
 from ragchat.config import load_config  # noqa: E402
 from ragchat.embeddings import openai_client  # noqa: E402
 from ragchat.pipeline import NOT_FOUND_ANSWER, ask, ingest_document_text, retrieve  # noqa: E402
-from ragchat.store import get_client  # noqa: E402
+from ragchat.store import collection_name, get_client  # noqa: E402
 
 EVAL_USER = "__eval__"
 CORPUS_DIR = EVAL_DIR / "corpus"
@@ -35,8 +35,20 @@ JUDGE_MODEL = "qwen3.8-max"
 
 def reset_eval_collection() -> None:
     client = get_client()
+    # Collection names are now namespaced by (user, embedding model) in
+    # store.py, so delete the exact collection the eval will write to.
+    name = collection_name(EVAL_USER, cfg.embedding_model) if "cfg" in dir() else None
+    if name is None:
+        # cfg not yet loaded (shouldn't happen) — sweep any __eval__ collections
+        for col in client.list_collections():
+            if col.name.startswith("user-__eval__"):
+                try:
+                    client.delete_collection(col.name)
+                except Exception:
+                    pass
+        return
     try:
-        client.delete_collection("user-eval")
+        client.delete_collection(name)
     except Exception:
         pass
 

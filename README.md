@@ -24,9 +24,33 @@ account on the sign-in screen (see "Google OAuth" below to enable real OAuth).
 
 ### Configuration
 
-- **Pipeline knobs** — [config.yaml](config.yaml): chunk size/overlap,
-  splitter, top_k, similarity threshold, model, temperature. Hot-reloaded per
-  request except index-affecting ones (chunking + embedding model).
+## Pipeline knobs (config.yaml)
+
+- `chunking` — chunk_size, chunk_overlap, splitter (recursive | markdown_header |
+  semantic). Changing these invalidates stored chunks (fingerprint), so
+  re-index after editing.
+- `embedding.model` — embedding modelspec. **Switching models isolates your
+  chunks into a fresh Chroma collection** (Chroma fixes vector dimension per
+  collection), so old-model chunks are hidden until you re-index — no crash,
+  no cross-dimension bleed. Re-index after switching.
+- `retrieval.hybrid_search` — **real BM25 keyword fusion**: the vector top-k
+  and a BM25 keyword top-k are fused with reciprocal rank fusion (RRF). This
+  promotes exact-match terms (IDs, codes, names) that pure-vector search
+  misses. It does NOT add web text — document grounding is unaffected.
+- `retrieval.similarity_threshold` — minimum cosine similarity a chunk must
+  clear to be used. When nothing clears it, you get the explicit "not found"
+  answer (PRD F13). Leave at 0.0 and the pipeline applies a small safety
+  floor so noise-only hits still refuse.
+- `retrieval.top_k` / `candidate_k` — chunks handed to the LLM / the wider
+  candidate pool the reranker narrows.
+- `retrieval.reranker` — LLM cross-encoder scores candidates → top_k.
+- `generation.web_augmentation` — **fallback only**, default OFF. When ON,
+  web (DuckDuckGo) results are appended as labeled `[web]` chunks **only** when
+  the user's own documents do not clear the relevance threshold. It never
+  overrides a grounded answer. This is what the PRD called "hybrid_search";
+  the config key was split so BM25 fusion and web fallback are independently
+  controllable.
+- `generation.llm_model` / `temperature` — answering model + temperature.
 - **Secrets** — environment variables only:
   - `ANTHROPIC_AUTH_TOKEN` (already set in this workspace)
   - `RAG_ALLOWED_ROOT` — allowed root for folder sources (default: `$HOME`)
