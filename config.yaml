@@ -9,10 +9,9 @@ embedding:
   # collection (see ragchat/store.py), so no manual reindex flag is needed.
   model: gemini-embedding-001
 generation:
-  # Open-weight Gemma 3 27B instruct, served by Google AI Studio's
-  # OpenAI-compatible endpoint (generous free tier). Used for generation AND
-  # the eval LLM-as-judge.
-  llm_model: gemma-3-27b-it
+  # Open-weight Gemma 4 26B MoE instruct, served by Google AI Studio's
+  # OpenAI-compatible endpoint. Used for generation AND the eval LLM-as-judge.
+  llm_model: gemma-4-26b-it
   temperature: 0.0
   # Web augmentation is a FALLBACK ONLY (PRD F13): when on, web results are
   # appended as labeled [web] chunks only when the user's own documents do
