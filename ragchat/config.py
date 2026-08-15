@@ -52,9 +52,12 @@ class Settings:
         # "neon" (Postgres + pgvector, for Vercel/serverless deploy).
         self.vector_backend = os.environ.get("VECTOR_BACKEND", "chroma")
         # Postgres connection string for the Neon backend (pgvector). On Vercel
-        # this is injected from the Neon integration (DATABASE_URL).
-        self.pg_url = os.environ.get("PG_DATABASE_URL") or os.environ.get(
-            "DATABASE_URL", ""
+        # the Neon integration injects it as rag_gel_DATABASE_URL; fall back to
+        # PG_DATABASE_URL / DATABASE_URL for local or manual setup.
+        self.pg_url = (
+            os.environ.get("PG_DATABASE_URL")
+            or os.environ.get("rag_gel_DATABASE_URL")
+            or os.environ.get("DATABASE_URL", "")
         )
         self.session_secret = os.environ.get("SESSION_SECRET", "dev-session-secret")
         self.allowed_root = Path(
