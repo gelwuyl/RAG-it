@@ -3,14 +3,17 @@ chunking:
   chunk_size: 512
   splitter: recursive
 embedding:
-  # Google text-embedding-004 (768-dim) via the OpenAI-compatible endpoint.
-  # 768-dim keeps it UNDER pgvector's 2000-dim HNSW index ceiling (so ANN
-  # indexing works on Neon), and is Google's recommended/quality tier.
-  model: text-embedding-004
+  # Google gemini-embedding-001, requested at 768-dim via the OpenAI-compatible
+  # endpoint (see ragchat/embeddings.py dimensions=768). 768-dim keeps it UNDER
+  # pgvector's 2000-dim HNSW index ceiling (so ANN indexing works on Neon).
+  # text-embedding-004/005 do NOT exist on this proxy; only gemini-embedding-* do.
+  model: models/gemini-embedding-001
 generation:
-  # Open-weight Gemma 4 26B MoE instruct, served by Google AI Studio's
-  # OpenAI-compatible endpoint. Used for generation AND the eval LLM-as-judge.
-  llm_model: gemma-4-26b-it
+  # Gemma 4 26B instruct, served by Google AI Studio's OpenAI-compatible
+  # endpoint. Used for generation AND the eval LLM-as-judge. The proxy exposes
+  # it as models/gemma-4-26b-a4b-it (the bare "gemma-4-26b-it" is NOT in the
+  # live /v1/models catalog and 404s).
+  llm_model: models/gemma-4-26b-a4b-it
   temperature: 0.0
   # Web augmentation is a FALLBACK ONLY (PRD F13): when on, web results are
   # appended as labeled [web] chunks only when the user's own documents do
