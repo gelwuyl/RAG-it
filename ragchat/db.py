@@ -22,7 +22,9 @@ from .config import DATA_DIR, settings
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 engine = create_engine(
-    settings.db_url, connect_args={"check_same_thread": False} if "sqlite" in settings.db_url else {}
+    settings.db_url,
+    pool_pre_ping=True,
+    connect_args={"check_same_thread": False} if "sqlite" in settings.db_url else {},
 )
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 Base = declarative_base()

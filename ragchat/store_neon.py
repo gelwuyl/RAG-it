@@ -74,16 +74,18 @@ def _get_engine() -> Engine:
 
 
 def _ensure_table(conn) -> None:
-    """Create the table, the pgvector extension, and the HNSW index once."""
-    try:
-        conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-    except Exception:
-        # Some managed Postgres setups already have the extension or disallow
-        # CREATE EXTENSION inside the calling role; the table/index DDL below
-        # will surface a clear error if the extension is genuinely missing.
-        conn.rollback()
+    """Create the table, the pgvector extension, and the HNSW index once.
+
+    Runs INSIDE the caller's `with eng.begin() as conn:` transaction, so it
+    must NOT commit/rollback here — the context manager does that on exit. A
+    manual commit inside the begin() context closes the transaction and makes
+    the surrounding `with` block raise "Can't operate on closed transaction".
+    """
+    # CREATE EXTENSION IF NOT EXISTS is idempotent; on managed Postgres that
+    # disallows it, the table/index DDL below surfaces a clear error instead.
+    conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
     _metadata.create_all(conn)
-    # HNSW cosine index — valid at 768 dimensions (well under pgvector's 2000-dim ceiling).
+    # HNSW cosine index — valid at 768 dimensions (well under pgvector's 2000-dim HNSW ceiling).
     conn.execute(
         text(
             "CREATE INDEX IF NOT EXISTS chunks_embedding_hnsw "
@@ -97,7 +99,6 @@ def _ensure_table(conn) -> None:
             "ON chunks (user_id, embedding_model, fingerprint)"
         )
     )
-    conn.commit()
 
 
 # ---------------------------------------------------------------------------
