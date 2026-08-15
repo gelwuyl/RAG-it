@@ -1,0 +1,26 @@
+# RAG pipeline configuration (PRD §5).
+# Every knob below is hot-reloaded on each request except index-affecting ones
+# (chunk_size, chunk_overlap, splitter, embedding.model), which require a
+# re-index of affected documents (see README).
+
+chunking:
+  chunk_size: 512        # tokens
+  chunk_overlap: 75      # tokens (~15%)
+  splitter: recursive    # recursive | markdown_header | semantic
+
+retrieval:
+  top_k: 4               # chunks handed to the LLM
+  candidate_k: 20        # wider pool when reranker is on
+  similarity_threshold: 0.0   # 0.0 = off; min relevance score to keep a chunk
+  hybrid_search: false   # vector + BM25 keyword fusion (deferred in v1)
+  reranker: false        # cross-encoder rerank (deferred in v1)
+
+query:
+  query_rewrite: true    # resolve follow-ups against chat history
+
+generation:
+  llm_model: qwen3.8-max # any chat model reachable via the class proxy
+  temperature: 0.0
+
+embedding:
+  model: text-embedding-005   # 768 dims; gemini-embedding (3072) also available

@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RAG Chat</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <!-- Sign-in view -->
+    <div id="auth-view" class="auth-view hidden">
+      <div class="auth-card">
+        <h1>● RAG Chat</h1>
+        <p class="muted">Ask questions grounded in your own documents.</p>
+        <a id="google-btn" class="btn btn-primary hidden" href="/api/auth/google/login">Sign in with Google</a>
+        <div id="password-auth" class="hidden">
+          <input id="auth-username" type="text" placeholder="Username" autocomplete="username" />
+          <input id="auth-password" type="password" placeholder="Password" autocomplete="current-password" />
+          <div class="auth-row">
+            <button id="login-btn" class="btn">Log in</button>
+            <button id="register-btn" class="btn btn-secondary">Create account</button>
+          </div>
+          <p id="auth-error" class="error-text"></p>
+          <p class="muted small">No Google OAuth configured — using local accounts.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- App shell is visible immediately (no in-app auth gate in single-user
+         mode). The auth panel is shown only on 401. -->
+    <div id="app-view" class="app-shell">
+      <header class="topbar">
+        <span class="brand">● RAG Chat</span>
+        <span id="user-name" class="muted"></span>
+      </header>
+
+      <div class="panes">
+        <!-- Left: sources -->
+        <aside class="pane sources-pane">
+          <h2>Sources</h2>
+          <div
+            id="drop-zone"
+            class="drop-zone"
+            title="Drag files here or click to upload"
+          >
+            + Upload files
+            <input id="file-input" type="file" multiple hidden
+              accept=".pdf,.md,.txt,.markdown,.rst,.html,.htm,.csv,.json,.yaml,.yml,.log" />
+          </div>
+          <div class="add-row">
+            <input id="url-input" type="text" placeholder="Add a web page URL" />
+            <button id="add-url-btn" class="btn btn-small">Add</button>
+          </div>
+          <div class="add-row">
+            <input id="folder-input" type="text" placeholder="Add folder path (e.g. ~/documents)" />
+            <button id="add-folder-btn" class="btn btn-small">Add</button>
+          </div>
+
+          <div id="folder-list" class="source-list"></div>
+          <div id="doc-list" class="source-list"></div>
+
+          <div class="pane-footer">
+            <button id="reindex-btn" class="btn btn-small" title="Re-chunk all sources under the current config">Re-index all</button>
+          </div>
+        </aside>
+
+        <!-- Center: chat -->
+        <main class="pane chat-pane">
+          <div class="chat-header">
+            <select id="chat-select"></select>
+            <button id="new-chat-btn" class="btn btn-small">+ New chat</button>
+          </div>
+          <div id="messages" class="messages">
+            <div class="empty-hint" id="empty-hint">
+              Add sources on the left, then ask anything about them.
+              Answers are grounded in your documents and cite their sources.
+            </div>
+          </div>
+          <form id="ask-form" class="ask-form">
+            <textarea id="question-input" rows="1" placeholder="Ask about your documents…"
+              autocomplete="off"></textarea>
+            <button id="ask-btn" class="btn btn-primary" type="submit">Ask</button>
+          </form>
+        </main>
+
+        <!-- Right: excerpt -->
+        <aside class="pane excerpt-pane" id="excerpt-pane">
+          <div class="excerpt-empty">
+            <h2>Excerpt</h2>
+            <p class="muted">Click a citation <span class="cite-demo">[1]</span> to see the source passage.</p>
+          </div>
+          <div id="excerpt-content" class="hidden">
+            <div class="excerpt-header">
+              <h2 id="excerpt-title"></h2>
+              <button id="excerpt-close" class="btn btn-small">✕</button>
+            </div>
+            <p id="excerpt-ref" class="muted small"></p>
+            <pre id="excerpt-text"></pre>
+          </div>
+        </aside>
+      </div>
+    </div>
+
+    <div id="toast" class="toast hidden"></div>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
