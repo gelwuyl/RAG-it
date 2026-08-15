@@ -550,4 +550,14 @@ $("excerpt-close").onclick = () => {
 
 // ---------- boot ----------
 
-initAuth().catch((e) => toast(e.message, true));
+// Surface any script-load or runtime error captured by the inline collector
+// in index.html, plus our own boot failures. Without this, a broken app.js
+// looks like a "working" page where nothing responds.
+(function boot() {
+  const prev = window.__ragchat_errors || [];
+  if (prev.length) toast("Script error: " + prev.join("; "), true);
+  initAuth().catch((e) => {
+    console.error("boot failed:", e);
+    toast("Boot failed: " + e.message, true);
+  });
+})();
