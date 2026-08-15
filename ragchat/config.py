@@ -58,13 +58,13 @@ class Settings:
         self.google_client_secret = os.environ.get("GOOGLE_CLIENT_SECRET", "")
         self.google_redirect_uri = os.environ.get("GOOGLE_REDIRECT_URI", "")
         # Default generation model; overridden by config.yaml
-        self.default_llm_model = os.environ.get("RAG_LLM_MODEL", "qwen3.8-max")
+        self.default_llm_model = os.environ.get("RAG_LLM_MODEL", "gemma-3-27b-it")
         # Default embedding model name as exposed by the proxy. The proxy serves
         # "text-embedding-005" (768d) and "gemini-embedding" (3072d). We normalize
         # to the bare modelspec so the same physical model from different env
         # overrides still collides to one Chroma collection.
         self.default_embedding_model = normalize_embedding_model(
-            os.environ.get("RAG_EMBEDDING_MODEL", "text-embedding-005")
+            os.environ.get("RAG_EMBEDDING_MODEL", "gemini-embedding-001")
         )
 
 
