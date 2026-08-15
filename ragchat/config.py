@@ -57,6 +57,8 @@ class PipelineConfig:
     top_k: int
     candidate_k: int
     similarity_threshold: float
+    hybrid_search: bool
+    reranker: bool
     query_rewrite: bool
     llm_model: str
     temperature: float
@@ -85,6 +87,8 @@ def load_config() -> PipelineConfig:
         top_k=int(r.get("top_k", 4)),
         candidate_k=int(r.get("candidate_k", 20)),
         similarity_threshold=float(r.get("similarity_threshold", 0.0)),
+        hybrid_search=bool(r.get("hybrid_search", False)),
+        reranker=bool(r.get("reranker", False)),
         query_rewrite=bool(q.get("query_rewrite", True)),
         llm_model=str(g.get("llm_model", settings.default_llm_model)),
         temperature=float(g.get("temperature", 0.0)),

@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from . import auth as authn
-from .config import UPLOAD_DIR, load_config, settings
+from .config import CONFIG_PATH, UPLOAD_DIR, load_config, settings
 from .db import (
     Conversation,
     Document,
@@ -619,12 +619,28 @@ def eval_config():
         "top_k": cfg.top_k,
         "candidate_k": cfg.candidate_k,
         "similarity_threshold": cfg.similarity_threshold,
+        "hybrid_search": cfg.hybrid_search,
+        "reranker": cfg.reranker,
         "query_rewrite": cfg.query_rewrite,
         "llm_model": cfg.llm_model,
         "temperature": cfg.temperature,
         "embedding_model": cfg.embedding_model,
         "fingerprint": cfg.fingerprint(),
     }
+
+
+@app.post("/api/eval/hybrid-search")
+def toggle_hybrid_search():
+    """Toggle hybrid_search on/off in config.yaml. The config is re-read every
+    request, so the change takes effect on the next ask."""
+    import yaml as _yaml
+
+    data = _yaml.safe_load(CONFIG_PATH.read_text()) or {}
+    data.setdefault("retrieval", {})["hybrid_search"] = not data.get(
+        "retrieval", {}
+    ).get("hybrid_search", False)
+    CONFIG_PATH.write_text(_yaml.dump(data, default_flow_style=False))
+    return {"hybrid_search": data["retrieval"]["hybrid_search"]}
 
 
 @app.get("/api/health")

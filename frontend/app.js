@@ -72,7 +72,7 @@ async function initAuth() {
   }
   showApp();
   try {
-    await Promise.all([refreshSources(), refreshChats()]);
+    await Promise.all([refreshSources(), refreshChats(), refreshHybridToggle()]);
   } catch (e) {
     console.error("boot fetch failed:", e);
   }
@@ -222,6 +222,41 @@ $("add-folder-btn").onclick = async () => {
     toast(e.message, true);
   } finally {
     $("add-folder-btn").disabled = false;
+  }
+};
+
+/* hybrid-search toggle */
+async function refreshHybridToggle() {
+  try {
+    const cfg = await api("/api/eval/config");
+    const btn = $("hybrid-toggle");
+    if (cfg.hybrid_search) {
+      btn.textContent = "On";
+      btn.classList.add("on");
+    } else {
+      btn.textContent = "Off";
+      btn.classList.remove("on");
+    }
+  } catch (e) {
+    console.error("hybrid toggle failed:", e);
+  }
+}
+
+$("hybrid-toggle").onclick = async () => {
+  try {
+    const r = await api("/api/eval/hybrid-search", { method: "POST" });
+    const btn = $("hybrid-toggle");
+    if (r.hybrid_search) {
+      btn.textContent = "On";
+      btn.classList.add("on");
+      toast("Web search ON — answers will include web results");
+    } else {
+      btn.textContent = "Off";
+      btn.classList.remove("on");
+      toast("Web search OFF — answers from your documents only");
+    }
+  } catch (e) {
+    toast(e.message, true);
   }
 };
 

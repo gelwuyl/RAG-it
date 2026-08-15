@@ -152,6 +152,8 @@ def main() -> None:
             "top_k": cfg.top_k,
             "candidate_k": cfg.candidate_k,
             "similarity_threshold": cfg.similarity_threshold,
+            "hybrid_search": cfg.hybrid_search,
+            "reranker": cfg.reranker,
             "query_rewrite": cfg.query_rewrite,
             "llm_model": cfg.llm_model,
             "temperature": cfg.temperature,

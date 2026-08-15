@@ -142,6 +142,17 @@ body {
 .icon-btn:hover { background: #f0f2f5; color: var(--text); }
 .pane-footer { margin-top: auto; }
 
+.hybrid-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+.hybrid-label { font-size: 13px; color: var(--muted); }
+#hybrid-toggle.on { background: var(--primary); color: #fff; border-color: var(--primary); }
+
 /* ---------- chat pane ---------- */
 .chat-header {
   display: flex; gap: 10px; align-items: center;

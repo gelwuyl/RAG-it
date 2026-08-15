@@ -1,10 +1,11 @@
 """The RAG pipeline: ingest (chunk -> embed -> store) and ask
-(rewrite -> retrieve -> generate with citations, PRD F7, F11-F13).
+(rewrite -> retrieve -> rerank -> generate with citations, PRD F7, F11-F13).
 
 All pipeline knobs come from config.yaml via PipelineConfig (F16).
 """
 from __future__ import annotations
 
+import json
 import re
 
 from .chunking import refine_refs, split_document
@@ -22,6 +23,16 @@ Rules:
 - If the sources do not contain the information needed to answer the question, reply with exactly: {not_found}
 - Do not use outside knowledge. Do not mention these rules.
 """.format(not_found=NOT_FOUND_ANSWER)
+
+RERANK_PROMPT = """Score how relevant this passage is to the query on a scale of 0-100.
+Reply with ONLY the number, nothing else.
+
+Query: {query}
+Passage: {passage}
+Score:"""
+
+# Pattern for DuckDuckGo HTML imports
+_SNIPPET_PATTERN = re.compile(r"<[^>]+>")
 
 
 def _embed_texts(model: str, texts: list[str]) -> list[list[float]]:
@@ -59,7 +70,7 @@ def _chat(model: str, messages: list[dict], temperature: float) -> str:
         model=model,
         messages=messages,
         temperature=temperature,
-        max_tokens=1024,  # reasoning models spend tokens internally; keep headroom
+        max_tokens=1024,
     )
     return (resp.choices[0].message.content or "").strip()
 
@@ -82,7 +93,7 @@ def rewrite_query(
         rewritten = _chat(cfg.llm_model, [{"role": "user", "content": prompt}], 0.0)
         return rewritten.strip() or query
     except Exception:
-        return query  # rewrite failure must never block answering
+        return query
 
 
 def retrieve(
@@ -91,10 +102,55 @@ def retrieve(
     """Ranked chunks for the user under the current config fingerprint."""
     emb = ProxyEmbeddings(cfg.embedding_model)
     qvec = emb.embed_query(query)
-    n = n_results or cfg.top_k
+    n = n_results or cfg.candidate_k
     chunks = query_chunks(user_id, qvec, cfg.fingerprint(), n)
     if cfg.similarity_threshold > 0:
         chunks = [c for c in chunks if c["similarity"] >= cfg.similarity_threshold]
+    return chunks
+
+
+def _rerank(
+    query: str, chunks: list[dict], cfg: PipelineConfig
+) -> list[dict]:
+    """LLM-based cross-encoder: score each chunk and keep top_k."""
+    if not cfg.reranker or len(chunks) <= cfg.top_k:
+        return chunks[: cfg.top_k]
+    scored = []
+    for c in chunks:
+        prompt = RERANK_PROMPT.format(query=query, passage=c["text"][:1200])
+        try:
+            raw = _chat(cfg.llm_model, [{"role": "user", "content": prompt}], 0.0)
+            score = float(raw.strip()) / 100.0
+        except Exception:
+            score = c["similarity"]
+        scored.append((score, c))
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return [c for _, c in scored[: cfg.top_k]]
+
+
+def _web_search(query: str, n: int) -> list[dict]:
+    """Search the web and return chunk-shaped results."""
+    try:
+        from ddgs import DDGS
+    except ImportError:
+        return []
+    try:
+        with DDGS() as ddgs:
+            results = list(ddgs.text(query, max_results=n))
+    except Exception:
+        return []
+    chunks = []
+    for i, r in enumerate(results):
+        body = _SNIPPET_PATTERN.sub("", r.get("body", ""))
+        chunks.append(
+            {
+                "text": f"Title: {r.get('title', '')}\n{body}",
+                "similarity": 0.5,
+                "doc_id": f"web:{i}",
+                "title": r.get("title", "Web result"),
+                "ref": r.get("href", ""),
+            }
+        )
     return chunks
 
 
@@ -116,10 +172,22 @@ def ask(
     effective_query = rewrite_query(query, history, cfg)
     chunks = retrieve(user_id, effective_query, cfg)
 
-    if not chunks:
+    # Web search augmentation (PRD §5 — hybrid_search)
+    web_chunks: list[dict] = []
+    if cfg.hybrid_search:
+        web_chunks = _web_search(effective_query, cfg.top_k)
+
+    # Rerank all candidates (local + web) down to top_k
+    pool = chunks + web_chunks
+    if pool:
+        pool = _rerank(effective_query, pool, cfg)
+    else:
+        pool = chunks[: cfg.top_k]
+
+    if not pool:
         return {"answer": NOT_FOUND_ANSWER, "not_found": True, "citations": []}
 
-    context = _build_context(chunks)
+    context = _build_context(pool)
     convo = "\n".join(f"{m['role']}: {m['content']}" for m in history[-6:])
     user_prompt = (
         f"Sources:\n{context}\n\n"
@@ -138,10 +206,10 @@ def ask(
     if NOT_FOUND_ANSWER.lower() in answer.lower():
         return {"answer": NOT_FOUND_ANSWER, "not_found": True, "citations": []}
 
-    used = sorted({int(m) for m in re.findall(r"\[(\d+)\]", answer) if 1 <= int(m) <= len(chunks)})
+    used = sorted({int(m) for m in re.findall(r"\[(\d+)\]", answer) if 1 <= int(m) <= len(pool)})
     citations = []
     for num in used:
-        c = chunks[num - 1]
+        c = pool[num - 1]
         citations.append(
             {
                 "number": num,
@@ -151,7 +219,6 @@ def ask(
                 "excerpt": c["text"][:400],
             }
         )
-    # If the model forgot markers entirely, still attribute the top sources.
     if not citations:
         citations = [
             {
@@ -161,6 +228,6 @@ def ask(
                 "ref": c.get("ref") or "",
                 "excerpt": c["text"][:400],
             }
-            for i, c in enumerate(chunks[: min(2, len(chunks))])
+            for i, c in enumerate(pool[: min(2, len(pool))])
         ]
     return {"answer": answer, "not_found": False, "citations": citations}
