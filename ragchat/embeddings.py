@@ -29,7 +29,9 @@ class ProxyEmbeddings(Embeddings):
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
         client = openai_client()
         try:
-            resp = client.embeddings.create(model=self.model, input=texts)
+            resp = client.embeddings.create(
+                model=self.model, input=texts, dimensions=768
+            )
             return [d.embedding for d in resp.data]
         except Exception:
             # Some proxy models reject list inputs; fall back to one-by-one.
@@ -39,5 +41,7 @@ class ProxyEmbeddings(Embeddings):
         return self._embed_one(text, openai_client())
 
     def _embed_one(self, text: str, client: OpenAI) -> list[float]:
-        resp = client.embeddings.create(model=self.model, input=[text])
+        resp = client.embeddings.create(
+            model=self.model, input=[text], dimensions=768
+        )
         return resp.data[0].embedding
