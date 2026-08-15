@@ -390,31 +390,51 @@ $("reindex-btn").onclick = reindexAll;
 
 // ---------- chat ----------
 
+// Local status overrides while a request is in flight; the backend status is
+// the source of truth after each refresh.
+const chatStatusOverride = new Map(); // chatId -> "pending" | "done"
+
+function renderChats() {
+  const list = $("chat-list");
+  list.innerHTML = "";
+  for (const c of state.chats) {
+    const item = document.createElement("div");
+    item.className = "chat-item" + (c.id === state.currentChatId ? " active" : "");
+    const status = chatStatusOverride.get(c.id) || c.status || "done";
+    item.innerHTML = `
+      <span class="status-dot ${status}" title="${status === "pending" ? "Waiting for an answer" : "Answered"}"></span>
+      <span class="title" title="${escapeHtml(c.title)}">${escapeHtml(c.title)}</span>
+      <button class="icon-btn chat-delete" title="Delete conversation">✕</button>`;
+    item.onclick = () => { if (c.id !== state.currentChatId) openChat(c.id); };
+    item.querySelector(".chat-delete").onclick = async (e) => {
+      e.stopPropagation();
+      if (!confirm(`Delete “${c.title}”?`)) return;
+      try {
+        await api(`/api/chats/${c.id}`, { method: "DELETE" });
+        chatStatusOverride.delete(c.id);
+        if (state.currentChatId === c.id) state.currentChatId = null;
+        await refreshChats(state.currentChatId);
+        toast("Conversation deleted");
+      } catch (err) { toast(err.message, true); }
+    };
+    list.appendChild(item);
+  }
+}
+
 async function refreshChats(selectId = null) {
   state.chats = await api("/api/chats");
-  const sel = $("chat-select");
-  sel.innerHTML = "";
-  for (const c of state.chats) {
-    const opt = document.createElement("option");
-    opt.value = c.id;
-    opt.textContent = c.title;
-    sel.appendChild(opt);
-  }
+  renderChats();
   const target = selectId || (state.chats[0] && state.chats[0].id);
   if (target) {
-    sel.value = target;
     await openChat(target);
   } else {
     state.currentChatId = null;
+    renderChats();
     $("messages").innerHTML = `<div class="empty-hint" id="empty-hint">
       Add sources on the left, then ask anything about them.
       Answers are grounded in your documents and cite their sources.</div>`;
   }
 }
-
-$("chat-select").onchange = async (e) => {
-  if (e.target.value) await openChat(e.target.value);
-};
 
 $("new-chat-btn").onclick = async () => {
   try {
@@ -425,6 +445,7 @@ $("new-chat-btn").onclick = async () => {
 
 async function openChat(chatId) {
   state.currentChatId = chatId;
+  renderChats();
   const chat = await api(`/api/chats/${chatId}`);
   const box = $("messages");
   box.innerHTML = "";
@@ -505,6 +526,8 @@ $("ask-form").onsubmit = async (e) => {
   appendMessage("user", question);
   const pending = appendMessage("assistant", "Thinking…", [], true);
   $("ask-btn").disabled = true;
+  chatStatusOverride.set(state.currentChatId, "pending"); // orange dot while we wait
+  renderChats();
 
   try {
     const result = await api(`/api/chats/${state.currentChatId}/ask`, {
@@ -513,10 +536,14 @@ $("ask-form").onsubmit = async (e) => {
     });
     pending.remove();
     appendMessage("assistant", result.answer, result.citations);
-    // keep the chat list titles in sync
-    if (state.chats.length) {
-      const c = state.chats.find((x) => x.id === state.currentChatId);
-      if (c && c.title === "New chat") await refreshChats(state.currentChatId);
+    chatStatusOverride.delete(state.currentChatId); // answered -> green dot
+    // keep the chat list titles/statuses in sync
+    const c = state.chats.find((x) => x.id === state.currentChatId);
+    if (c) c.status = "done";
+    if (c && c.title === "New chat") {
+      await refreshChats(state.currentChatId);
+    } else {
+      renderChats();
     }
   } catch (err) {
     pending.remove();

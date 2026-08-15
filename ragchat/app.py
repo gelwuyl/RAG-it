@@ -526,10 +526,35 @@ def list_chats(user: User = Depends(authn.get_current_user), db: Session = Depen
         .order_by(Conversation.created_at.desc())
         .all()
     )
-    return [
-        {"id": c.id, "title": c.title, "created_at": c.created_at}
-        for c in convs
-    ]
+    out = []
+    for c in convs:
+        last = (
+            db.query(Message)
+            .filter(Message.conversation_id == c.id)
+            .order_by(Message.created_at.desc())
+            .first()
+        )
+        # pending = user asked and the assistant reply hasn't landed yet; done otherwise
+        status = "pending" if last and last.role == "user" else "done"
+        out.append(
+            {"id": c.id, "title": c.title, "created_at": c.created_at, "status": status}
+        )
+    return out
+
+
+@app.delete("/api/chats/{chat_id}")
+def delete_chat(
+    chat_id: str,
+    user: User = Depends(authn.get_current_user),
+    db: Session = Depends(get_session),
+):
+    conv = db.get(Conversation, chat_id)
+    if not conv or conv.user_id != user.id:
+        raise HTTPException(status_code=404, detail="Chat not found")
+    db.query(Message).filter(Message.conversation_id == chat_id).delete()
+    db.delete(conv)
+    db.commit()
+    return {"ok": True}
 
 
 @app.post("/api/chats")

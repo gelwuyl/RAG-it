@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>RAG Chat</title>
-    <link rel="stylesheet" href="/styles.css?v=2" />
+    <link rel="stylesheet" href="/styles.css?v=3" />
     <script>
       // Boot diagnostics: collect load/runtime errors so a broken app.js
       // shows a visible message instead of a silently dead UI.
@@ -80,9 +80,10 @@
         <!-- Center: chat -->
         <main class="pane chat-pane">
           <div class="chat-header">
-            <select id="chat-select"></select>
+            <span class="chats-label">Conversations</span>
             <button id="new-chat-btn" class="btn btn-small">+ New chat</button>
           </div>
+          <div id="chat-list" class="chat-list"></div>
           <div id="messages" class="messages">
             <div class="empty-hint" id="empty-hint">
               Add sources on the left, then ask anything about them.
@@ -212,6 +213,6 @@
       </div>
     </div>
 
-    <script type="module" src="/app.js?v=2"></script>
+    <script type="module" src="/app.js?v=3"></script>
   </body>
 </html>
