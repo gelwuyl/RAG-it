@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -64,10 +65,85 @@ def normalize_embedding_model(name: str) -> str:
 
 settings = Settings()
 
-# Models reachable through the class proxy (CLAUDE.md). Used to populate the
-# settings dropdowns and to reject typos before they hit the proxy.
-CHAT_MODELS = ["deepseek-v4-pro", "qwen3.8-max", "qwen3-coder"]
-EMBEDDING_MODELS = ["text-embedding-005", "gemini-embedding"]
+# Fallback catalog used only when live proxy discovery is unreachable. These
+# keep the UI populated offline; they are NOT an allowlist — any model the
+# proxy actually returns is accepted (see model_catalog below).
+_FALLBACK_CHAT_MODELS = ["deepseek-v4-pro", "qwen3.8-max", "qwen3-coder"]
+_FALLBACK_EMBEDDING_MODELS = ["text-embedding-005", "gemini-embedding"]
+
+# How long a successful discovery result is cached (seconds). The proxy model
+# list changes rarely; a short TTL avoids a round-trip on every settings open
+# without going stale for long.
+_MODEL_CACHE_TTL = 300.0
+
+_cache: dict = {"chat": None, "embedding": None, "at": 0.0}
+
+
+def _classify_model(model_id: str) -> str | None:
+    """Classify a proxy model id as 'chat', 'embedding', or None (skip)."""
+    mid = model_id.lower()
+    if any(k in mid for k in ("embed", "embedding")):
+        return "embedding"
+    # Treat anything that isn't an embedder as a chat/generation model. The
+    # proxy's /v1/models is the source of truth, so we don't maintain a
+    # per-prefix allowlist here.
+    return "chat"
+
+
+def discover_models() -> dict[str, list[str]]:
+    """Return live chat + embedding model lists from the proxy.
+
+    Calls GET {proxy_base_url}/models (OpenAI-compatible). On any failure
+    (no network, bad key, non-standard response) returns the fallback
+    catalog so the UI never goes blank and config validation never locks
+    you out during a transient proxy outage.
+    """
+    try:
+        from .embeddings import openai_client
+
+        client = openai_client()
+        resp = client.models.list()
+        chat, emb = [], []
+        for m in getattr(resp, "data", []) or []:
+            mid = getattr(m, "id", None)
+            if not mid:
+                continue
+            kind = _classify_model(mid)
+            if kind == "chat":
+                chat.append(mid)
+            elif kind == "embedding":
+                emb.append(mid)
+        if chat or emb:
+            return {"chat": sorted(chat), "embedding": sorted(emb)}
+    except Exception:
+        pass
+    return {"chat": list(_FALLBACK_CHAT_MODELS), "embedding": list(_FALLBACK_EMBEDDING_MODELS)}
+
+
+def model_catalog() -> dict[str, list[str]]:
+    """Cached live model catalog (chat + embedding)."""
+    now = time.time()
+    if _cache["chat"] is not None and (now - _cache["at"]) < _MODEL_CACHE_TTL:
+        return {"chat": _cache["chat"], "embedding": _cache["embedding"]}
+    catalog = discover_models()
+    _cache["chat"] = catalog["chat"]
+    _cache["embedding"] = catalog["embedding"]
+    _cache["at"] = now
+    return catalog
+
+
+def is_known_model(model: str, kind: str) -> bool:
+    """True if `model` is in the live catalog for `kind`, OR is the current
+    deployment default for that kind (so a discovery miss can't reject a model
+    the proxy will still serve)."""
+    catalog = model_catalog()
+    if model in catalog[kind]:
+        return True
+    if kind == "chat" and model == settings.default_llm_model:
+        return True
+    if kind == "embedding" and model == settings.default_embedding_model:
+        return True
+    return False
 
 
 @dataclass(frozen=True)

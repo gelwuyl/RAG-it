@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from . import auth as authn
-from .config import CHAT_MODELS, CONFIG_PATH, EMBEDDING_MODELS, UPLOAD_DIR, load_config, settings
+from .config import CONFIG_PATH, UPLOAD_DIR, load_config, model_catalog, is_known_model, settings
 from .db import (
     Conversation,
     Document,
@@ -636,8 +636,12 @@ def ask_chat(
 
 @app.get("/api/models")
 def list_models():
-    """Proxy model catalog for the settings dropdowns."""
-    return {"chat": CHAT_MODELS, "embedding": EMBEDDING_MODELS}
+    """Live proxy model catalog for the settings dropdowns.
+
+    Discovered from GET {proxy}/v1/models (OpenAI-compatible); falls back to a
+    static default list if the proxy is unreachable so the UI never blanks.
+    """
+    return model_catalog()
 
 
 @app.get("/api/eval/config")
@@ -720,10 +724,12 @@ def update_config(body: ConfigUpdateIn):
 
     data = _yaml.safe_load(CONFIG_PATH.read_text()) or {}
     updates = body.model_dump(exclude_none=True)
-    # Reject unknown models up front instead of failing mid-ask with a proxy error.
-    if "llm_model" in updates and updates["llm_model"] not in CHAT_MODELS:
+    # Reject unknown models up front instead of failing mid-ask with a proxy
+    # error. "Unknown" means not in the live proxy catalog AND not the current
+    # deployment default (so a discovery miss can't lock you out).
+    if "llm_model" in updates and not is_known_model(updates["llm_model"], "chat"):
         raise HTTPException(status_code=422, detail=f"Unknown LLM model: {updates['llm_model']}")
-    if "embedding_model" in updates and updates["embedding_model"] not in EMBEDDING_MODELS:
+    if "embedding_model" in updates and not is_known_model(updates["embedding_model"], "embedding"):
         raise HTTPException(
             status_code=422, detail=f"Unknown embedding model: {updates['embedding_model']}"
         )

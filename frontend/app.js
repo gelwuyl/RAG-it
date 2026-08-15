@@ -10,7 +10,8 @@ const state = {
   models: { chat: [], embedding: [] }, // proxy model catalog for the settings dropdowns
 };
 
-// Human-friendly labels for the model dropdowns.
+// Human-friendly labels for known models. With live proxy discovery the
+// catalog is dynamic, so any model not listed here simply shows its raw id.
 const MODEL_LABELS = {
   "deepseek-v4-pro": "DeepSeek V4 Pro (class default)",
   "qwen3.8-max": "Qwen3.8 Max",
@@ -18,6 +19,10 @@ const MODEL_LABELS = {
   "text-embedding-005": "text-embedding-005 (768 dims)",
   "gemini-embedding": "gemini-embedding (3072 dims)",
 };
+
+function modelLabel(id) {
+  return MODEL_LABELS[id] || id;
+}
 
 // ---------- helpers ----------
 
@@ -290,7 +295,7 @@ function fillModelSelect(id, models, current) {
   // Keep a hand-edited model that isn't in the catalog selectable.
   const all = models.includes(current) ? models : [...models, current];
   sel.innerHTML = all
-    .map((m) => `<option value="${escapeHtml(m)}">${escapeHtml(MODEL_LABELS[m] || m)}</option>`)
+    .map((m) => `<option value="${escapeHtml(m)}">${escapeHtml(modelLabel(m))}</option>`)
     .join("");
   sel.value = current;
 }
