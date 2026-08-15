@@ -782,7 +782,44 @@ def update_config(body: ConfigUpdateIn):
 
 @app.get("/api/health")
 def health():
-    return {"ok": True}
+    """Liveness + deploy self-check.
+
+    Reports DB connectivity and which secrets are *present* (values are
+    NEVER returned) so deploy issues can be diagnosed without the Vercel
+    dashboard. A 200 here means the function booted and reached its DB.
+    """
+    import os as _os
+
+    from sqlalchemy import text as _text
+
+    from .config import DATA_DIR, settings as _s
+    from .db import engine as _engine
+
+    env_present = {
+        "GEMINI_API_KEY": bool(_os.environ.get("GEMINI_API_KEY")),
+        "DATABASE_URL": bool(_os.environ.get("DATABASE_URL")),
+        "PG_DATABASE_URL": bool(_os.environ.get("PG_DATABASE_URL")),
+        "rag_gel_DATABASE_URL": bool(_os.environ.get("rag_gel_DATABASE_URL")),
+        "VECTOR_BACKEND": bool(_os.environ.get("VECTOR_BACKEND")),
+    }
+    db_ok = False
+    db_err = None
+    try:
+        with _engine.connect() as conn:
+            conn.execute(_text("select 1"))
+        db_ok = True
+    except Exception as exc:  # surface the connection error, not a 500
+        db_err = str(exc)[:200]
+
+    return {
+        "ok": True,
+        "db_backend": _s.vector_backend,
+        "app_db_is_postgres": ("postgres" in _s.db_url),
+        "db_connected": db_ok,
+        "db_error": db_err,
+        "data_dir": str(DATA_DIR),
+        "env_present": env_present,
+    }
 
 
 # Serve the built frontend in production; in dev Vite serves it instead.

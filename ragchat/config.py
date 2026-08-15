@@ -26,7 +26,14 @@ import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG_PATH = ROOT / "config.yaml"
-DATA_DIR = ROOT / "data"
+# Local state (SQLite fallback DB, uploaded-file cache). On Vercel serverless
+# the project directory is read-only, so any writable state must live in /tmp.
+# RAG_DATA_DIR can override this explicitly; otherwise we use /tmp on Vercel
+# (VERCEL=1 is set in the function environment) and <repo>/data locally.
+_DATA_ROOT = os.environ.get("RAG_DATA_DIR") or (
+    "/tmp/ragchat-data" if os.environ.get("VERCEL") else str(ROOT / "data")
+)
+DATA_DIR = Path(_DATA_ROOT)
 CHROMA_DIR = DATA_DIR / "chroma"
 DB_PATH = DATA_DIR / "app.db"
 UPLOAD_DIR = DATA_DIR / "uploads"
@@ -47,7 +54,16 @@ class Settings:
         self.api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get(
             "ANTHROPIC_AUTH_TOKEN", ""
         )
-        self.db_url = os.environ.get("DATABASE_URL", f"sqlite:///{DB_PATH}")
+        # App metadata DB (users, documents, chats). On Vercel the Neon
+        # integration injects rag_gel_DATABASE_URL; fall back through the
+        # same chain the vector store uses so metadata + vectors share one DB.
+        # Local/dev without Postgres falls back to a SQLite file.
+        self.db_url = (
+            os.environ.get("DATABASE_URL")
+            or os.environ.get("PG_DATABASE_URL")
+            or os.environ.get("rag_gel_DATABASE_URL")
+            or f"sqlite:///{DB_PATH}"
+        )
         # Vector store backend: "chroma" (local disk, default/dev) or
         # "neon" (Postgres + pgvector, for Vercel/serverless deploy).
         self.vector_backend = os.environ.get("VECTOR_BACKEND", "chroma")
