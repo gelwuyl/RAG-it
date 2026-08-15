@@ -225,7 +225,8 @@ $("add-folder-btn").onclick = async () => {
   }
 };
 
-/* hybrid-search toggle */
+/* ---------- settings ---------- */
+
 async function refreshHybridToggle() {
   try {
     const cfg = await api("/api/eval/config");
@@ -257,6 +258,78 @@ $("hybrid-toggle").onclick = async () => {
     }
   } catch (e) {
     toast(e.message, true);
+  }
+};
+
+/* Tuning parameters modal */
+function openSettings() {
+  $("settings-overlay").classList.remove("hidden");
+  $("settings-note").classList.add("hidden");
+  loadSettingsIntoForm();
+}
+
+async function loadSettingsIntoForm() {
+  try {
+    const cfg = await api("/api/eval/config");
+    $("set-chunk-size").value = cfg.chunk_size;
+    $("set-chunk-overlap").value = cfg.chunk_overlap;
+    $("set-splitter").value = cfg.splitter;
+    $("set-top-k").value = cfg.top_k;
+    $("set-candidate-k").value = cfg.candidate_k;
+    $("set-sim-threshold").value = cfg.similarity_threshold;
+    $("set-reranker").value = String(cfg.reranker);
+    $("set-hybrid-search").value = String(cfg.hybrid_search);
+    $("set-query-rewrite").value = String(cfg.query_rewrite);
+    $("set-llm-model").value = cfg.llm_model;
+    $("set-temperature").value = cfg.temperature;
+    $("set-embedding-model").value = cfg.embedding_model;
+  } catch (e) {
+    toast(e.message, true);
+  }
+}
+
+function closeSettings() {
+  $("settings-overlay").classList.add("hidden");
+  $("settings-note").classList.add("hidden");
+}
+
+$("settings-btn").onclick = openSettings;
+$("settings-close").onclick = closeSettings;
+$("settings-overlay").onclick = (e) => {
+  if (e.target === $("settings-overlay")) closeSettings();
+};
+
+$("settings-save").onclick = async () => {
+  try {
+    const body = {
+      chunk_size: parseInt($("set-chunk-size").value),
+      chunk_overlap: parseInt($("set-chunk-overlap").value),
+      splitter: $("set-splitter").value,
+      top_k: parseInt($("set-top-k").value),
+      candidate_k: parseInt($("set-candidate-k").value),
+      similarity_threshold: parseFloat($("set-sim-threshold").value),
+      reranker: $("set-reranker").value === "true",
+      hybrid_search: $("set-hybrid-search").value === "true",
+      query_rewrite: $("set-query-rewrite").value === "true",
+      llm_model: $("set-llm-model").value.trim(),
+      temperature: parseFloat($("set-temperature").value),
+      embedding_model: $("set-embedding-model").value.trim(),
+    };
+    const r = await api("/api/eval/config", {
+      method: "PUT",
+      body: JSON.stringify(body),
+    });
+    if (r.needs_reindex) {
+      $("settings-note").textContent =
+        "Index-affecting keys changed. You should re-index your sources.";
+      $("settings-note").classList.remove("hidden");
+    } else {
+      $("settings-note").classList.add("hidden");
+    }
+    await refreshHybridToggle();
+    toast("Settings saved — next ask will use the new config.");
+  } catch (e) {
+    toast("Save failed: " + e.message, true);
   }
 };
 

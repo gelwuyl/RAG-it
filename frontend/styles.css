@@ -216,6 +216,61 @@ body {
 }
 .toast.error { background: var(--error); }
 
+/* ---------- settings modal ---------- */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.35);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 100;
+}
+.modal {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  width: 520px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.12);
+}
+.modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 20px; border-bottom: 1px solid var(--border);
+}
+.modal-header h2 { font-size: 17px; }
+.modal-body {
+  padding: 16px 20px; overflow-y: auto; flex: 1;
+  display: flex; flex-direction: column; gap: 16px;
+}
+.modal-footer {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 20px; border-top: 1px solid var(--border);
+}
+fieldset {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px 14px;
+}
+fieldset legend {
+  font-size: 13px; font-weight: 600; padding: 0 6px;
+  display: flex; align-items: center; gap: 8px;
+}
+.index-badge {
+  font-size: 11px; font-weight: 400; color: #d97706;
+  background: #fff7e6; padding: 1px 6px; border-radius: 4px;
+}
+.field {
+  display: flex; align-items: center; gap: 10px; margin-top: 10px;
+}
+.field label {
+  font-size: 13px; color: var(--muted); min-width: 140px; flex-shrink: 0;
+}
+.field input, .field select {
+  flex: 1; padding: 7px 10px; border: 1px solid var(--border);
+  border-radius: 8px; font-size: 13px; background: var(--panel);
+}
+.field input[type="number"] { max-width: 100px; }
+#settings-save { min-width: 80px; }
+
 @media (max-width: 1100px) {
   .excerpt-pane { width: 240px; }
   .sources-pane { width: 220px; }

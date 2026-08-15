@@ -643,6 +643,75 @@ def toggle_hybrid_search():
     return {"hybrid_search": data["retrieval"]["hybrid_search"]}
 
 
+class ConfigUpdateIn(BaseModel):
+    """Partial config update — only the keys present are written."""
+    chunk_size: int | None = None
+    chunk_overlap: int | None = None
+    splitter: str | None = None
+    top_k: int | None = None
+    candidate_k: int | None = None
+    similarity_threshold: float | None = None
+    hybrid_search: bool | None = None
+    reranker: bool | None = None
+    query_rewrite: bool | None = None
+    llm_model: str | None = None
+    temperature: float | None = None
+    embedding_model: str | None = None
+
+
+@app.put("/api/eval/config")
+def update_config(body: ConfigUpdateIn):
+    """Write tuning knobs back to config.yaml. Returns the new config snapshot
+    and whether a re-index is needed (index-affecting keys changed)."""
+    import yaml as _yaml
+
+    data = _yaml.safe_load(CONFIG_PATH.read_text()) or {}
+    updates = body.model_dump(exclude_none=True)
+    index_affecting = {"chunk_size", "chunk_overlap", "splitter", "embedding_model"}
+    needs_reindex = bool(index_affecting & set(updates.keys()))
+
+    # Map flat keys back to nested config.yaml sections
+    section_map = {
+        "chunk_size": ("chunking", "chunk_size"),
+        "chunk_overlap": ("chunking", "chunk_overlap"),
+        "splitter": ("chunking", "splitter"),
+        "top_k": ("retrieval", "top_k"),
+        "candidate_k": ("retrieval", "candidate_k"),
+        "similarity_threshold": ("retrieval", "similarity_threshold"),
+        "hybrid_search": ("retrieval", "hybrid_search"),
+        "reranker": ("retrieval", "reranker"),
+        "query_rewrite": ("query", "query_rewrite"),
+        "llm_model": ("generation", "llm_model"),
+        "temperature": ("generation", "temperature"),
+        "embedding_model": ("embedding", "model"),
+    }
+    for key, value in updates.items():
+        section, subkey = section_map.get(key, (None, None))
+        if section:
+            data.setdefault(section, {})[subkey] = value
+
+    CONFIG_PATH.write_text(_yaml.dump(data, default_flow_style=False))
+    cfg = load_config()
+    return {
+        "config": {
+            "chunk_size": cfg.chunk_size,
+            "chunk_overlap": cfg.chunk_overlap,
+            "splitter": cfg.splitter,
+            "top_k": cfg.top_k,
+            "candidate_k": cfg.candidate_k,
+            "similarity_threshold": cfg.similarity_threshold,
+            "hybrid_search": cfg.hybrid_search,
+            "reranker": cfg.reranker,
+            "query_rewrite": cfg.query_rewrite,
+            "llm_model": cfg.llm_model,
+            "temperature": cfg.temperature,
+            "embedding_model": cfg.embedding_model,
+            "fingerprint": cfg.fingerprint(),
+        },
+        "needs_reindex": needs_reindex,
+    }
+
+
 @app.get("/api/health")
 def health():
     return {"ok": True}

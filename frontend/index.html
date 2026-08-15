@@ -32,6 +32,7 @@
       <header class="topbar">
         <span class="brand">● RAG Chat</span>
         <span id="user-name" class="muted"></span>
+        <button id="settings-btn" class="btn btn-small" title="Tuning parameters">⚙ Settings</button>
       </header>
 
       <div class="panes">
@@ -106,6 +107,103 @@
     </div>
 
     <div id="toast" class="toast hidden"></div>
+
+    <!-- Settings modal -->
+    <div id="settings-overlay" class="modal-overlay hidden">
+      <div class="modal">
+        <div class="modal-header">
+          <h2>Pipeline Settings</h2>
+          <button id="settings-close" class="btn btn-small">✕</button>
+        </div>
+        <div class="modal-body">
+          <fieldset>
+            <legend>Chunking <span class="index-badge">needs re-index</span></legend>
+            <div class="field">
+              <label for="set-chunk-size">Chunk size (tokens)</label>
+              <input id="set-chunk-size" type="number" min="128" max="1024" step="8" />
+            </div>
+            <div class="field">
+              <label for="set-chunk-overlap">Chunk overlap (tokens)</label>
+              <input id="set-chunk-overlap" type="number" min="0" max="256" step="8" />
+            </div>
+            <div class="field">
+              <label for="set-splitter">Splitter</label>
+              <select id="set-splitter">
+                <option value="recursive">Recursive (structure-aware)</option>
+                <option value="markdown_header">Markdown header</option>
+                <option value="semantic">Semantic (v1: recursive)</option>
+              </select>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>Retrieval</legend>
+            <div class="field">
+              <label for="set-top-k">Top‑K (chunks to LLM)</label>
+              <input id="set-top-k" type="number" min="1" max="20" />
+            </div>
+            <div class="field">
+              <label for="set-candidate-k">Candidate‑K (pool before rerank)</label>
+              <input id="set-candidate-k" type="number" min="1" max="100" />
+            </div>
+            <div class="field">
+              <label for="set-sim-threshold">Similarity threshold</label>
+              <input id="set-sim-threshold" type="number" min="0.0" max="1.0" step="0.05" />
+            </div>
+            <div class="field">
+              <label for="set-reranker">Reranker (LLM cross-encoder)</label>
+              <select id="set-reranker">
+                <option value="false">Off</option>
+                <option value="true">On</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="set-hybrid-search">Web search</label>
+              <select id="set-hybrid-search">
+                <option value="false">Off</option>
+                <option value="true">On</option>
+              </select>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>Query</legend>
+            <div class="field">
+              <label for="set-query-rewrite">Query rewrite (follow-ups)</label>
+              <select id="set-query-rewrite">
+                <option value="true">On</option>
+                <option value="false">Off</option>
+              </select>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>Generation</legend>
+            <div class="field">
+              <label for="set-llm-model">LLM model</label>
+              <input id="set-llm-model" type="text" />
+            </div>
+            <div class="field">
+              <label for="set-temperature">Temperature</label>
+              <input id="set-temperature" type="number" min="0.0" max="1.0" step="0.05" />
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>Embedding <span class="index-badge">needs re-index</span></legend>
+            <div class="field">
+              <label for="set-embedding-model">Embedding model</label>
+              <input id="set-embedding-model" type="text" />
+            </div>
+          </fieldset>
+        </div>
+        <div class="modal-footer">
+          <p id="settings-note" class="muted small hidden"></p>
+          <button id="settings-save" class="btn btn-primary">Save</button>
+        </div>
+      </div>
+    </div>
+
     <script type="module" src="/app.js"></script>
   </body>
 </html>
