@@ -11,7 +11,11 @@ import sys
 from pathlib import Path
 
 EVAL_DIR = Path(__file__).resolve().parent
-METRICS = ["recall_at_k", "mrr", "answer_correctness", "not_found_rate_unanswerables"]
+METRICS = [
+    "context_recall", "precision_at_k", "mrr", "ndcg_at_k", "hit_rate_at_k",
+    "faithfulness", "answer_relevancy", "answer_correctness",
+    "not_found_rate_unanswerables", "context_recall_multi_doc",
+]
 
 
 def load_report(run_path: str | Path) -> dict:

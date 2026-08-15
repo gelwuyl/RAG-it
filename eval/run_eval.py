@@ -2,12 +2,14 @@
 the golden set, and write a comparable report to eval/runs/<timestamp>/.
 
 Usage:
-    .venv/bin/python -m eval.run_eval            # full run (retrieval + answers)
+    .venv/bin/python -m eval.run_eval            # full run (retrieval + answers + judges)
     .venv/bin/python -m eval.run_eval --retrieval-only   # skip generation/judge
     .venv/bin/python -m eval.run_eval --limit 5          # smoke run
 
-The report includes the full config snapshot (F19), so any two runs under
-eval/runs/ can be compared side by side (see eval/compare.py).
+The report includes the full config snapshot (F19) and now BOTH a retrieval
+block (Context Recall / Precision@k / MRR / NDCG / HitRate, computed by
+embedding-cosine match against golden passages) and a generation block
+(Faithfulness / Answer Relevancy / Answer Correctness via LLM-as-judge).
 """
 from __future__ import annotations
 
@@ -23,30 +25,28 @@ ROOT = EVAL_DIR.parent
 sys.path.insert(0, str(ROOT))
 
 from ragchat.config import load_config  # noqa: E402
-from ragchat.embeddings import openai_client  # noqa: E402
+from ragchat.embeddings import ProxyEmbeddings, openai_client  # noqa: E402
 from ragchat.pipeline import NOT_FOUND_ANSWER, ask, ingest_document_text, retrieve  # noqa: E402
 from ragchat.store import collection_name, get_client  # noqa: E402
+from eval.metrics import (  # noqa: E402
+    MATCH_THRESHOLD,
+    context_recall,
+    precision_at_k,
+    mrr_at_k,
+    ndcg_at_k,
+    hit_rate_at_k,
+)
+from eval import judges  # noqa: E402
 
 EVAL_USER = "__eval__"
 CORPUS_DIR = EVAL_DIR / "corpus"
 GOLDEN = EVAL_DIR / "golden.jsonl"
-JUDGE_MODEL = "qwen3.8-max"
+JUDGE_MODEL = judges.JUDGE_MODEL
 
 
-def reset_eval_collection() -> None:
+def reset_eval_collection(cfg) -> None:
     client = get_client()
-    # Collection names are now namespaced by (user, embedding model) in
-    # store.py, so delete the exact collection the eval will write to.
-    name = collection_name(EVAL_USER, cfg.embedding_model) if "cfg" in dir() else None
-    if name is None:
-        # cfg not yet loaded (shouldn't happen) — sweep any __eval__ collections
-        for col in client.list_collections():
-            if col.name.startswith("user-__eval__"):
-                try:
-                    client.delete_collection(col.name)
-                except Exception:
-                    pass
-        return
+    name = collection_name(EVAL_USER, cfg.embedding_model)
     try:
         client.delete_collection(name)
     except Exception:
@@ -55,32 +55,22 @@ def reset_eval_collection() -> None:
 
 def load_corpus(cfg) -> None:
     for path in sorted(CORPUS_DIR.glob("*")):
-        text = path.read_text(encoding="utf-8", errors="replace")
-        n = ingest_document_text(EVAL_USER, path.name, path.name, text, cfg)
-        print(f"  indexed {path.name} ({n} chunks)")
+        if path.suffix.lower() in (".md", ".txt"):
+            text = path.read_text(encoding="utf-8", errors="replace")
+            n = ingest_document_text(EVAL_USER, path.name, path.name, text, cfg)
+            print(f"  indexed {path.name} ({n} chunks)")
+
+
+def embed_passages(passages: list[str], model: str) -> list[list[float]]:
+    if not passages:
+        return []
+    emb = ProxyEmbeddings(model)
+    return emb.embed_documents(passages)
 
 
 def judge_answer(question: str, expected: str, answer: str) -> tuple[bool, str]:
-    client = openai_client()
-    prompt = (
-        "You are grading a RAG system. Given a question, an expected answer, "
-        "and the system's generated answer, decide whether the generated "
-        "answer correctly conveys the key facts of the expected answer. "
-        "Minor phrasing differences are fine; wrong or missing key facts are not.\n\n"
-        f"Question: {question}\nExpected answer: {expected}\n"
-        f"Generated answer: {answer}\n\n"
-        "Reply exactly: PASS or FAIL, then a newline, then one sentence of reasoning."
-    )
-    resp = client.chat.completions.create(
-        model=JUDGE_MODEL,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.0,
-        max_tokens=512,
-    )
-    out = (resp.choices[0].message.content or "").strip()
-    verdict = out.upper().startswith("PASS")
-    reason = out.split("\n", 1)[1].strip() if "\n" in out else out
-    return verdict, reason
+    # Kept for backwards compatibility; correctness now routed through judges.py
+    return judges.answer_correctness(question, expected, answer)
 
 
 def main() -> None:
@@ -91,35 +81,50 @@ def main() -> None:
 
     cfg = load_config()
     print(f"Config fingerprint: {cfg.fingerprint()}")
+    print(f"Judge model: {JUDGE_MODEL} | MATCH_THRESHOLD (cosine): {MATCH_THRESHOLD}")
     print("Indexing corpus...")
-    reset_eval_collection()
+    reset_eval_collection(cfg)
     load_corpus(cfg)
 
     items = [json.loads(line) for line in GOLDEN.read_text().splitlines() if line.strip()]
     if args.limit:
         items = items[: args.limit]
 
+    # Pre-embed golden passages once per question.
+    for it in items:
+        it["_golden_embs"] = embed_passages(it.get("golden_passages", []), cfg.embedding_model)
+
     results = []
     for i, item in enumerate(items, start=1):
         question = item["question"]
         chunks = retrieve(EVAL_USER, question, cfg)
-        hits = [c for c in chunks if c["title"] == item.get("source")]
-        recall = 1.0 if hits else 0.0
-        rr = 0.0
-        for rank, c in enumerate(chunks, start=1):
-            if c["title"] == item.get("source"):
-                rr = 1.0 / rank
-                break
+        # Embed the retrieved chunk texts with the same model used for the
+        # golden passages so we can cosine-match (user decision #3: embedding-cosine).
+        chunk_texts = [c["text"] for c in chunks]
+        _emb = ProxyEmbeddings(cfg.embedding_model)
+        chunk_embs = _emb.embed_documents(chunk_texts) if chunk_texts else []
+
+        k = cfg.top_k
+        cr = context_recall(chunk_embs, item["_golden_embs"])
+        prec = precision_at_k(chunk_embs, item["_golden_embs"], k)
+        mrr = mrr_at_k(chunk_embs, item["_golden_embs"], k)
+        ndcg = ndcg_at_k(chunk_embs, item["_golden_embs"], k)
+        hr = hit_rate_at_k(chunk_embs, item["_golden_embs"], k)
 
         entry = {
             "question": question,
             "unanswerable": item["unanswerable"],
-            "expected_source": item.get("source", ""),
-            "recall_at_k": recall,
-            "reciprocal_rank": rr,
+            "needs": item.get("needs", ["single_passage"]),
+            "type": item.get("type", ""),
+            "expected_source": item.get("golden_doc", ""),
+            "context_recall": round(cr, 4),
+            "precision_at_k": round(prec, 4),
+            "mrr": round(mrr, 4),
+            "ndcg_at_k": round(ndcg, 4),
+            "hit_rate_at_k": hr,
             "retrieved": [
                 {"title": c["title"], "similarity": round(c["similarity"], 4)}
-                for c in chunks
+                for c in chunks[:k]
             ],
         }
 
@@ -127,31 +132,56 @@ def main() -> None:
             res = ask(EVAL_USER, question, [], cfg)
             entry["answer"] = res["answer"]
             entry["not_found"] = res["not_found"]
+            context_text = "\n\n".join(
+                f"[{j+1}] {c['title']}\n{c['text']}" for j, c in enumerate(chunks[:k])
+            )
             if item["unanswerable"]:
+                # Correct iff the system refused (did not fabricate).
                 entry["correct"] = bool(res["not_found"])
+                entry["faithful"] = None
+                entry["relevant"] = None
             else:
-                verdict, reason = judge_answer(question, item["expected"], res["answer"])
-                entry["correct"] = verdict
-                entry["judge_reason"] = reason
+                fh, fh_r = judges.faithfulness(question, context_text, res["answer"])
+                rv, rv_r = judges.answer_relevancy(question, res["answer"])
+                cr_ok, cr_r = judges.answer_correctness(
+                    question, item["expected"], res["answer"]
+                )
+                entry["faithful"] = fh
+                entry["faithful_reason"] = fh_r
+                entry["relevant"] = rv
+                entry["relevant_reason"] = rv_r
+                entry["correct"] = cr_ok
+                entry["correct_reason"] = cr_r
+
         results.append(entry)
-        status = "✓" if entry.get("correct", recall > 0) else "✗"
+        status = "✓" if entry.get("correct", cr > 0) else "✗"
         print(f"  [{i}/{len(items)}] {status} {question[:60]}")
 
+    # Aggregate
     answerable = [r for r in results if not r["unanswerable"]]
     unanswerable = [r for r in results if r["unanswerable"]]
+    multi_doc = [r for r in answerable if "multi_doc" in r["needs"]]
+
+    def _mean(vals):
+        return round(sum(vals) / len(vals), 4) if vals else 0.0
+
     metrics = {
-        "recall_at_k": round(sum(r["recall_at_k"] for r in answerable) / max(len(answerable), 1), 4),
-        "mrr": round(sum(r["reciprocal_rank"] for r in answerable) / max(len(answerable), 1), 4),
+        "context_recall": _mean([r["context_recall"] for r in answerable]),
+        "precision_at_k": _mean([r["precision_at_k"] for r in answerable]),
+        "mrr": _mean([r["mrr"] for r in answerable]),
+        "ndcg_at_k": _mean([r["ndcg_at_k"] for r in answerable]),
+        "hit_rate_at_k": _mean([r["hit_rate_at_k"] for r in answerable]),
     }
     if not args.retrieval_only:
-        metrics["answer_correctness"] = round(
-            sum(1 for r in answerable if r["correct"]) / max(len(answerable), 1), 4
-        )
-        metrics["not_found_rate_unanswerables"] = round(
-            sum(1 for r in unanswerable if r["correct"]) / max(len(unanswerable), 1), 4
-        )
+        metrics["faithfulness"] = _mean([1 if r["faithful"] else 0 for r in answerable if r["faithful"] is not None])
+        metrics["answer_relevancy"] = _mean([1 if r["relevant"] else 0 for r in answerable if r["relevant"] is not None])
+        metrics["answer_correctness"] = _mean([1 if r["correct"] else 0 for r in answerable if r.get("correct") is not None])
+        metrics["not_found_rate_unanswerables"] = _mean([1 if r["correct"] else 0 for r in unanswerable]) if unanswerable else None
+        if multi_doc:
+            metrics["context_recall_multi_doc"] = _mean([r["context_recall"] for r in multi_doc])
     metrics["n_answerable"] = len(answerable)
     metrics["n_unanswerable"] = len(unanswerable)
+    metrics["n_multi_doc"] = len(multi_doc)
 
     run_dir = EVAL_DIR / "runs" / datetime.now().strftime("%Y%m%d_%H%M%S")
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -176,6 +206,7 @@ def main() -> None:
         "results": results,
     }
     (run_dir / "report.json").write_text(json.dumps(report, indent=2))
+
     md = [
         f"# Eval run {run_dir.name}",
         "",
@@ -183,23 +214,30 @@ def main() -> None:
         "",
         "| Metric | Value | Target |",
         "|---|---|---|",
-        f"| Recall@k | {metrics['recall_at_k']} | ≥ 0.80 |",
+        f"| Context Recall | {metrics['context_recall']} | ≥ 0.80 |",
+        f"| Precision@k | {metrics['precision_at_k']} | ≥ 0.70 |",
         f"| MRR | {metrics['mrr']} | ≥ 0.65 |",
+        f"| NDCG@k | {metrics['ndcg_at_k']} | ≥ 0.70 |",
+        f"| Hit Rate@k | {metrics['hit_rate_at_k']} | ≥ 0.80 |",
     ]
     if not args.retrieval_only:
         md += [
-            f"| Answer correctness | {metrics['answer_correctness']} | ≥ 0.80 |",
+            f"| Faithfulness | {metrics['faithfulness']} | ≥ 0.90 |",
+            f"| Answer Relevancy | {metrics['answer_relevancy']} | ≥ 0.85 |",
+            f"| Answer Correctness | {metrics['answer_correctness']} | ≥ 0.80 |",
             f"| Not-found rate (unanswerables) | {metrics['not_found_rate_unanswerables']} | ≥ 0.90 |",
         ]
     md += [
         "",
-        "| Question | Expected source | Recall | Correct |",
-        "|---|---|---|---|",
+        "| Question | Type | CtxRecall | Faithful | Correct |",
+        "|---|---|---|---|---|",
     ]
     for r in results:
+        fh = "—" if r.get("faithful") is None else ("✓" if r["faithful"] else "✗")
+        cd = "—" if r.get("correct") is None else ("✓" if r["correct"] else "✗")
         md.append(
-            f"| {r['question'][:60]} | {r['expected_source'] or '—'} | "
-            f"{r['recall_at_k']:.0f} | {'—' if args.retrieval_only else ('✓' if r.get('correct') else '✗')} |"
+            f"| {r['question'][:55]} | {','.join(r.get('needs', []))} | "
+            f"{r['context_recall']:.2f} | {fh} | {cd} |"
         )
     (run_dir / "report.md").write_text("\n".join(md))
     print(f"\nMetrics: {json.dumps(metrics, indent=2)}")
