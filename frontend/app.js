@@ -7,6 +7,16 @@ const state = {
   chats: [],
   currentChatId: null,
   currentCitations: [], // citations of the last assistant message, for the excerpt pane
+  models: { chat: [], embedding: [] }, // proxy model catalog for the settings dropdowns
+};
+
+// Human-friendly labels for the model dropdowns.
+const MODEL_LABELS = {
+  "deepseek-v4-pro": "DeepSeek V4 Pro (class default)",
+  "qwen3.8-max": "Qwen3.8 Max",
+  "qwen3-coder": "Qwen3 Coder (metered)",
+  "text-embedding-005": "text-embedding-005 (768 dims)",
+  "gemini-embedding": "gemini-embedding (3072 dims)",
 };
 
 // ---------- helpers ----------
@@ -268,9 +278,27 @@ function openSettings() {
   loadSettingsIntoForm();
 }
 
+// Value the embedding model had when the settings form was opened; used to
+// decide whether saving needs a re-index prompt.
+let loadedEmbeddingModel = null;
+
+function fillModelSelect(id, models, current) {
+  const sel = $(id);
+  // Keep a hand-edited model that isn't in the catalog selectable.
+  const all = models.includes(current) ? models : [...models, current];
+  sel.innerHTML = all
+    .map((m) => `<option value="${escapeHtml(m)}">${escapeHtml(MODEL_LABELS[m] || m)}</option>`)
+    .join("");
+  sel.value = current;
+}
+
 async function loadSettingsIntoForm() {
   try {
-    const cfg = await api("/api/eval/config");
+    const [cfg, models] = await Promise.all([
+      api("/api/eval/config"),
+      api("/api/models"),
+    ]);
+    state.models = models;
     $("set-chunk-size").value = cfg.chunk_size;
     $("set-chunk-overlap").value = cfg.chunk_overlap;
     $("set-splitter").value = cfg.splitter;
@@ -280,9 +308,10 @@ async function loadSettingsIntoForm() {
     $("set-reranker").value = String(cfg.reranker);
     $("set-hybrid-search").value = String(cfg.hybrid_search);
     $("set-query-rewrite").value = String(cfg.query_rewrite);
-    $("set-llm-model").value = cfg.llm_model;
+    fillModelSelect("set-llm-model", models.chat, cfg.llm_model);
     $("set-temperature").value = cfg.temperature;
-    $("set-embedding-model").value = cfg.embedding_model;
+    fillModelSelect("set-embedding-model", models.embedding, cfg.embedding_model);
+    loadedEmbeddingModel = cfg.embedding_model;
   } catch (e) {
     toast(e.message, true);
   }
@@ -311,18 +340,28 @@ $("settings-save").onclick = async () => {
       reranker: $("set-reranker").value === "true",
       hybrid_search: $("set-hybrid-search").value === "true",
       query_rewrite: $("set-query-rewrite").value === "true",
-      llm_model: $("set-llm-model").value.trim(),
+      llm_model: $("set-llm-model").value,
       temperature: parseFloat($("set-temperature").value),
-      embedding_model: $("set-embedding-model").value.trim(),
+      embedding_model: $("set-embedding-model").value,
     };
     const r = await api("/api/eval/config", {
       method: "PUT",
       body: JSON.stringify(body),
     });
     if (r.needs_reindex) {
-      $("settings-note").textContent =
-        "Index-affecting keys changed. You should re-index your sources.";
       $("settings-note").classList.remove("hidden");
+      if (body.embedding_model !== loadedEmbeddingModel) {
+        // The index is unusable until re-embedded with the new model — offer
+        // to do it right away rather than only leaving a note.
+        $("settings-note").textContent =
+          "Embedding model changed — sources must be re-indexed before asking.";
+        if (confirm("Embedding model changed. Re-index all sources now?")) {
+          await reindexAll();
+        }
+      } else {
+        $("settings-note").textContent =
+          "Index-affecting keys changed. You should re-index your sources.";
+      }
     } else {
       $("settings-note").classList.add("hidden");
     }
@@ -333,10 +372,10 @@ $("settings-save").onclick = async () => {
   }
 };
 
-$("reindex-btn").onclick = async () => {
+async function reindexAll() {
+  toast("Re-indexing all sources (this may take a while)…");
+  $("reindex-btn").disabled = true;
   try {
-    toast("Re-indexing all sources (this may take a while)…");
-    $("reindex-btn").disabled = true;
     const r = await api("/api/documents/reindex", { method: "POST" });
     toast(`Re-indexed ${r.reindexed} sources`);
     await refreshSources();
@@ -345,7 +384,9 @@ $("reindex-btn").onclick = async () => {
   } finally {
     $("reindex-btn").disabled = false;
   }
-};
+}
+
+$("reindex-btn").onclick = reindexAll;
 
 // ---------- chat ----------
 

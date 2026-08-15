@@ -48,6 +48,11 @@ class Settings:
 
 settings = Settings()
 
+# Models reachable through the class proxy (CLAUDE.md). Used to populate the
+# settings dropdowns and to reject typos before they hit the proxy.
+CHAT_MODELS = ["deepseek-v4-pro", "qwen3.8-max", "qwen3-coder"]
+EMBEDDING_MODELS = ["text-embedding-005", "gemini-embedding"]
+
 
 @dataclass(frozen=True)
 class PipelineConfig:

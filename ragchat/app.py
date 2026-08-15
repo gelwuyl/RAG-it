@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from . import auth as authn
-from .config import CONFIG_PATH, UPLOAD_DIR, load_config, settings
+from .config import CHAT_MODELS, CONFIG_PATH, EMBEDDING_MODELS, UPLOAD_DIR, load_config, settings
 from .db import (
     Conversation,
     Document,
@@ -609,6 +609,12 @@ def ask_chat(
 
 # ---------- eval ----------
 
+@app.get("/api/models")
+def list_models():
+    """Proxy model catalog for the settings dropdowns."""
+    return {"chat": CHAT_MODELS, "embedding": EMBEDDING_MODELS}
+
+
 @app.get("/api/eval/config")
 def eval_config():
     cfg = load_config()
@@ -667,6 +673,13 @@ def update_config(body: ConfigUpdateIn):
 
     data = _yaml.safe_load(CONFIG_PATH.read_text()) or {}
     updates = body.model_dump(exclude_none=True)
+    # Reject unknown models up front instead of failing mid-ask with a proxy error.
+    if "llm_model" in updates and updates["llm_model"] not in CHAT_MODELS:
+        raise HTTPException(status_code=422, detail=f"Unknown LLM model: {updates['llm_model']}")
+    if "embedding_model" in updates and updates["embedding_model"] not in EMBEDDING_MODELS:
+        raise HTTPException(
+            status_code=422, detail=f"Unknown embedding model: {updates['embedding_model']}"
+        )
     index_affecting = {"chunk_size", "chunk_overlap", "splitter", "embedding_model"}
     needs_reindex = bool(index_affecting & set(updates.keys()))
 
