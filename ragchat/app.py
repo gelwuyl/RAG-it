@@ -30,7 +30,7 @@ from .db import (
 )
 from .loaders import fetch_url, load_bytes, page_title, TEXT_EXTENSIONS, HTML_EXTENSIONS, PDF_EXTENSIONS
 from .pipeline import ingest_document_text, ask
-from .store import delete_document_chunks
+from .vectordb import delete_document_chunks
 
 app = FastAPI(title="RAG Chat")
 app.add_middleware(

@@ -24,7 +24,7 @@ import re
 from .chunking import refine_refs, split_document
 from .config import PipelineConfig, settings
 from .embeddings import openai_client, ProxyEmbeddings
-from .store import add_chunks, query_chunks
+from .vectordb import add_chunks, query_chunks
 
 EMBED_BATCH = 16
 NOT_FOUND_ANSWER = "I couldn't find this in your documents."

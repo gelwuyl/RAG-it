@@ -27,7 +27,8 @@ sys.path.insert(0, str(ROOT))
 from ragchat.config import load_config  # noqa: E402
 from ragchat.embeddings import ProxyEmbeddings, openai_client  # noqa: E402
 from ragchat.pipeline import NOT_FOUND_ANSWER, ask, ingest_document_text, retrieve  # noqa: E402
-from ragchat.store import collection_name, get_client  # noqa: E402
+from ragchat.vectordb import collection_name  # noqa: E402
+from ragchat.store import get_client  # noqa: E402
 from eval.metrics import (  # noqa: E402
     MATCH_THRESHOLD,
     context_recall,

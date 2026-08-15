@@ -48,6 +48,14 @@ class Settings:
             "ANTHROPIC_AUTH_TOKEN", ""
         )
         self.db_url = os.environ.get("DATABASE_URL", f"sqlite:///{DB_PATH}")
+        # Vector store backend: "chroma" (local disk, default/dev) or
+        # "neon" (Postgres + pgvector, for Vercel/serverless deploy).
+        self.vector_backend = os.environ.get("VECTOR_BACKEND", "chroma")
+        # Postgres connection string for the Neon backend (pgvector). On Vercel
+        # this is injected from the Neon integration (DATABASE_URL).
+        self.pg_url = os.environ.get("PG_DATABASE_URL") or os.environ.get(
+            "DATABASE_URL", ""
+        )
         self.session_secret = os.environ.get("SESSION_SECRET", "dev-session-secret")
         self.allowed_root = Path(
             os.environ.get("RAG_ALLOWED_ROOT", str(Path.home()))
@@ -64,7 +72,7 @@ class Settings:
         # to the bare modelspec so the same physical model from different env
         # overrides still collides to one Chroma collection.
         self.default_embedding_model = normalize_embedding_model(
-            os.environ.get("RAG_EMBEDDING_MODEL", "gemini-embedding-001")
+            os.environ.get("RAG_EMBEDDING_MODEL", "text-embedding-004")
         )
 
 

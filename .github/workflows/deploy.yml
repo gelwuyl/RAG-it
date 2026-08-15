@@ -1,0 +1,112 @@
+# =============================================================================
+# GitHub Actions CI — Build frontend & deploy agentic-RAG to Vercel
+#
+# Secrets referenced (configure under Repo Settings > Secrets and variables > Actions):
+#   VERCEL_TOKEN       Vercel account access token            (https://vercel.com/account/tokens)
+#   VERCEL_ORG_ID      Vercel Team/User ID the project lives in (from `vercel inspect` / project settings)
+#   VERCEL_PROJECT_ID  Vercel project ID to deploy into        (from `vercel inspect` / project settings)
+#   GEMINI_API_KEY     Google AI Studio key (OpenAI-compatible endpoint) — repo secret
+#   DATABASE_URL       Neon Postgres + pgvector connection string — repo secret
+#   SESSION_SECRET     App session signing secret — repo secret
+#
+# Non-secret app config injected at deploy time (safe to be visible):
+#   VECTOR_BACKEND=neon            -> ragchat/vectordb.py dispatch uses Neon, not local Chroma
+#   RAG_EMBEDDING_MODEL=text-embedding-004
+#   RAG_LLM_MODEL=gemma-4-26b-it
+#   PROXY_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/
+#
+# NOTE: secrets are injected via GitHub Encrypted Secrets / the Vercel env store.
+#       Nothing sensitive is hardcoded in this file.
+# =============================================================================
+name: Deploy to Vercel
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+# Read-only token is enough; Vercel auth is via VERCEL_TOKEN.
+permissions:
+  contents: read
+
+# Avoid overlapping production deploys.
+concurrency:
+  group: vercel-prod
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ---------------------------------------------------------------------
+      # 1) Frontend build (Vite)
+      # ---------------------------------------------------------------------
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      # ---------------------------------------------------------------------
+      # 2) Python toolchain (backend deps sanity — backend agent owns requirements.txt)
+      # ---------------------------------------------------------------------
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install backend requirements
+        run: |
+          if [ -f requirements.txt ]; then
+            python -m pip install --upgrade pip
+            pip install -r requirements.txt
+          else
+            echo "requirements.txt not present yet (backend agent adds it) — skipping pip install"
+          fi
+
+      # ---------------------------------------------------------------------
+      # 3) Deploy to Vercel (CLI approach) + inject env vars at deploy time
+      # ---------------------------------------------------------------------
+      - name: Deploy to Vercel (prod)
+        env:
+          # Vercel auth
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          # Injected secrets
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
+          # Non-secret runtime config
+          VECTOR_BACKEND: neon
+          RAG_EMBEDDING_MODEL: text-embedding-004
+          RAG_LLM_MODEL: gemma-4-26b-it
+          PROXY_BASE_URL: https://generativelanguage.googleapis.com/v1beta/openai/
+        run: |
+          set -euo pipefail
+
+          # Link to the target project non-interactively using VERCEL_ORG_ID /
+          # VERCEL_PROJECT_ID (the Vercel CLI reads these env vars automatically).
+          npx vercel@latest link --yes --token "$VERCEL_TOKEN"
+
+          # Push each required env var into the Vercel project store.
+          # We rm first so re-runs update the value instead of erroring on duplicates.
+          for name in GEMINI_API_KEY DATABASE_URL SESSION_SECRET VECTOR_BACKEND RAG_EMBEDDING_MODEL RAG_LLM_MODEL PROXY_BASE_URL; do
+            value="${!name}"
+            vercel env rm "$name" production --yes --token "$VERCEL_TOKEN" 2>/dev/null || true
+            printf '%s' "$value" | vercel env add "$name" production --token "$VERCEL_TOKEN"
+          done
+
+          # Deploy to production.
+          npx vercel@latest --prod --yes --token "$VERCEL_TOKEN"

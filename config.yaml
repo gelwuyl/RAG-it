@@ -3,11 +3,10 @@ chunking:
   chunk_size: 512
   splitter: recursive
 embedding:
-  # Google Gemini embedding model (3072-dim) via the OpenAI-compatible endpoint.
-  # `gemini-embedding-001` is Google's documented GA embedding slug (free tier
-  # available). Switching model auto-creates a fresh per-(user, model) Chroma
-  # collection (see ragchat/store.py), so no manual reindex flag is needed.
-  model: gemini-embedding-001
+  # Google text-embedding-004 (768-dim) via the OpenAI-compatible endpoint.
+  # 768-dim keeps it UNDER pgvector's 2000-dim HNSW index ceiling (so ANN
+  # indexing works on Neon), and is Google's recommended/quality tier.
+  model: text-embedding-004
 generation:
   # Open-weight Gemma 4 26B MoE instruct, served by Google AI Studio's
   # OpenAI-compatible endpoint. Used for generation AND the eval LLM-as-judge.
