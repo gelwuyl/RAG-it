@@ -444,6 +444,9 @@ function openSettings() {
 // decide whether saving needs a re-index prompt.
 let loadedEmbeddingModel = null;
 let loadedEmbeddingProvider = null;
+// Last-known OpenRouter key presence (from /api/eval/config), so the provider
+// dropdown change handler can refresh the warning without re-fetching config.
+let openrouterConfigured = false;
 
 function fillModelSelect(id, models, current) {
   const sel = $(id);
@@ -478,6 +481,7 @@ async function loadSettingsIntoForm() {
     $("set-reranker-provider").value = cfg.reranker_provider || "gemini";
     loadedEmbeddingModel = cfg.embedding_model;
     loadedEmbeddingProvider = cfg.embedding_provider || "gemini";
+    openrouterConfigured = !!cfg.openrouter_configured;
     // Warn if the user is on (or picks) OpenRouter without a key.
     updateProviderWarnings(cfg.openrouter_configured);
     // When the embedding provider changes, reload the embedding-model list so
@@ -493,7 +497,7 @@ async function loadSettingsIntoForm() {
         } catch (e) {
           /* keep current list on failure */
         }
-        updateProviderWarnings(r.openrouter_configured);
+        updateProviderWarnings(openrouterConfigured);
       };
     }
   } catch (e) {
@@ -548,11 +552,13 @@ $("settings-save").onclick = async () => {
       embedding_provider: $("set-embedding-provider").value,
       reranker_provider: $("set-reranker-provider").value,
     };
-    updateProviderWarnings(r.openrouter_configured);
     const res = await api("/api/eval/config", {
       method: "PUT",
       body: JSON.stringify(body),
     });
+    // Re-evaluate the OpenRouter-key warning from the live server response
+    // (it reflects the actual env state, e.g. after a Vercel redeploy).
+    updateProviderWarnings(res.openrouter_configured);
     if (res.needs_reindex) {
       $("settings-note").classList.remove("hidden");
       if (body.embedding_model !== loadedEmbeddingModel || body.embedding_provider !== loadedEmbeddingProvider) {
