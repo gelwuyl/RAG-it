@@ -1102,6 +1102,15 @@ def health():
         "PG_DATABASE_URL": bool(_os.environ.get("PG_DATABASE_URL")),
         "rag_gel_DATABASE_URL": bool(_os.environ.get("rag_gel_DATABASE_URL")),
         "VECTOR_BACKEND": bool(_os.environ.get("VECTOR_BACKEND")),
+        # Auth-related. These were absent, which made the one genuinely
+        # dangerous misconfiguration invisible: with SESSION_SECRET unset the
+        # app signs sessions with a hardcoded default, and anyone who knows it
+        # can mint a cookie for ANY user id. Without dashboard access there was
+        # no way to tell from outside whether a deploy was in that state.
+        "SESSION_SECRET": bool(_os.environ.get("SESSION_SECRET")),
+        "GOOGLE_CLIENT_ID": bool(_os.environ.get("GOOGLE_CLIENT_ID")),
+        "GOOGLE_CLIENT_SECRET": bool(_os.environ.get("GOOGLE_CLIENT_SECRET")),
+        "GOOGLE_REDIRECT_URI": bool(_os.environ.get("GOOGLE_REDIRECT_URI")),
     }
     db_ok = False
     db_err = None
@@ -1158,6 +1167,17 @@ def health():
         "effective_config": cfg_info,
         "judge": judge_info,
         "embedding_models_by_provider": discovery,
+        "auth": {
+            # Surfaced as an explicit warning rather than leaving the reader to
+            # infer it from env_present. Sessions signed with the built-in
+            # default are forgeable for any user id.
+            "session_secret_is_default": settings.session_secret == "dev-session-secret",
+            "google_oauth_configured": authn.oauth_configured(),
+            # google_auth_url() does not derive this from the request, so an
+            # unset value sends an empty redirect_uri and Google rejects the
+            # consent request with redirect_uri_mismatch.
+            "google_redirect_uri_set": bool(_os.environ.get("GOOGLE_REDIRECT_URI")),
+        },
     }
 
 

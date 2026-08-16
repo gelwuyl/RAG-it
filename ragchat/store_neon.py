@@ -315,6 +315,7 @@ def query_chunks(
             FROM chunks
             WHERE user_id = :u
               AND embedding_model = :m
+              AND fingerprint = :f
               AND to_tsvector('simple', text) @@ plainto_tsquery('simple', :q)
             ORDER BY rank DESC
             LIMIT :lim
@@ -323,7 +324,22 @@ def query_chunks(
         fres = (
             conn.execute(
                 fts_sql,
-                {"q": query_text, "u": user_id, "m": embedding_model, "lim": v_lim},
+                # `fingerprint` matters here as much as on the vector side. Without
+                # it the two halves of the fusion searched different corpora: the
+                # vector query is fingerprint-scoped, so it correctly ignores chunks
+                # left behind by a previous chunking config, but FTS matched them and
+                # RRF promoted them into the results. Those rows genuinely persist —
+                # delete_document_chunks() scopes by doc and model, not fingerprint,
+                # so changing chunk_size/splitter and declining the re-index prompt
+                # leaves them in place until prune_chunks() is run. The symptom is
+                # hybrid search citing text split under the OLD chunking.
+                {
+                    "q": query_text,
+                    "u": user_id,
+                    "m": embedding_model,
+                    "f": fingerprint,
+                    "lim": v_lim,
+                },
             )
             .mappings()
             .all()
