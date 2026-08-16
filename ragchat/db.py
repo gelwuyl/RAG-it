@@ -119,6 +119,7 @@ class ConfigOverride(Base):
 
 
 def get_config_override(key: str):
+    ensure_db()
     s = SessionLocal()
     try:
         return s.get(ConfigOverride, key)
@@ -152,8 +153,50 @@ def init_db() -> None:
                 pass
 
 
+# Self-healing schema init for serverless cold starts. Vercel's @vercel/python
+# runtime does not reliably fire FastAPI startup events, so tables created only
+# there (e.g. conversations/messages) and the built-in local account can be
+# absent on the live function. We therefore create the schema and the local
+# account lazily on the first DB access instead of relying solely on the
+# startup hook.
+_initialized = False
+LOCAL_USERNAME = "local"
+
+
+def ensure_db() -> None:
+    """Idempotently create all tables/columns and the built-in local account once per process."""
+    global _initialized
+    if _initialized:
+        return
+    init_db()
+    # Single-user mode: ensure the built-in local account exists so the UI can
+    # sign itself in without any form (auth flow per PRD is deferred).
+    from . import auth as authn
+    db = SessionLocal()
+    try:
+        existing = (
+            db.query(User)
+            .filter(User.provider == "password", User.sub == LOCAL_USERNAME)
+            .first()
+        )
+        if not existing:
+            db.add(
+                User(
+                    provider="password",
+                    sub=LOCAL_USERNAME,
+                    name="Local user",
+                    password_hash=authn.hash_password(new_id()),
+                )
+            )
+            db.commit()
+    finally:
+        db.close()
+    _initialized = True
+
+
 def get_session():
     """FastAPI dependency yielding a database session."""
+    ensure_db()
     s = SessionLocal()
     try:
         yield s
