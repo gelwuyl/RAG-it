@@ -87,14 +87,27 @@ function showApp() {
 }
 
 async function initAuth() {
-  // Single-user mode: sign in automatically as the built-in local account.
   try {
-    const status = await api("/api/auth/status");
-    if (!status.authenticated) {
+    let status = await api("/api/auth/status");
+    // Guest fallback ONLY when Google sign-in is unavailable on this
+    // deployment. Every route is already scoped to the signed-in user
+    // (documents, folders, chats and vector chunks all filter on user id), so
+    // the ONE thing that made everyone share a space was auto-signing every
+    // visitor into the built-in `local` account. Doing that while OAuth is
+    // configured would defeat per-user isolation: two people signing in with
+    // different Google accounts would still land in the same `local` documents.
+    if (!status.authenticated && !status.google_oauth) {
       await api("/api/auth/local-login", { method: "POST" });
+      status = await api("/api/auth/status");
     }
-    const refreshed = await api("/api/auth/status");
-    state.user = refreshed.user;
+    if (!status.authenticated) {
+      // OAuth is available but nobody is signed in — show the gate instead of
+      // booting into an empty app whose every fetch would 401.
+      renderAuthGate(status);
+      showAuth();
+      return;
+    }
+    state.user = status.user;
     const nameEl = $("user-name");
     if (nameEl) nameEl.textContent = state.user?.name || "";
   } catch (e) {
@@ -108,10 +121,44 @@ async function initAuth() {
   }
 }
 
+// The #auth-view card exists in index.html but nothing ever wired it up: both
+// the Google link and the password form are `hidden` by default and no code
+// revealed them, so hitting a 401 showed a dead card with no way to sign in.
+function renderAuthGate(status) {
+  const googleBtn = $("google-btn");
+  const pwWrap = $("password-auth");
+  if (googleBtn) googleBtn.classList.toggle("hidden", !status.google_oauth);
+  // Keep the password fallback available when Google isn't configured, so a
+  // deployment without OAuth is still usable with real per-user accounts.
+  if (pwWrap) pwWrap.classList.toggle("hidden", !!status.google_oauth);
+
+  const err = $("auth-error");
+  const submit = async (path) => {
+    const username = $("auth-username")?.value.trim();
+    const password = $("auth-password")?.value || "";
+    if (!username || !password) {
+      if (err) err.textContent = "Enter a username and password.";
+      return;
+    }
+    try {
+      await api(path, { method: "POST", body: JSON.stringify({ username, password }) });
+      window.location.reload();
+    } catch (e) {
+      if (err) err.textContent = e.message;
+    }
+  };
+  const loginBtn = $("login-btn");
+  const registerBtn = $("register-btn");
+  if (loginBtn) loginBtn.onclick = () => submit("/api/auth/login");
+  if (registerBtn) registerBtn.onclick = () => submit("/api/auth/register");
+}
+
 // ---------- optional Google sign-in ----------
 //
-// Purely an identity badge in the top bar. Nothing in the app is gated on it:
-// if /api/auth/me fails or Google isn't configured, the rest still boots.
+// Identity badge in the top bar. When Google OAuth is NOT configured the app
+// still boots signed-out into the shared `local` account; when it IS
+// configured, signing in gives each account its own isolated space.
+// The status payload carries no avatar URL, so the chip uses the initial.
 
 const GOOGLE_G_SVG = `<svg class="google-g" viewBox="0 0 18 18" width="16" height="16" aria-hidden="true">
     <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62Z"/>
@@ -132,7 +179,10 @@ function renderSignedOut(slot, configured) {
       toast("Google sign-in isn't configured on this deployment.", true);
       return;
     }
-    window.location.href = "/api/auth/login";
+    // /api/auth/login is POST-only (username+password). Navigating to it issued
+    // a GET, which 405'd and never reached Google — this is why the button
+    // "did nothing". The OAuth entry point is /api/auth/google/login.
+    window.location.href = "/api/auth/google/login";
   };
 }
 
@@ -160,8 +210,14 @@ function renderSignedIn(slot, me) {
       );
     };
   }
-  slot.querySelector("#google-signout").onclick = () => {
-    window.location.href = "/api/auth/logout";
+  // Logout is POST-only too, so navigating here 405'd and left you signed in.
+  slot.querySelector("#google-signout").onclick = async () => {
+    try {
+      await api("/api/auth/logout", { method: "POST" });
+    } catch (e) {
+      /* clearing the cookie is best-effort; reload reflects the real state */
+    }
+    window.location.reload();
   };
 }
 
@@ -183,15 +239,18 @@ async function initGoogleAuth() {
     window.history.replaceState({}, "", window.location.pathname + (qs ? `?${qs}` : ""));
   }
 
+  // There is no /api/auth/me route — it 404'd on every load, so `me` was always
+  // null and the badge could never show a signed-in user. The real endpoint is
+  // /api/auth/status, whose shape is {authenticated, user, google_oauth}.
   let me = null;
   try {
-    const res = await fetch("/api/auth/me", { credentials: "same-origin" });
+    const res = await fetch("/api/auth/status", { credentials: "same-origin" });
     me = res.ok ? await res.json() : null;
   } catch (e) {
-    console.warn("auth/me unavailable:", e);
+    console.warn("auth/status unavailable:", e);
   }
-  if (me && me.logged_in) renderSignedIn(slot, me);
-  else renderSignedOut(slot, me ? me.configured : undefined);
+  if (me && me.authenticated && me.user) renderSignedIn(slot, me.user);
+  else renderSignedOut(slot, me ? me.google_oauth : undefined);
 }
 
 // ---------- sources ----------
