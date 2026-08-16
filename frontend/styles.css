@@ -69,6 +69,7 @@ h1, h2, h3 { line-height: 1.3; }
 .hidden { display: none !important; }
 .muted { color: var(--muted); }
 .small { font-size: 12px; }
+.warn { color: var(--warn); background: var(--warn-bg); border: 1px solid #fedf89; border-radius: var(--r-sm, 6px); padding: 6px 10px; margin: 0 0 12px; }
 .error-text { color: var(--error); font-size: 13px; }
 
 /* ---------- buttons & controls ---------- */
@@ -196,6 +197,51 @@ input::placeholder, textarea::placeholder { color: var(--faint); }
   margin-left: auto;
 }
 .user-name:not(:empty) + .topbar-actions { margin-left: 0; }
+
+/* Optional Google sign-in: last item in the top bar, never a layout owner. */
+.auth-slot { display: flex; align-items: center; margin-left: 8px; }
+.google-btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  white-space: nowrap;
+}
+.google-g { flex-shrink: 0; display: block; }
+.user-chip {
+  display: inline-flex; align-items: center; gap: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel-sunken);
+  border-radius: var(--r-pill);
+  padding: 3px 5px 3px 4px;
+  max-width: 240px;
+}
+.user-avatar {
+  width: 24px; height: 24px; flex-shrink: 0;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid var(--border);
+  background: var(--panel);
+}
+.user-avatar-initial {
+  display: grid; place-items: center;
+  font-size: 11px; font-weight: 700; color: #fff;
+  border-color: transparent;
+  background: linear-gradient(135deg, var(--primary), var(--accent));
+}
+.user-chip-name {
+  font-size: 12px; color: var(--muted); min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.user-chip-signout {
+  font: inherit; font-size: 11px;
+  border: 1px solid var(--border-strong);
+  background: var(--panel);
+  color: var(--muted);
+  border-radius: var(--r-pill);
+  padding: 3px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.user-chip-signout:hover { background: #eef0f3; color: var(--text); }
 
 /* pill switches (keyword fusion / web fallback) */
 .switch {
@@ -755,8 +801,11 @@ fieldset legend {
   .topbar { padding: 10px 12px; gap: 8px 10px; }
   .brand-sub { display: none; }
   .user-name { font-size: 12px; }
-  .topbar-actions { width: 100%; margin-left: 0; }
+  /* Keep the sign-in control on the brand row; the toggles wrap below it. */
+  .auth-slot { order: 2; margin-left: auto; }
+  .topbar-actions { order: 3; width: 100%; margin-left: 0; }
   .user-name:not(:empty) + .topbar-actions { margin-left: 0; }
+  .user-chip { max-width: 190px; }
   .switch { flex: 1 1 auto; justify-content: space-between; }
 
   .panes {
@@ -803,6 +852,9 @@ fieldset legend {
 
 @media (max-width: 400px) {
   .topbar-actions .btn { flex: 1 1 auto; }
+  /* Too narrow to share the brand row — give the sign-in control its own. */
+  .auth-slot { width: 100%; margin-left: 0; }
+  .google-btn, .user-chip { width: 100%; max-width: none; justify-content: center; }
 }
 
 @media (prefers-reduced-motion: reduce) {

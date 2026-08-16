@@ -24,7 +24,7 @@ import time
 
 from .chunking import refine_refs, split_document
 from .config import PipelineConfig, settings
-from .embeddings import openai_client, ProxyEmbeddings, retry_call
+from .embeddings import openai_client, ProxyEmbeddings, retry_call, reranker_provider, rerank
 from .vectordb import add_chunks, query_chunks
 
 EMBED_BATCH = 16
@@ -57,8 +57,8 @@ Score:"""
 _SNIPPET_PATTERN = re.compile(r"<[^>]+>")
 
 
-def _embed_texts(model: str, texts: list[str]) -> list[list[float]]:
-    emb = ProxyEmbeddings(model)
+def _embed_texts(model: str, texts: list[str], provider: str | None = None) -> list[list[float]]:
+    emb = ProxyEmbeddings(model, provider=provider)
     out: list[list[float]] = []
     for i in range(0, len(texts), EMBED_BATCH):
         out.extend(emb.embed_documents(texts[i : i + EMBED_BATCH]))
@@ -78,7 +78,7 @@ def ingest_document_text(
     if not chunks:
         return 0
     texts = [c.text for c in chunks]
-    embeddings = _embed_texts(cfg.embedding_model, texts)
+    embeddings = _embed_texts(cfg.embedding_model, texts, provider=cfg.embedding_provider)
     refs = [c.ref for c in chunks]
     # Embedding model is part of the collection name (store.py), so chunks
     # from different dimensions never collide.
@@ -131,7 +131,7 @@ def retrieve(
     fused (RRF) in the store so exact-match terms surface (PRD §5). The
     embedding model is passed so the correct per-model collection is queried.
     """
-    emb = ProxyEmbeddings(cfg.embedding_model)
+    emb = ProxyEmbeddings(cfg.embedding_model, provider=cfg.embedding_provider)
     qvec = emb.embed_query(query)
     n = n_results or cfg.candidate_k
     chunks = query_chunks(
@@ -149,14 +149,33 @@ def retrieve(
 def _rerank(
     query: str, chunks: list[dict], cfg: PipelineConfig
 ) -> list[dict]:
-    """LLM-based cross-encoder: score each chunk and keep top_k.
+    """Re-rank chunks to keep the top_k most relevant to `query`.
 
-    Web chunks (doc_id starts with 'web:') cannot be re-scored by the
-    document model meaningfully; they keep their position via a neutral
-    score rather than a spurious LLM number.
+    When cfg.reranker is off, or there are few enough chunks already, we
+    return the vector top_k unchanged.
+
+    Provider behaviour:
+      - reranker_provider() == "openrouter"  -> Cohere rerank-v3.5 at
+        OpenRouter's /v1/rerank endpoint (fast, cheap, purpose-built). All
+        passages (including [web] ones) are reranked together.
+      - reranker_provider() == "gemini" (default) -> the original LLM
+        cross-encoder: each non-web chunk is scored 0-100 by the generation
+        LLM. Web chunks keep a neutral score so they aren't given a spurious
+        LLM number.
     """
     if not cfg.reranker or len(chunks) <= cfg.top_k:
         return chunks[: cfg.top_k]
+
+    if reranker_provider() == "openrouter":
+        try:
+            docs = [c["text"] for c in chunks]
+            order = rerank(query, docs, top_n=cfg.top_k)
+            return [chunks[i] for i in order]
+        except Exception:
+            # Reranker unavailable (e.g. key missing) — fall back to vector order.
+            return chunks[: cfg.top_k]
+
+    # Default: slow LLM cross-encoder.
     scored = []
     for c in chunks:
         if str(c.get("doc_id", "")).startswith("web:"):
@@ -242,6 +261,41 @@ def _eval_answer(question: str, answer: str, context_text: str, cfg: PipelineCon
     }
 
 
+def _clean_answer(answer: str) -> str:
+    """Strip model reasoning wrappers (e.g. ``,
+    ``<think:6124c78e>...</think:6124c78e>``, ``<reasoning>...</reasoning>``) from a
+    generated answer so the user-facing text is clean and citation parsing
+    isn't poisoned by a stray not-found string inside the reasoning block.
+
+    Some reasoning-tuned models wrap output in these tags. The final,
+    user-facing sentence usually sits OUTSIDE the wrapper, but if the whole
+    answer is inside it we keep the inner text so nothing is lost.
+    """
+    import re as _re
+
+    text = answer or ""
+    # Remove full wrapper blocks (tags + contents), case-insensitive.
+    stripped = _re.sub(
+        r"<(thought|thinking|reasoning)[\s>].*?</\1>",
+        "",
+        text,
+        flags=_re.IGNORECASE | _re.DOTALL,
+    )
+    stripped = stripped.strip()
+    # Fallback: if everything was inside the wrapper, recover its inner text.
+    if not stripped:
+        inner = _re.search(
+            r"<(thought|thinking|reasoning)[\s>].*?</\1>",
+            text,
+            flags=_re.IGNORECASE | _re.DOTALL,
+        )
+        if inner:
+            stripped = inner.group(0).split(">", 1)[-1].rsplit("<", 1)[0].strip()
+    # Drop any leftover self-closing/empty tags and stray markers.
+    stripped = _re.sub(r"</?(thought|thinking|reasoning)\s*/?>", "", stripped, flags=_re.IGNORECASE)
+    return stripped.strip()
+
+
 def _build_eval_line(eval_d: dict | None, chunks: list[dict], latency_ms: float) -> str:
     """Compact grey-line string: retrieval sim + web count + judge verdicts + latency."""
     parts: list[str] = []
@@ -324,6 +378,11 @@ def ask(
             "not_found": True,
             "citations": [],
         }
+
+    # Strip reasoning wrappers some models emit (e.g. ``) so the
+    # user-facing text is clean and the not-found guard / citation parsing
+    # aren't poisoned by a stray phrase inside the reasoning block.
+    answer = _clean_answer(answer)
 
     if NOT_FOUND_ANSWER.lower() in answer.lower():
         return {

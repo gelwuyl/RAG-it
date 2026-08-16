@@ -25,6 +25,21 @@ SPA, using Neon (Postgres + pgvector) as the vector store.
 `VECTOR_BACKEND=neon`, `PG_DATABASE_URL` / `DATABASE_URL`, `SESSION_SECRET`,
 `RAG_ALLOWED_ROOT`.
 
+Set these in the Vercel dashboard (**Project → Settings → Environment
+Variables**) or via `vercel env add <NAME>` — never in the repo. They are read
+at runtime by `os.environ.get(...)` (see `ragchat/config.py` / `embeddings.py`).
+
+## Optional environment variables
+- `OPENROUTER_API_KEY` — unlocks the **OpenRouter** provider for embeddings and
+  reranking, escaping the Gemini free-tier rate limit (the ~5-document upload
+  ceiling). Add it via `vercel env add OPENROUTER_API_KEY` or the dashboard. Once
+  present, switch `EMBEDDING_PROVIDER` / `RERANKER_PROVIDER` to `openrouter`
+  either here (add them as env vars) or live in the app's Settings UI.
+- `EMBEDDING_PROVIDER` — `gemini` (default) or `openrouter`. Boot default only;
+  the Settings UI overrides it at runtime (persisted to the DB).
+- `RERANKER_PROVIDER` — `gemini` (default, LLM cross-encoder) or `openrouter`
+  (Cohere `rerank-v3.5`, fast/cheap). Same switching rules as above.
+
 ## Frontend
 - `vercel.json` runs `npm install && npm run build` in `frontend/` and
   serves `frontend/dist` as static output. `/api/*` is rewritten to the

@@ -29,6 +29,7 @@ function modelLabel(id) {
 
 async function api(path, options = {}) {
   const res = await fetch(path, {
+    method: options.method || "GET",
     headers: options.body instanceof FormData ? {} : { "Content-Type": "application/json" },
     credentials: "same-origin",
     ...options,
@@ -98,6 +99,92 @@ async function initAuth() {
   } catch (e) {
     console.error("boot fetch failed:", e);
   }
+}
+
+// ---------- optional Google sign-in ----------
+//
+// Purely an identity badge in the top bar. Nothing in the app is gated on it:
+// if /api/auth/me fails or Google isn't configured, the rest still boots.
+
+const GOOGLE_G_SVG = `<svg class="google-g" viewBox="0 0 18 18" width="16" height="16" aria-hidden="true">
+    <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62Z"/>
+    <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.8.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.03-3.7H.96v2.33A9 9 0 0 0 9 18Z"/>
+    <path fill="#FBBC05" d="M3.97 10.72a5.4 5.4 0 0 1 0-3.44V4.95H.96a9 9 0 0 0 0 8.1l3.01-2.33Z"/>
+    <path fill="#EA4335" d="M9 3.58c1.32 0 2.5.46 3.44 1.35l2.58-2.58C13.46.9 11.43 0 9 0A9 9 0 0 0 .96 4.95l3.01 2.33C4.68 5.16 6.66 3.58 9 3.58Z"/>
+  </svg>`;
+
+function renderSignedOut(slot, configured) {
+  slot.innerHTML = `<button id="google-signin" class="btn btn-small google-btn" type="button"
+      title="${configured === false
+        ? "Google sign-in is not configured on this deployment"
+        : "Optional — the app works signed out too"}">
+      ${GOOGLE_G_SVG}<span class="google-btn-text">Sign in with Google</span>
+    </button>`;
+  slot.querySelector("#google-signin").onclick = () => {
+    if (configured === false) {
+      toast("Google sign-in isn't configured on this deployment.", true);
+      return;
+    }
+    window.location.href = "/api/auth/login";
+  };
+}
+
+function renderSignedIn(slot, me) {
+  const name = me.name || me.email || "Signed in";
+  const initial = (name.trim()[0] || "?").toUpperCase();
+  const avatar = me.picture
+    ? `<img class="user-avatar" src="${escapeHtml(me.picture)}" alt=""
+         referrerpolicy="no-referrer" />`
+    : `<span class="user-avatar user-avatar-initial" aria-hidden="true">${escapeHtml(initial)}</span>`;
+  slot.innerHTML = `<div class="user-chip" title="${escapeHtml(me.email || name)}">
+      ${avatar}
+      <span class="user-chip-name">${escapeHtml(name)}</span>
+      <button id="google-signout" class="user-chip-signout" type="button">Sign out</button>
+    </div>`;
+  // A broken avatar URL (Google sometimes 403s them) falls back to the initial.
+  const img = slot.querySelector("img.user-avatar");
+  if (img) {
+    img.onerror = () => {
+      img.replaceWith(
+        Object.assign(document.createElement("span"), {
+          className: "user-avatar user-avatar-initial",
+          textContent: initial,
+        })
+      );
+    };
+  }
+  slot.querySelector("#google-signout").onclick = () => {
+    window.location.href = "/api/auth/logout";
+  };
+}
+
+async function initGoogleAuth() {
+  const slot = $("auth-slot");
+  if (!slot) return;
+  // Surface a failed round-trip once, then clean the URL.
+  const params = new URLSearchParams(window.location.search);
+  const authFlag = params.get("auth");
+  if (authFlag) {
+    toast(
+      authFlag === "unavailable"
+        ? "Google sign-in isn't configured on this deployment."
+        : "Google sign-in failed — you can keep using the app signed out.",
+      true
+    );
+    params.delete("auth");
+    const qs = params.toString();
+    window.history.replaceState({}, "", window.location.pathname + (qs ? `?${qs}` : ""));
+  }
+
+  let me = null;
+  try {
+    const res = await fetch("/api/auth/me", { credentials: "same-origin" });
+    me = res.ok ? await res.json() : null;
+  } catch (e) {
+    console.warn("auth/me unavailable:", e);
+  }
+  if (me && me.logged_in) renderSignedIn(slot, me);
+  else renderSignedOut(slot, me ? me.configured : undefined);
 }
 
 // ---------- sources ----------
@@ -356,6 +443,7 @@ function openSettings() {
 // Value the embedding model had when the settings form was opened; used to
 // decide whether saving needs a re-index prompt.
 let loadedEmbeddingModel = null;
+let loadedEmbeddingProvider = null;
 
 function fillModelSelect(id, models, current) {
   const sel = $(id);
@@ -386,9 +474,48 @@ async function loadSettingsIntoForm() {
     fillModelSelect("set-llm-model", models.chat, cfg.llm_model);
     $("set-temperature").value = cfg.temperature;
     fillModelSelect("set-embedding-model", models.embedding, cfg.embedding_model);
+    $("set-embedding-provider").value = cfg.embedding_provider || "gemini";
+    $("set-reranker-provider").value = cfg.reranker_provider || "gemini";
     loadedEmbeddingModel = cfg.embedding_model;
+    loadedEmbeddingProvider = cfg.embedding_provider || "gemini";
+    // Warn if the user is on (or picks) OpenRouter without a key.
+    updateProviderWarnings(cfg.openrouter_configured);
+    // When the embedding provider changes, reload the embedding-model list so
+    // the dropdown auto-detects that provider's models (Gemini vs OpenRouter).
+    const epSel = $("set-embedding-provider");
+    if (epSel) {
+      epSel.onchange = async () => {
+        const p = epSel.value;
+        try {
+          const m = await api(`/api/models?provider=${encodeURIComponent(p)}`);
+          const cur = $("set-embedding-model")?.value;
+          fillModelSelect("set-embedding-model", m.embedding, cur || defaultEmbedModelFor(p));
+        } catch (e) {
+          /* keep current list on failure */
+        }
+        updateProviderWarnings(r.openrouter_configured);
+      };
+    }
   } catch (e) {
     toast(e.message, true);
+  }
+}
+
+function defaultEmbedModelFor(provider) {
+  return provider === "openrouter" ? "openai/text-embedding-3-small" : "models/gemini-embedding-001";
+}
+
+function updateProviderWarnings(configured) {
+  const warn = $("provider-warning");
+  const ep = $("set-embedding-provider")?.value;
+  const rp = $("set-reranker-provider")?.value;
+  if (configured || (ep !== "openrouter" && rp !== "openrouter")) {
+    if (warn) warn.classList.add("hidden");
+    return;
+  }
+  if (warn) {
+    warn.textContent = "OpenRouter selected but no OPENROUTER_API_KEY found in .env — add it and restart the backend.";
+    warn.classList.remove("hidden");
   }
 }
 
@@ -418,19 +545,22 @@ $("settings-save").onclick = async () => {
       llm_model: $("set-llm-model").value,
       temperature: parseFloat($("set-temperature").value),
       embedding_model: $("set-embedding-model").value,
+      embedding_provider: $("set-embedding-provider").value,
+      reranker_provider: $("set-reranker-provider").value,
     };
-    const r = await api("/api/eval/config", {
+    updateProviderWarnings(r.openrouter_configured);
+    const res = await api("/api/eval/config", {
       method: "PUT",
       body: JSON.stringify(body),
     });
-    if (r.needs_reindex) {
+    if (res.needs_reindex) {
       $("settings-note").classList.remove("hidden");
-      if (body.embedding_model !== loadedEmbeddingModel) {
+      if (body.embedding_model !== loadedEmbeddingModel || body.embedding_provider !== loadedEmbeddingProvider) {
         // The index is unusable until re-embedded with the new model — offer
         // to do it right away rather than only leaving a note.
         $("settings-note").textContent =
-          "Embedding model changed — sources must be re-indexed before asking.";
-        if (confirm("Embedding model changed. Re-index all sources now?")) {
+          "Embedding model or provider changed — sources must be re-indexed before asking.";
+        if (confirm("Embedding changed. Re-index all sources now?")) {
           await reindexAll();
         }
       } else {
@@ -485,10 +615,29 @@ function renderChats() {
       e.stopPropagation();
       if (!confirm(`Delete “${c.title}”?`)) return;
       try {
+        // DELETE returns 204/200; only mutate local state on success.
         await api(`/api/chats/${c.id}`, { method: "DELETE" });
+        // Remove the chat from the in-memory list so it disappears immediately
+        // (the cached state.chats is the source of truth for renderChats).
+        state.chats = state.chats.filter((x) => x.id !== c.id);
         chatStatusOverride.delete(c.id);
-        if (state.currentChatId === c.id) state.currentChatId = null;
-        await refreshChats(state.currentChatId);
+        const wasCurrent = state.currentChatId === c.id;
+        if (wasCurrent) state.currentChatId = null;
+        if (wasCurrent && state.chats.length) {
+          // Jump to the newest remaining chat instead of the empty state.
+          await openChat(state.chats[0].id);
+        } else {
+          renderChats();
+        }
+        if (!state.chats.length) {
+          state.currentChatId = null;
+          renderChats();
+          $("messages").innerHTML = emptyState(
+            "◈",
+            "Ask a question to see results",
+            "Add sources on the left, then ask anything about them. Answers are grounded in your documents and cite their sources."
+          );
+        }
         toast("Conversation deleted");
       } catch (err) { toast(err.message, true); }
     };
@@ -924,4 +1073,7 @@ MOBILE.addEventListener("change", applyBreakpointDefaults);
     console.error("boot failed:", e);
     toast("Boot failed: " + e.message, true);
   });
+  // Independent of the app boot on purpose: Google sign-in is optional, so a
+  // failure here must never hold up (or break) the rest of the UI.
+  initGoogleAuth().catch((e) => console.warn("google auth init failed:", e));
 })();

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import time
 from pathlib import Path
 from typing import Optional
@@ -20,6 +21,7 @@ from .config import (
     UPLOAD_DIR,
     load_config,
     model_catalog,
+    embedding_models_for,
     is_known_model,
     save_config_override,
     settings,
@@ -668,13 +670,25 @@ def ask_chat(
 # ---------- eval ----------
 
 @app.get("/api/models")
-def list_models():
-    """Live proxy model catalog for the settings dropdowns.
+def list_models(provider: str | None = None):
+    """Live model catalog for the settings dropdowns.
 
-    Discovered from GET {proxy}/v1/models (OpenAI-compatible); falls back to a
-    static default list if the proxy is unreachable so the UI never blanks.
+    Chat models come from the generation endpoint (Gemini/proxy). Embedding
+    models are discovered from the *embedding* provider's /v1/models so the
+    dropdown reflects what the selected provider actually serves. Pass
+    `?provider=openrouter` to fetch OpenRouter's embedding catalog instead of
+    the default Gemini one. Falls back to a static list if discovery is
+    unreachable so the UI never blanks.
     """
-    return model_catalog()
+    emb_provider = provider or "gemini"
+    catalog = model_catalog()
+    if emb_provider != "gemini":
+        # Re-fetch the embedding list for the requested provider (cheap cache
+        # only covers the default provider; explicit request always reflects
+        # live discovery for that provider).
+        emb = embedding_models_for(emb_provider)
+        catalog = {"chat": catalog["chat"], "embedding": emb}
+    return catalog
 
 
 @app.get("/api/eval/config")
@@ -693,6 +707,9 @@ def eval_config():
         "llm_model": cfg.llm_model,
         "temperature": cfg.temperature,
         "embedding_model": cfg.embedding_model,
+        "embedding_provider": cfg.embedding_provider,
+        "reranker_provider": cfg.reranker_provider,
+        "openrouter_configured": bool(os.environ.get("OPENROUTER_API_KEY")),
         "web_augmentation": cfg.web_augmentation,
         "eval_show": cfg.eval_show,
         "fingerprint": cfg.fingerprint(),
@@ -745,6 +762,8 @@ class ConfigUpdateIn(BaseModel):
     llm_model: str | None = None
     temperature: float | None = None
     embedding_model: str | None = None
+    embedding_provider: str | None = None
+    reranker_provider: str | None = None
     web_augmentation: bool | None = None
     eval_show: bool | None = None
 
@@ -766,7 +785,21 @@ def update_config(body: ConfigUpdateIn):
         raise HTTPException(
             status_code=422, detail=f"Unknown embedding model: {updates['embedding_model']}"
         )
-    index_affecting = {"chunk_size", "chunk_overlap", "splitter", "embedding_model"}
+    # Validate provider switches; block OpenRouter if no key is configured
+    # (a silent failure later is worse than a clear 422 here). Gemini always
+    # allowed (uses GEMINI_API_KEY / proxy).
+    for key, env_var in (("embedding_provider", "OPENROUTER_API_KEY"),
+                         ("reranker_provider", "OPENROUTER_API_KEY")):
+        if key in updates:
+            val = str(updates[key]).lower()
+            if val not in ("gemini", "openrouter"):
+                raise HTTPException(status_code=422, detail=f"Unknown {key}: {updates[key]}")
+            if val == "openrouter" and not os.environ.get(env_var):
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"OpenRouter not configured — set {env_var} in .env before selecting OpenRouter for {key}.",
+                )
+    index_affecting = {"chunk_size", "chunk_overlap", "splitter", "embedding_model", "embedding_provider"}
     needs_reindex = bool(index_affecting & set(updates.keys()))
 
     cfg = load_config()
@@ -787,6 +820,9 @@ def update_config(body: ConfigUpdateIn):
             "llm_model": cfg.llm_model,
             "temperature": cfg.temperature,
             "embedding_model": cfg.embedding_model,
+            "embedding_provider": cfg.embedding_provider,
+            "reranker_provider": cfg.reranker_provider,
+            "openrouter_configured": bool(os.environ.get("OPENROUTER_API_KEY")),
             "web_augmentation": cfg.web_augmentation,
             "eval_show": cfg.eval_show,
             "fingerprint": cfg.fingerprint(),
@@ -832,15 +868,18 @@ def _eval_status() -> dict:
 
 def _run_benchmark() -> None:
     """Run the eval harness in a background thread and persist a status file."""
+    _EVAL_STATUS_FILE.write_text(
+        json.dumps({"status": "running", "started_at": time.time()})
+    )
     try:
         import sys as _sys
 
         _sys.path.insert(0, str(_EVAL_DIR.parent))
+        # Import lazily inside the worker so a missing dep / import error in the
+        # harness is captured as an error status rather than crashing the thread
+        # silently before any status is written.
         from eval.run_eval import run_benchmark as _bench
 
-        _EVAL_STATUS_FILE.write_text(
-            json.dumps({"status": "running", "started_at": time.time()})
-        )
         report = _bench()
         _EVAL_STATUS_FILE.write_text(
             json.dumps(

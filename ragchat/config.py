@@ -96,6 +96,13 @@ class Settings:
         self.default_embedding_model = normalize_embedding_model(
             os.environ.get("RAG_EMBEDDING_MODEL", "models/gemini-embedding-001")
         )
+        # Which provider serves embeddings / the reranker. "gemini" = the
+        # Google OpenAI-compatible endpoint (free tier, rate-limited);
+        # "openrouter" = OpenRouter's /v1 (embedding + rerank), far higher
+        # limits. Switchable at runtime via the settings UI (persisted to the
+        # DB override) — no restart needed.
+        self.default_embedding_provider = os.environ.get("EMBEDDING_PROVIDER", "gemini").lower()
+        self.default_reranker_provider = os.environ.get("RERANKER_PROVIDER", "gemini").lower()
 
 
 def normalize_embedding_model(name: str) -> str:
@@ -116,7 +123,10 @@ settings = Settings()
 # keep the UI populated offline; they are NOT an allowlist — any model the
 # proxy actually returns is accepted (see model_catalog below).
 _FALLBACK_CHAT_MODELS = ["deepseek-v4-pro", "qwen3.8-max", "qwen3-coder"]
-_FALLBACK_EMBEDDING_MODELS = ["text-embedding-005", "gemini-embedding"]
+_FALLBACK_EMBEDDING_MODELS: dict[str, list[str]] = {
+    "gemini": ["text-embedding-005", "gemini-embedding"],
+    "openrouter": ["openai/text-embedding-3-small", "openai/text-embedding-3-large", "qwen3-embedding-8b"],
+}
 
 # How long a successful discovery result is cached (seconds). The proxy model
 # list changes rarely; a short TTL avoids a round-trip on every settings open
@@ -137,42 +147,82 @@ def _classify_model(model_id: str) -> str | None:
     return "chat"
 
 
-def discover_models() -> dict[str, list[str]]:
-    """Return live chat + embedding model lists from the proxy.
+def _client_for_provider(provider: str) -> "OpenAI":
+    """OpenAI-compatible client for the given provider's model discovery.
 
-    Calls GET {proxy_base_url}/models (OpenAI-compatible). On any failure
-    (no network, bad key, non-standard response) returns the fallback
-    catalog so the UI never goes blank and config validation never locks
-    you out during a transient proxy outage.
+    Gemini's /v1/models is the catalog of Google models; OpenRouter's
+    /v1/models lists everything OpenRouter serves (including its embedding
+    models). This lets the embedding dropdown auto-detect models per provider
+    instead of only ever showing Gemini models.
     """
-    try:
-        from .embeddings import openai_client
+    from .embeddings import _PROVIDER_API_KEY, _PROVIDER_BASE_URL
 
-        client = openai_client()
+    p = provider if provider in _PROVIDER_BASE_URL else "gemini"
+    return OpenAI(api_key=_PROVIDER_API_KEY.get(p, ""), base_url=_PROVIDER_BASE_URL[p])
+
+
+def discover_models(provider: str = "gemini") -> dict[str, list[str]]:
+    """Return live chat + embedding model lists from the given provider's /v1/models.
+
+    Chat models are always sourced from the generation (Gemini) endpoint; the
+    `provider` arg selects which endpoint's embedding models we discover. On any
+    failure (no network, bad key, non-standard response) returns the fallback
+    catalog so the UI never goes blank and config validation never locks you
+    out during a transient proxy outage.
+    """
+    emb_models: list[str] = []
+    try:
+        client = _client_for_provider(provider)
         resp = client.models.list()
-        chat, emb = [], []
         for m in getattr(resp, "data", []) or []:
             mid = getattr(m, "id", None)
             if not mid:
                 continue
-            kind = _classify_model(mid)
-            if kind == "chat":
-                chat.append(mid)
-            elif kind == "embedding":
-                emb.append(mid)
-        if chat or emb:
-            return {"chat": sorted(chat), "embedding": sorted(emb)}
+            if _classify_model(mid) == "embedding":
+                emb_models.append(mid)
     except Exception:
         pass
-    return {"chat": list(_FALLBACK_CHAT_MODELS), "embedding": list(_FALLBACK_EMBEDDING_MODELS)}
+
+    # Chat models: always from the generation endpoint (Gemini/proxy).
+    chat_models: list[str] = []
+    if provider == "gemini":
+        # Only re-query when this is the generation endpoint too.
+        try:
+            gen = _client_for_provider("gemini")
+            resp = gen.models.list()
+            for m in getattr(resp, "data", []) or []:
+                mid = getattr(m, "id", None)
+                if mid and _classify_model(mid) == "chat":
+                    chat_models.append(mid)
+        except Exception:
+            pass
+
+    if emb_models:
+        return {"chat": sorted(chat_models), "embedding": sorted(emb_models)}
+    return {
+        "chat": list(_FALLBACK_CHAT_MODELS),
+        "embedding": list(_FALLBACK_EMBEDDING_MODELS.get(provider, _FALLBACK_EMBEDDING_MODELS["gemini"])),
+    }
+
+
+def embedding_models_for(provider: str) -> list[str]:
+    """Live embedding-model list for `provider` (Gemini or OpenRouter)."""
+    return discover_models(provider).get("embedding", [])
 
 
 def model_catalog() -> dict[str, list[str]]:
-    """Cached live model catalog (chat + embedding)."""
+    """Cached live model catalog (chat + embedding).
+
+    Chat models come from the generation endpoint; embedding models come from
+    the currently-selected embedding provider so the dropdown reflects what that
+    provider actually serves.
+    """
     now = time.time()
     if _cache["chat"] is not None and (now - _cache["at"]) < _MODEL_CACHE_TTL:
         return {"chat": _cache["chat"], "embedding": _cache["embedding"]}
-    catalog = discover_models()
+    from .embeddings import embedding_provider
+
+    catalog = discover_models(embedding_provider())
     _cache["chat"] = catalog["chat"]
     _cache["embedding"] = catalog["embedding"]
     _cache["at"] = now
@@ -180,16 +230,23 @@ def model_catalog() -> dict[str, list[str]]:
 
 
 def is_known_model(model: str, kind: str) -> bool:
-    """True if `model` is in the live catalog for `kind`, OR is the current
-    deployment default for that kind (so a discovery miss can't reject a model
-    the proxy will still serve)."""
+    """True if `model` is in the live catalog for `kind`, OR is a deployment
+    default for that kind (so a discovery miss can't reject a model the
+    provider will still serve). Accepts every provider's canonical default
+    embedding model, not just the Gemini one.
+    """
+    from .embeddings import _PROVIDER_DEFAULT_MODEL
+
     catalog = model_catalog()
     if model in catalog[kind]:
         return True
     if kind == "chat" and model == settings.default_llm_model:
         return True
-    if kind == "embedding" and model == settings.default_embedding_model:
-        return True
+    if kind == "embedding":
+        if model == settings.default_embedding_model:
+            return True
+        if model in set(_PROVIDER_DEFAULT_MODEL.values()):
+            return True
     return False
 
 
@@ -207,6 +264,8 @@ class PipelineConfig:
     llm_model: str
     temperature: float
     embedding_model: str
+    embedding_provider: str
+    reranker_provider: str
     web_augmentation: bool
     eval_show: bool
 
@@ -271,6 +330,8 @@ def load_config() -> PipelineConfig:
         llm_model=str(g.get("llm_model", settings.default_llm_model)),
         temperature=float(g.get("temperature", 0.0)),
         embedding_model=str(e.get("model", settings.default_embedding_model)),
+        embedding_provider=str(e.get("provider", settings.default_embedding_provider)),
+        reranker_provider=str(data.get("reranker", {}).get("provider", settings.default_reranker_provider)),
         web_augmentation=bool(g.get("web_augmentation", False)),
         eval_show=bool(data.get("evaluation", {}).get("show", True)),
     )
@@ -300,7 +361,8 @@ def save_config_override(cfg: "PipelineConfig") -> None:
             "temperature": cfg.temperature,
             "web_augmentation": cfg.web_augmentation,
         },
-        "embedding": {"model": cfg.embedding_model},
+        "embedding": {"model": cfg.embedding_model, "provider": cfg.embedding_provider},
+        "reranker": {"provider": cfg.reranker_provider},
         "evaluation": {"show": cfg.eval_show},
     }
     set_config_override("pipeline", json.dumps(payload))
