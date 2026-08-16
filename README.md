@@ -6,20 +6,51 @@ Deployed on **Vercel** (Python backend) with a **Neon Postgres + pgvector** data
 
 ## Architecture
 
-| Component | What it does | Tool / Service | Why this choice |
-|-----------|--------------|----------------|-----------------|
-| **Backend** | REST API: auth, upload, chat, config, eval | FastAPI (Python) | Lightweight async API; deploys cleanly on Vercel's Python (uv) runtime |
-| **Frontend** | 3-pane chat UI (sources / chat / excerpt) | Vanilla JS + Vite | No framework overhead; fast and simple to maintain |
-| **Database** | Users, documents, chats, messages, config | Neon Postgres | Serverless Postgres — survives Vercel's read-only filesystem and redeploys |
-| **Vector DB** | Semantic search over document chunks | pgvector (inside Neon) | Lives in the same Postgres; no separate vector service to run |
-| **Embeddings** | Text → vectors for storage & search | class proxy `/v1/embeddings` (`models/gemini-embedding-001`, 768-dim) | One embedding model per deployment; OpenAI-compatible |
-| **Generation** | Produces the grounded answer | class proxy `/v1/chat/completions` (`models/gemma-4-26b-a4b-it`) | Grounds every claim in retrieved passages |
-| **Question rewrite** | Turns follow-ups ("and what about X?") into standalone queries | LLM rewrite | Improves retrieval for conversational follow-ups |
-| **Reranker** | Re-ranks candidates by relevance before the LLM sees them | LLM cross-encoder | Raises top-k quality; can be toggled off |
-| **Evaluation** | Scores each answer (faithfulness, relevancy, latency, top similarity) | LLM-as-judge + offline harness (`eval/`) | Shows a grey performance line under every answer so tuning is measurable |
-| **Authentication** | Sign-in + session cookies | Local username/password + optional Google OAuth | Works out of the box; OAuth is opt-in |
+```mermaid
+flowchart TD
+    U[Browser / Frontend: Vanilla JS + Vite] --> BE[FastAPI Backend: auth, upload, chat, config, eval]
 
-> The evaluation judge is a heuristic (LLM-as-judge) and can mis-flag edge cases — treat its verdicts as a signal, not ground truth. Web fallback and the reranker are basic first versions that can be improved.
+    BE -->|ingest| L[Loaders: PDF, HTML, text, URL]
+    L --> C[Chunking]
+    C --> E[Embeddings via proxy /v1/embeddings]
+    E --> V[("pgvector (Neon Postgres)")]
+
+    BE -->|query| Q[Question rewrite]
+    Q --> R[Retrieve: vector + BM25 fusion]
+    V --> R
+    R --> RR[Reranker]
+    RR --> G[Generation via proxy /v1/chat]
+    G --> EV[Evaluation: LLM-as-judge]
+
+    BE --> AUTH[Authentication: password + Google OAuth]
+    BE --> DB[("Neon Postgres: users, documents, chats, config")]
+    PX[Class LLM proxy: OpenAI-compatible /v1] --> E
+    PX --> G
+```
+
+**Component notes**
+
+- **Frontend** — Vanilla JS + Vite 3-pane UI (sources / chat / excerpt). No framework overhead; easy to maintain.
+- **Backend** — FastAPI (Python) on Vercel's uv runtime. Lightweight async REST API.
+- **Database** — Neon Postgres. Serverless; survives Vercel's read-only filesystem and redeploys.
+- **Vector DB** — pgvector inside Neon. One store, no separate vector service to run.
+- **Embeddings** — class proxy `/v1/embeddings` (`models/gemini-embedding-001`, 768-dim). One embedding model per deployment; OpenAI-compatible.
+- **Generation** — class proxy `/v1/chat/completions` (`models/gemma-4-26b-a4b-it`). Grounds every answer in retrieved passages.
+- **Question rewrite** — LLM turns follow-ups ("and what about X?") into standalone queries; improves retrieval for conversational context.
+- **Reranker** — LLM cross-encoder re-scores candidates; raises top-k quality, can be toggled off.
+- **Evaluation** — LLM-as-judge scores every answer; surfaced as a grey line under each reply.
+- **Authentication** — Local username/password + optional Google OAuth. Works out of the box; OAuth is opt-in.
+
+> Web fallback and the reranker are basic first versions that can be improved.
+
+## Evaluation metrics
+
+Each answer shows a grey performance line. These are **heuristic signals, not hard pass/fail** — read them as a tuning aid, not ground truth:
+
+- **Top similarity** — how close the best retrieved chunk is to your question (higher = a more on-topic source was found).
+- **Faithfulness** — whether the answer sticks to what the sources say, rather than guessing or adding outside info.
+- **Relevancy** — whether the answer actually addresses the question you asked.
+- **Latency** — total round-trip time for the answer, in milliseconds.
 
 ## Pipeline configuration
 
