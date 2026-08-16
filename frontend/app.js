@@ -482,13 +482,25 @@ async function loadSettingsIntoForm() {
     loadedEmbeddingModel = cfg.embedding_model;
     loadedEmbeddingProvider = cfg.embedding_provider || "gemini";
     openrouterConfigured = !!cfg.openrouter_configured;
-    // Warn if the user is on (or picks) OpenRouter without a key.
-    updateProviderWarnings(cfg.openrouter_configured);
-    // When the embedding provider changes, reload the embedding-model list so
-    // the dropdown auto-detects that provider's models (Gemini vs OpenRouter).
-    const epSel = $("set-embedding-provider");
-    if (epSel) {
-      epSel.onchange = async () => {
+        // Warn if the user is on (or picks) OpenRouter without a key.
+        updateProviderWarnings(cfg.openrouter_configured);
+        // Refresh embedding-models list to match saved provider on initial load,
+        // so the dropdown shows only the selected provider's models (Gemini vs
+        // OpenRouter) instead of always showing the full catalog.
+        const epSelInit = $("set-embedding-provider");
+        if (epSelInit) {
+          const p = epSelInit.value;
+          try {
+            const m = await api(`/api/models?provider=${encodeURIComponent(p)}`);
+            const cur = $("set-embedding-model")?.value;
+            fillModelSelect("set-embedding-model", m.embedding, cur || defaultEmbedModelFor(p));
+          } catch (e) {/* keep current list */}
+        }
+        // When the embedding provider changes, reload the embedding-model list so
+        // the dropdown auto-detects that provider's models (Gemini vs OpenRouter).
+        const epSel = $("set-embedding-provider");
+        if (epSel) {
+          epSel.onchange = async () => {
         const p = epSel.value;
         try {
           const m = await api(`/api/models?provider=${encodeURIComponent(p)}`);
