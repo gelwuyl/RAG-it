@@ -54,8 +54,12 @@ def _stub_embed(texts):
 
 
 class _StubEmbeddings:
-    def __init__(self, model: str):
+    # Mirrors ProxyEmbeddings' signature, which is provider-aware (gemini |
+    # openrouter). The stub ignores the provider — it never leaves the process —
+    # but must accept the kwarg or every ingest path raises TypeError.
+    def __init__(self, model: str, provider: str | None = None):
         self.model = model
+        self.provider = provider
 
     def embed_documents(self, texts):
         return _stub_embed(texts)
@@ -104,6 +108,9 @@ def _make_cfg(**over):
         temperature=0.0,
         embedding_model="text-embedding-005",
         web_augmentation=False,
+        embedding_provider="gemini",
+        reranker_provider="gemini",
+        eval_show=True,
     )
     base.update(over)
     return _cfg.PipelineConfig(**base)

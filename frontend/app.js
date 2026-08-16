@@ -8,7 +8,7 @@ const state = {
   currentChatId: null,
   currentCitations: [], // citations of the last assistant message, for the excerpt pane
   models: { chat: [], embedding: [] }, // proxy model catalog for the settings dropdowns
-  evalPolling: null,
+  evalRunning: false, // true while the chunked benchmark loop is driving
 };
 
 // Human-friendly labels for known models. With live proxy discovery the
@@ -17,8 +17,15 @@ const MODEL_LABELS = {
   "deepseek-v4-pro": "DeepSeek V4 Pro (class default)",
   "qwen3.8-max": "Qwen3.8 Max",
   "qwen3-coder": "Qwen3 Coder (metered)",
-  "text-embedding-005": "text-embedding-005 (768 dims)",
-  "gemini-embedding": "gemini-embedding (3072 dims)",
+  // Embedding models. Every one is stored at 768 dims (the Neon `chunks`
+  // table has a single fixed vector(768) column), so the label says so.
+  "models/gemini-embedding-001": "gemini-embedding-001 (Gemini, 768d)",
+  "openai/text-embedding-3-small": "text-embedding-3-small (OpenRouter, 768d)",
+  "openai/text-embedding-3-large": "text-embedding-3-large (OpenRouter, 768d)",
+  "qwen/qwen3-embedding-8b": "Qwen3 Embedding 8B (OpenRouter, 768d)",
+  "qwen/qwen3-embedding-4b": "Qwen3 Embedding 4B (OpenRouter, 768d)",
+  "perplexity/pplx-embed-v1-0.6b": "pplx-embed v1 0.6B (OpenRouter, 768d)",
+  "google/gemini-embedding-001": "gemini-embedding-001 (OpenRouter, 768d)",
 };
 
 function modelLabel(id) {
@@ -450,12 +457,34 @@ let openrouterConfigured = false;
 
 function fillModelSelect(id, models, current) {
   const sel = $(id);
+  const list = Array.isArray(models) ? models.filter(Boolean) : [];
   // Keep a hand-edited model that isn't in the catalog selectable.
-  const all = models.includes(current) ? models : [...models, current];
+  const all = current && !list.includes(current) ? [...list, current] : list;
   sel.innerHTML = all
     .map((m) => `<option value="${escapeHtml(m)}">${escapeHtml(modelLabel(m))}</option>`)
     .join("");
-  sel.value = current;
+  if (current) sel.value = current;
+}
+
+// Replace the embedding-model dropdown with exactly the models the given
+// provider serves. Called on open AND on every provider change, so the list is
+// always scoped to one provider (Gemini has a single embedder; the rest are
+// OpenRouter's). If the previously-selected model doesn't belong to the new
+// provider we fall back to that provider's default rather than leaving a stray
+// cross-provider entry in the list.
+async function refreshEmbeddingModels(provider, preferred) {
+  const sel = $("set-embedding-model");
+  if (!sel) return;
+  let list;
+  try {
+    const m = await api(`/api/models?provider=${encodeURIComponent(provider)}`);
+    list = m.embedding || [];
+  } catch (e) {
+    list = [];
+  }
+  if (!list.length) list = [defaultEmbedModelFor(provider)];
+  const want = preferred && list.includes(preferred) ? preferred : defaultEmbedModelFor(provider);
+  fillModelSelect("set-embedding-model", list, want);
 }
 
 async function loadSettingsIntoForm() {
@@ -476,41 +505,33 @@ async function loadSettingsIntoForm() {
     $("set-query-rewrite").value = String(cfg.query_rewrite);
     fillModelSelect("set-llm-model", models.chat, cfg.llm_model);
     $("set-temperature").value = cfg.temperature;
-    fillModelSelect("set-embedding-model", models.embedding, cfg.embedding_model);
-    $("set-embedding-provider").value = cfg.embedding_provider || "gemini";
+    const savedProvider = (cfg.embedding_provider || "gemini").toLowerCase();
+    $("set-embedding-provider").value = savedProvider;
     $("set-reranker-provider").value = cfg.reranker_provider || "gemini";
     loadedEmbeddingModel = cfg.embedding_model;
-    loadedEmbeddingProvider = cfg.embedding_provider || "gemini";
+    loadedEmbeddingProvider = savedProvider;
     openrouterConfigured = !!cfg.openrouter_configured;
-        // Warn if the user is on (or picks) OpenRouter without a key.
-        updateProviderWarnings(cfg.openrouter_configured);
-        // Refresh embedding-models list to match saved provider on initial load,
-        // so the dropdown shows only the selected provider's models (Gemini vs
-        // OpenRouter) instead of always showing the full catalog.
-        const epSelInit = $("set-embedding-provider");
-        if (epSelInit) {
-          const p = epSelInit.value;
-          try {
-            const m = await api(`/api/models?provider=${encodeURIComponent(p)}`);
-            const cur = $("set-embedding-model")?.value;
-            fillModelSelect("set-embedding-model", m.embedding, cur || defaultEmbedModelFor(p));
-          } catch (e) {/* keep current list */}
-        }
-        // When the embedding provider changes, reload the embedding-model list so
-        // the dropdown auto-detects that provider's models (Gemini vs OpenRouter).
-        const epSel = $("set-embedding-provider");
-        if (epSel) {
-          epSel.onchange = async () => {
+    // Warn if the user is on (or picks) OpenRouter without a key.
+    updateProviderWarnings(cfg.openrouter_configured);
+    // Populate the embedding-model list for the SAVED provider only. There is
+    // no unscoped first fetch any more — that was what briefly showed every
+    // provider's models at once.
+    await refreshEmbeddingModels(savedProvider, cfg.embedding_model);
+    // Re-scope the list whenever the provider changes.
+    const epSel = $("set-embedding-provider");
+    if (epSel) {
+      epSel.onchange = async () => {
         const p = epSel.value;
-        try {
-          const m = await api(`/api/models?provider=${encodeURIComponent(p)}`);
-          const cur = $("set-embedding-model")?.value;
-          fillModelSelect("set-embedding-model", m.embedding, cur || defaultEmbedModelFor(p));
-        } catch (e) {
-          /* keep current list on failure */
-        }
+        // Only keep the current model if we're switching back to the provider
+        // it belongs to; otherwise take that provider's default.
+        const keep = p === loadedEmbeddingProvider ? loadedEmbeddingModel : null;
+        await refreshEmbeddingModels(p, keep);
         updateProviderWarnings(openrouterConfigured);
       };
+    }
+    const rpSel = $("set-reranker-provider");
+    if (rpSel) {
+      rpSel.onchange = () => updateProviderWarnings(openrouterConfigured);
     }
   } catch (e) {
     toast(e.message, true);
@@ -761,6 +782,11 @@ function buildEvalBlock(evalData, evalLine) {
     if (evalData.relevant != null) {
       rows.push(["Relevancy", evalData.relevant ? "PASS" : "FAIL", evalData.relevant_reason || "the answer addresses your question"]);
     }
+    // Grading unavailable is NOT a failure — say so explicitly rather than
+    // leaving the row out (or, as before, rendering it as a confident FAIL).
+    if (evalData.judge_error && (evalData.faithful == null || evalData.relevant == null)) {
+      rows.push(["Grading", "unavailable", String(evalData.judge_error).slice(0, 160)]);
+    }
     if (evalData.latency_ms != null) {
       rows.push(["Latency", `${(evalData.latency_ms / 1000).toFixed(1)} s`, "time to generate this answer"]);
     }
@@ -975,6 +1001,9 @@ async function loadEval() {
   try {
     const data = await api("/api/eval");
     renderEval(data);
+    // A run left in flight (tab closed, reload mid-benchmark) resumes from the
+    // last committed slice instead of being stranded at "running" forever.
+    if (data.status === "running" && !state.evalRunning) driveEvalRun();
   } catch (e) {
     console.error("eval load failed:", e);
   }
@@ -995,51 +1024,75 @@ function renderEval(data) {
     return;
   }
   if (data.status === "running") {
-    statusEl.textContent = "Benchmark running… (indexing corpus + scoring golden questions)";
+    // Show real progress. The run advances one slice per request, so the user
+    // sees which phase it's in rather than an indefinite spinner.
+    const files = data.total_files || 0;
+    if (files && data.indexed_files < files) {
+      statusEl.textContent = `Indexing corpus… ${data.indexed_files}/${files} files`;
+    } else {
+      statusEl.textContent = `Scoring golden questions… ${data.completed}/${data.total}`;
+    }
     runBtn.disabled = true;
-    if (!state.evalPolling) startEvalPolling();
+    // Partial results stream in as slices complete.
+    renderScorecard(data.metrics || {});
+    renderEvalQuestions(data.results || []);
     return;
   }
   if (data.status === "error") {
     statusEl.textContent = "Benchmark failed: " + (data.error || "unknown error");
+    runBtn.disabled = false;
+    renderScorecard(data.metrics || {});
+    renderEvalQuestions(data.results || []);
+    return;
+  }
+  if (data.status === "cancelled") {
+    statusEl.textContent = "Benchmark cancelled.";
     runBtn.disabled = false;
     return;
   }
   // done
   runBtn.disabled = false;
   const ts = data.timestamp ? ` · ${data.timestamp}` : "";
-  statusEl.textContent = "Latest benchmark" + ts;
+  const ungraded = (data.metrics || {}).n_ungraded;
+  statusEl.textContent =
+    "Latest benchmark" + ts + (ungraded ? ` · ⚠ ${ungraded} ungraded (judge unavailable)` : "");
   renderScorecard(data.metrics || {});
   renderEvalQuestions(data.results || []);
 }
 
-function startEvalPolling() {
-  if (state.evalPolling) return;
-  state.evalPolling = setInterval(async () => {
-    try {
-      const data = await api("/api/eval");
+// Drive the run to completion, one slice per request. Each POST /api/eval/step
+// does a bounded piece of work and commits it, so this loop is resumable: if
+// the tab is closed mid-run, reopening it picks up from the last committed
+// slice rather than starting over.
+async function driveEvalRun() {
+  if (state.evalRunning) return;
+  state.evalRunning = true;
+  try {
+    for (;;) {
+      const data = await api("/api/eval/step", { method: "POST" });
       renderEval(data);
-      if (data.status !== "running") {
-        clearInterval(state.evalPolling);
-        state.evalPolling = null;
-      }
-    } catch (e) {
-      clearInterval(state.evalPolling);
-      state.evalPolling = null;
+      if (data.status !== "running") break;
+      if (!state.evalRunning) break; // cancelled by a new run starting
     }
-  }, 2500);
+  } catch (e) {
+    $("eval-status").textContent = "Benchmark failed: " + e.message;
+    $("eval-run-btn").disabled = false;
+  } finally {
+    state.evalRunning = false;
+  }
 }
 
 $("eval-run-btn").onclick = async () => {
   try {
     $("eval-run-btn").disabled = true;
     $("eval-status").textContent = "Starting benchmark…";
-    const r = await api("/api/eval/run", { method: "POST" });
-    if (r.status === "running" || r.status === "started") {
-      startEvalPolling();
-    } else {
-      await loadEval();
-    }
+    state.evalRunning = false; // supersede any in-flight loop
+    const r = await api("/api/eval/run", {
+      method: "POST",
+      body: JSON.stringify({ retrieval_only: false }),
+    });
+    renderEval(r);
+    await driveEvalRun();
   } catch (e) {
     toast("Benchmark failed: " + e.message, true);
     $("eval-run-btn").disabled = false;

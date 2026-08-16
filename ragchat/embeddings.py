@@ -60,7 +60,13 @@ _PROVIDER_DIMS: dict[str, int] = {
 # 768. This allowlist is the UI's safe set — add a model here only after
 # confirming `dimensions=768` actually returns 768.
 EMBEDDING_768_MODELS: dict[str, list[str]] = {
-    "gemini": ["models/gemini-embedding-001", "text-embedding-005"],
+    # Google's OpenAI-compatible endpoint serves three embedders as of
+    # 2026-08-17 (gemini-embedding-001, -2, -2-preview), but only -001 is
+    # allowlisted: the other two have not been confirmed live to honour
+    # dimensions=768, and the Neon chunks column is a fixed vector(768).
+    # text-embedding-004/005 are NOT served there at all (they 404). Every
+    # other option below is OpenRouter's.
+    "gemini": ["models/gemini-embedding-001"],
     "openrouter": [
         "openai/text-embedding-3-small",
         "openai/text-embedding-3-large",
@@ -95,8 +101,12 @@ _PROVIDER_DEFAULT_MODEL: dict[str, str] = {
 
 # Generation (chat) client — always Google / proxy base url (unchanged).
 _gen_client: OpenAI | None = None
-# Embedding client — provider-aware (gemini | openrouter).
-_emb_client: OpenAI | None = None
+# Embedding clients, keyed BY PROVIDER. This used to be a single slot, which
+# meant the first provider used in a process was pinned forever: switching
+# provider in Settings kept sending embeddings to the old endpoint (with the
+# old key) until the process restarted. On a warm Vercel instance that looks
+# like a random auth/404 failure long after the setting was changed.
+_emb_clients: dict[str, OpenAI] = {}
 # Reranker client — OpenRouter only.
 _rerank_client: OpenAI | None = None
 
@@ -155,15 +165,21 @@ def openai_client() -> OpenAI:
 
 
 def embedding_client(provider: str | None = None) -> OpenAI:
-    """Singleton OpenAI client for the active EMBEDDING provider."""
-    global _emb_client
+    """OpenAI client for the given EMBEDDING provider (one cached per provider).
+
+    Keyed by provider so a runtime switch in Settings actually changes the
+    endpoint and key being used, instead of reusing whichever client this
+    process happened to build first.
+    """
     p = _resolve_provider(provider)
-    if _emb_client is None:
-        _emb_client = OpenAI(
-            api_key=_PROVIDER_API_KEY[p],
+    client = _emb_clients.get(p)
+    if client is None:
+        client = OpenAI(
+            api_key=_PROVIDER_API_KEY.get(p, ""),
             base_url=_PROVIDER_BASE_URL[p],
         )
-    return _emb_client
+        _emb_clients[p] = client
+    return client
 
 
 def default_model_for(provider: str | None = None) -> str:

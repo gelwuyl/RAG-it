@@ -680,15 +680,17 @@ def list_models(provider: str | None = None):
     the default Gemini one. Falls back to a static list if discovery is
     unreachable so the UI never blanks.
     """
-    emb_provider = provider or "gemini"
-    catalog = model_catalog()
-    if emb_provider != "gemini":
-        # Re-fetch the embedding list for the requested provider (cheap cache
-        # only covers the default provider; explicit request always reflects
-        # live discovery for that provider).
-        emb = embedding_models_for(emb_provider)
-        catalog = {"chat": catalog["chat"], "embedding": emb}
-    return catalog
+    # The requested provider is ALWAYS honoured — including "gemini". This
+    # previously special-cased gemini and fell through to the default catalog,
+    # which is keyed off the EMBEDDING_PROVIDER env var; on a deploy with
+    # EMBEDDING_PROVIDER=openrouter that made the Gemini selection return
+    # OpenRouter's models. When no provider is given we fall back to the live
+    # config's provider (not a hardcoded "gemini") so the dropdown opens on the
+    # list matching what is actually saved.
+    emb_provider = (provider or load_config().embedding_provider or "gemini").lower()
+    if emb_provider not in ("gemini", "openrouter"):
+        emb_provider = "gemini"
+    return {**model_catalog(emb_provider), "provider": emb_provider}
 
 
 @app.get("/api/eval/config")
@@ -836,96 +838,221 @@ def update_config(body: ConfigUpdateIn):
     }
 
 
-# ---------- eval benchmark (RAGAS-style scorecard) ----------
+# ---------- eval benchmark (RAGAS-style scorecard, chunked) ----------
+#
+# The benchmark is CLIENT-DRIVEN and runs in slices. Each POST /api/eval/step
+# does one bounded unit of work — index one corpus file, or score a few golden
+# questions — persists the result to Postgres, and returns. The browser keeps
+# calling until the run reports done.
+#
+# Why not a background thread (the previous design)? On Vercel:
+#   1. The repo dir is read-only, so the old status file write raised EROFS
+#      before the try block, killing the thread with no trace.
+#   2. The function is frozen as soon as the response is sent, so a daemon
+#      thread stops executing anyway.
+#   3. A later poll can land on a different instance with no shared memory or
+#      /tmp, so in-process state is invisible to it.
+#   4. Scoring 46 questions x 3 LLM judges takes minutes, far past the function
+#      time limit.
+# Slices + DB-backed state solve all four, and give real progress feedback.
 
-import threading
 from pathlib import Path as _Path
 
 _EVAL_DIR = _Path(__file__).resolve().parent.parent / "eval"
-_EVAL_STATUS_FILE = _EVAL_DIR / "last_run_status.json"
-_eval_thread: threading.Thread | None = None
+
+# Questions scored per /api/eval/step call. Each involves a retrieval, an
+# embedding pass over the retrieved chunks, one generation and up to three
+# judge calls, so keep this small enough to finish well inside the limit.
+#
+# Measured locally 2026-08-17 (gemma-4-26b-a4b-it judge, OpenRouter embeddings):
+# ~40-54s to score ONE question, so a batch of 2 took 83s — past the 60s
+# maxDuration in vercel.json. A step that overruns is killed before it commits,
+# so the client retries the same slice forever and the run never advances.
+# One question per step is the only value that fits, and even that leaves only
+# ~6s of headroom; indexing steps are cheap (<9s) by comparison. If judge
+# latency grows, slice the judges themselves rather than raising this.
+EVAL_BATCH_DEFAULT = 1
+EVAL_BATCH_MAX = 10
 
 
-def _eval_status() -> dict:
-    """Read the latest benchmark status + report, or a clear 'none' state."""
-    if _EVAL_STATUS_FILE.exists():
-        try:
-            return json.loads(_EVAL_STATUS_FILE.read_text())
-        except Exception:
-            pass
-    # Fall back to the most recent report under eval/runs/ if no status file.
-    runs = sorted(_EVAL_DIR.glob("runs/*/report.json"), reverse=True)
-    if runs:
-        try:
-            report = json.loads(runs[0].read_text())
-            return {
-                "status": "done",
-                "run_dir": str(runs[0].parent),
-                "metrics": report.get("metrics", {}),
-                "results": report.get("results", []),
-                "config": report.get("config", {}),
-                "timestamp": report.get("timestamp", ""),
-            }
-        except Exception:
-            pass
-    return {"status": "none", "message": "No benchmark run yet."}
-
-
-def _run_benchmark() -> None:
-    """Run the eval harness in a background thread and persist a status file."""
-    _EVAL_STATUS_FILE.write_text(
-        json.dumps({"status": "running", "started_at": time.time()})
-    )
+def _corpus_files() -> list[str]:
+    """Corpus filenames, sourced from the harness so the two can't drift."""
     try:
-        import sys as _sys
+        from eval.run_eval import corpus_files
 
-        _sys.path.insert(0, str(_EVAL_DIR.parent))
-        # Import lazily inside the worker so a missing dep / import error in the
-        # harness is captured as an error status rather than crashing the thread
-        # silently before any status is written.
-        from eval.run_eval import run_benchmark as _bench
+        return [p.name for p in corpus_files()]
+    except Exception:
+        return sorted(
+            p.name
+            for p in _EVAL_DIR.glob("corpus/*")
+            if p.suffix.lower() in (".md", ".txt")
+        )
 
-        report = _bench()
-        _EVAL_STATUS_FILE.write_text(
-            json.dumps(
-                {
-                    "status": "done",
-                    "run_dir": report.get("run_dir", ""),
-                    "metrics": report.get("metrics", {}),
-                    "results": report.get("results", []),
-                    "config": report.get("config", {}),
-                    "timestamp": report.get("timestamp", ""),
-                }
-            )
-        )
-    except Exception as exc:  # never crash the worker silently
-        _EVAL_STATUS_FILE.write_text(
-            json.dumps({"status": "error", "error": str(exc)[:300]})
-        )
-    finally:
-        global _eval_thread
-        _eval_thread = None
+
+def _active_run(db: Session):
+    """The most recent run row, or None."""
+    from .db import EvalRun
+
+    return db.query(EvalRun).order_by(EvalRun.started_at.desc()).first()
+
+
+def _run_payload(run) -> dict:
+    """Serialise a run row into the shape the Evaluation tab renders."""
+    if run is None:
+        return {"status": "none", "message": "No benchmark run yet."}
+    results = json.loads(run.results) if run.results else []
+    metrics = json.loads(run.metrics) if run.metrics else {}
+    # While a run is in flight, show metrics computed from what's done so far so
+    # the scorecard fills in progressively instead of staying blank.
+    if run.status == "running" and results and not metrics:
+        try:
+            from eval.run_eval import aggregate
+
+            metrics = aggregate(results, retrieval_only=bool(run.retrieval_only))
+        except Exception:
+            metrics = {}
+    indexed = json.loads(run.indexed_files) if run.indexed_files else []
+    return {
+        "status": run.status,
+        "run_id": run.id,
+        "total": run.total or 0,
+        "completed": run.completed or 0,
+        "indexed_files": len(indexed),
+        "total_files": len(_corpus_files()),
+        "metrics": metrics,
+        "results": results,
+        "config": json.loads(run.config) if run.config else {},
+        "error": run.error,
+        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(run.updated_at or run.started_at or time.time())),
+    }
+
+
+class EvalRunIn(BaseModel):
+    """Options for starting a benchmark run."""
+
+    limit: int | None = None          # score only the first N golden questions
+    retrieval_only: bool = False      # skip generation + judges (much faster)
+    batch: int | None = None          # questions per step (clamped server-side)
 
 
 @app.get("/api/eval")
-def get_eval():
+def get_eval(db: Session = Depends(get_session)):
     """Latest benchmark report (RAGAS-style scorecard) for the Evaluation tab."""
-    return _eval_status()
+    return _run_payload(_active_run(db))
 
 
 @app.post("/api/eval/run")
-def run_eval():
-    """Trigger a local benchmark run. Runs in a background thread so the UI can
-    poll GET /api/eval for progress. On Vercel (read-only FS / short-lived
-    functions) this is best run locally; the tab still displays the latest
-    report that was generated locally."""
-    global _eval_thread
-    status = _eval_status()
-    if status.get("status") == "running":
-        return {"status": "running", "message": "A benchmark is already running."}
-    _eval_thread = threading.Thread(target=_run_benchmark, daemon=True)
-    _eval_thread.start()
-    return {"status": "started", "message": "Benchmark started — poll GET /api/eval."}
+def start_eval(body: EvalRunIn | None = None, db: Session = Depends(get_session)):
+    """Begin a benchmark run. Returns immediately; the client then calls
+    POST /api/eval/step repeatedly until status != "running"."""
+    from eval.run_eval import config_snapshot, load_golden, reset_eval_collection
+    from .db import EvalRun
+
+    body = body or EvalRunIn()
+    cfg = load_config()
+
+    # Supersede any run left in "running" (e.g. the tab was closed mid-run) so
+    # a stale row can't block a fresh start forever.
+    prev = _active_run(db)
+    if prev is not None and prev.status == "running":
+        prev.status = "cancelled"
+        prev.updated_at = time.time()
+        db.commit()
+
+    try:
+        items = load_golden(body.limit)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Could not read golden set: {exc}")
+
+    # Clear any chunks from a previous benchmark so stale vectors can't be
+    # retrieved into this run's scores.
+    reset_eval_collection(cfg)
+
+    run = EvalRun(
+        status="running",
+        total=len(items),
+        completed=0,
+        indexed_files=json.dumps([]),
+        retrieval_only=bool(body.retrieval_only),
+        results=json.dumps([]),
+        config=json.dumps(config_snapshot(cfg)),
+        started_at=time.time(),
+        updated_at=time.time(),
+    )
+    db.add(run)
+    db.commit()
+    return _run_payload(run)
+
+
+@app.post("/api/eval/step")
+def step_eval(body: EvalRunIn | None = None, db: Session = Depends(get_session)):
+    """Advance the active run by one bounded slice of work.
+
+    Order of work: index the corpus one file at a time, then score questions in
+    batches. Every slice commits before returning, so progress survives the
+    function being frozen or the next request landing elsewhere.
+    """
+    from eval.run_eval import (
+        EVAL_USER,
+        aggregate,
+        embed_passages,
+        load_golden,
+        score_item,
+    )
+
+    body = body or EvalRunIn()
+    run = _active_run(db)
+    if run is None or run.status != "running":
+        return _run_payload(run)
+
+    batch = max(1, min(body.batch or EVAL_BATCH_DEFAULT, EVAL_BATCH_MAX))
+    cfg = load_config()
+
+    try:
+        # --- phase 1: index the corpus, one file per step ---
+        indexed = json.loads(run.indexed_files) if run.indexed_files else []
+        pending = [f for f in _corpus_files() if f not in indexed]
+        if pending:
+            name = pending[0]
+            path = _EVAL_DIR / "corpus" / name
+            text_content = path.read_text(encoding="utf-8", errors="replace")
+            ingest_document_text(EVAL_USER, name, name, text_content, cfg)
+            indexed.append(name)
+            run.indexed_files = json.dumps(indexed)
+            run.updated_at = time.time()
+            db.commit()
+            return _run_payload(run)
+
+        # --- phase 2: score the next `batch` questions ---
+        items = load_golden(run.total)
+        results = json.loads(run.results) if run.results else []
+        start = run.completed or 0
+        for item in items[start : start + batch]:
+            item["_golden_embs"] = embed_passages(
+                item.get("golden_passages", []),
+                cfg.embedding_model,
+                provider=cfg.embedding_provider,
+            )
+            results.append(score_item(item, cfg, retrieval_only=bool(run.retrieval_only)))
+
+        run.results = json.dumps(results)
+        run.completed = len(results)
+        run.updated_at = time.time()
+        if run.completed >= (run.total or 0):
+            run.metrics = json.dumps(
+                aggregate(results, retrieval_only=bool(run.retrieval_only))
+            )
+            run.status = "done"
+        db.commit()
+    except Exception as exc:  # record the failure instead of 500-ing the poll
+        db.rollback()
+        run = _active_run(db)
+        if run is not None:
+            run.status = "error"
+            run.error = f"{type(exc).__name__}: {exc}"[:500]
+            run.updated_at = time.time()
+            db.commit()
+    return _run_payload(run)
 
 
 @app.get("/api/health")
@@ -945,6 +1072,7 @@ def health():
 
     env_present = {
         "GEMINI_API_KEY": bool(_os.environ.get("GEMINI_API_KEY")),
+        "OPENROUTER_API_KEY": bool(_os.environ.get("OPENROUTER_API_KEY")),
         "DATABASE_URL": bool(_os.environ.get("DATABASE_URL")),
         "PG_DATABASE_URL": bool(_os.environ.get("PG_DATABASE_URL")),
         "rag_gel_DATABASE_URL": bool(_os.environ.get("rag_gel_DATABASE_URL")),
@@ -959,6 +1087,41 @@ def health():
     except Exception as exc:  # surface the connection error, not a 500
         db_err = str(exc)[:200]
 
+    # Effective (live) config, so a deploy can be diagnosed from the browser
+    # without dashboard access. These are the values that actually get used —
+    # env vars are only the boot defaults and are frequently NOT what's active,
+    # because the Settings UI persists overrides to the database.
+    cfg_info: dict = {}
+    judge_info: dict = {}
+    try:
+        cfg = load_config()
+        cfg_info = {
+            "llm_model": cfg.llm_model,
+            "embedding_model": cfg.embedding_model,
+            "embedding_provider": cfg.embedding_provider,
+            "reranker_provider": cfg.reranker_provider,
+            "fingerprint": cfg.fingerprint(),
+            "env_llm_model_default": settings.default_llm_model,
+            "env_embedding_provider_default": settings.default_embedding_provider,
+        }
+    except Exception as exc:
+        cfg_info = {"error": str(exc)[:200]}
+    try:
+        from eval.judges import judge_model
+
+        judge_info = {"model": judge_model(), "importable": True}
+    except Exception as exc:
+        judge_info = {"importable": False, "error": str(exc)[:200]}
+
+    # Is live model discovery actually reaching each provider, or are we
+    # silently serving the static fallback catalog?
+    discovery: dict = {}
+    for _p in ("gemini", "openrouter"):
+        try:
+            discovery[_p] = embedding_models_for(_p)
+        except Exception as exc:
+            discovery[_p] = [f"error: {exc}"[:120]]
+
     return {
         "ok": True,
         "db_backend": _s.vector_backend,
@@ -967,6 +1130,9 @@ def health():
         "db_error": db_err,
         "data_dir": str(DATA_DIR),
         "env_present": env_present,
+        "effective_config": cfg_info,
+        "judge": judge_info,
+        "embedding_models_by_provider": discovery,
     }
 
 

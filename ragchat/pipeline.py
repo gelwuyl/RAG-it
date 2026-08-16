@@ -154,19 +154,22 @@ def _rerank(
     When cfg.reranker is off, or there are few enough chunks already, we
     return the vector top_k unchanged.
 
-    Provider behaviour:
-      - reranker_provider() == "openrouter"  -> Cohere rerank-v3.5 at
-        OpenRouter's /v1/rerank endpoint (fast, cheap, purpose-built). All
-        passages (including [web] ones) are reranked together.
-      - reranker_provider() == "gemini" (default) -> the original LLM
-        cross-encoder: each non-web chunk is scored 0-100 by the generation
-        LLM. Web chunks keep a neutral score so they aren't given a spurious
-        LLM number.
+    Provider behaviour (from cfg.reranker_provider, i.e. the Settings choice):
+      - "openrouter"      -> Cohere rerank-v3.5 at OpenRouter's /v1/rerank
+        endpoint (fast, cheap, purpose-built). All passages (including [web]
+        ones) are reranked together.
+      - "gemini" (default) -> the original LLM cross-encoder: each non-web
+        chunk is scored 0-100 by the generation LLM. Web chunks keep a neutral
+        score so they aren't given a spurious LLM number.
     """
     if not cfg.reranker or len(chunks) <= cfg.top_k:
         return chunks[: cfg.top_k]
 
-    if reranker_provider() == "openrouter":
+    # Use the LIVE config's choice, falling back to the env default only when
+    # the config doesn't carry one. This previously read reranker_provider()
+    # (env-only), so the Settings dropdown had no effect on a deploy.
+    provider = (cfg.reranker_provider or reranker_provider()).lower()
+    if provider == "openrouter":
         try:
             docs = [c["text"] for c in chunks]
             order = rerank(query, docs, top_n=cfg.top_k)
@@ -243,22 +246,34 @@ def _eval_answer(question: str, answer: str, context_text: str, cfg: PipelineCon
         return None
     try:
         from eval.judges import faithfulness, answer_relevancy
-    except Exception:
-        return None
-    try:
-        fh, fh_r = faithfulness(question, context_text, answer)
-    except Exception:
-        fh, fh_r = None, ""
-    try:
-        ar, ar_r = answer_relevancy(question, answer)
-    except Exception:
-        ar, ar_r = None, ""
-    return {
+    except Exception as exc:
+        return {"judge_error": f"judges unavailable: {exc}"}
+
+    def _run(fn, *args):
+        """Return (verdict|None, reason). None = not graded, NOT a failure.
+
+        A judge that 404s, times out, or replies without a verdict must never
+        be reported as FAIL — that renders as a confident hallucination finding
+        when in reality nothing was graded at all.
+        """
+        try:
+            return fn(*args)
+        except Exception as exc:  # noqa: BLE001
+            return None, str(exc)
+
+    fh, fh_r = _run(faithfulness, question, context_text, answer)
+    ar, ar_r = _run(answer_relevancy, question, answer)
+    out = {
         "faithful": fh,
         "faithful_reason": fh_r,
         "relevant": ar,
         "relevant_reason": ar_r,
     }
+    # Surface *why* grading is missing so a misconfigured judge model is
+    # visible in the UI instead of silently blanking the metrics.
+    if fh is None or ar is None:
+        out["judge_error"] = fh_r or ar_r or "judge returned no verdict"
+    return out
 
 
 def _clean_answer(answer: str) -> str:

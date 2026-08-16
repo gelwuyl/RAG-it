@@ -15,12 +15,36 @@ from __future__ import annotations
 import re
 
 from ragchat.embeddings import openai_client
-from ragchat.config import settings
+from ragchat.config import load_config, settings
 
-# Judge model follows the deployment default (now gemini-2.5-flash on Google's
-# endpoint). Was previously hard-coded to qwen3.8-max which would 404 on the
-# Gemini endpoint — derive it from settings so it tracks config.yaml.
-JUDGE_MODEL = settings.default_llm_model
+
+class JudgeError(RuntimeError):
+    """The judge could not produce a verdict (model 404, quota, empty reply).
+
+    Raised instead of silently returning FAIL so callers can distinguish
+    "the answer is bad" from "the grader is broken".
+    """
+
+
+def judge_model() -> str:
+    """Model used for LLM-as-judge — resolved from the LIVE config each call.
+
+    This used to be a module-level constant read from ``settings.default_llm_model``,
+    i.e. the ``RAG_LLM_MODEL`` env var at import time. That is the *boot default*,
+    not what the app is actually generating with: config.yaml (and the DB
+    override written by the Settings UI) can name a different model. On this
+    deployment the env default was the bare ``gemma-4-26b-it`` while the served
+    id is ``models/gemma-4-26b-a4b-it``, so every judge call 404'd and both
+    metrics rendered as FAIL. Reading the live config keeps the judge on the
+    same model that just answered the question.
+    """
+    try:
+        model = (load_config().llm_model or "").strip()
+        if model:
+            return model
+    except Exception:
+        pass
+    return settings.default_llm_model
 
 # Strict output contract the judge must follow. We repeat it in every prompt so
 # the parser can rely on "first line = verdict, second line = one sentence".
@@ -32,15 +56,52 @@ _VERDICT_CONTRACT = (
 )
 
 
+# Reasoning-tuned models wrap output in these; strip before parsing so a
+# thinking trace can neither hide the verdict nor leak into the reason.
+_THINK_BLOCK = re.compile(
+    r"<(thought|thinking|reasoning)[\s>].*?</\1>", re.IGNORECASE | re.DOTALL
+)
+
+# The SAME wrappers, but never closed — what you get when the reasoning trace
+# runs into max_tokens and the reply is cut mid-thought. The configured judge
+# (models/gemma-4-26b-a4b-it) is thinking-capable and emits <thought>, so this
+# is reachable in production, and it defeated the closed-tag pattern above:
+# the raw trace survived to the parser, which found a stray "FAIL" inside the
+# reasoning and reported it as a confident verdict. A truncated reply is a
+# BROKEN GRADER, not a failed answer — strip the unterminated block so nothing
+# is left to parse and the caller records "not graded".
+_UNCLOSED_THINK_BLOCK = re.compile(
+    r"<(thought|thinking|reasoning)[\s>].*\Z", re.IGNORECASE | re.DOTALL
+)
+
+
 def _judge(prompt: str) -> str:
+    """Ask the judge model for a verdict. Raises JudgeError if it can't answer.
+
+    ``max_tokens`` is deliberately generous (was 96). On thinking-capable models
+    the reasoning tokens are billed against this budget, so a tight cap made the
+    model spend the whole allowance thinking and return EMPTY content — which
+    the old parser then scored as FAIL.
+    """
     client = openai_client()
-    resp = client.chat.completions.create(
-        model=JUDGE_MODEL,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.0,
-        max_tokens=96,  # tight: one verdict line + one reason line, nothing more
-    )
-    return (resp.choices[0].message.content or "").strip()
+    model = judge_model()
+    try:
+        resp = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.0,
+            max_tokens=512,
+        )
+    except Exception as exc:  # 404 on an unserved model, quota, network...
+        raise JudgeError(f"judge model {model!r} failed: {exc}") from exc
+    choice = resp.choices[0] if resp.choices else None
+    out = ((choice.message.content if choice else None) or "").strip()
+    if not out:
+        finish = getattr(choice, "finish_reason", None) if choice else None
+        raise JudgeError(
+            f"judge model {model!r} returned empty content (finish_reason={finish})"
+        )
+    return out
 
 
 def _parse_verdict(out: str) -> tuple[bool, str]:
@@ -48,22 +109,39 @@ def _parse_verdict(out: str) -> tuple[bool, str]:
 
     Robust to minor formatting drift: finds the PASS/FAIL token anywhere, and
     takes the reason from the REASON: line (or the text after the verdict),
-    truncated to the first sentence. Never lets a thinking trace flip the call.
+    truncated to the first sentence.
+
+    Raises JudgeError when no verdict token is present. It previously returned
+    ``(False, "")`` in that case — failing CLOSED — so any unparseable reply was
+    indistinguishable from a genuine hallucination finding, and the UI showed a
+    confident FAIL with no reason. "Unknown" and "failed" are different states
+    and must not be conflated.
     """
-    if not out:
-        return False, ""
-    verdict_match = re.search(r"\b(PASS|FAIL)\b", out, re.IGNORECASE)
-    verdict = bool(verdict_match) and verdict_match.group(1).upper() == "PASS"
+    text = _THINK_BLOCK.sub("", out or "")
+    # Order matters: closed blocks first, so a well-formed trace followed by a
+    # real verdict keeps its verdict. Only a block left open to end-of-string
+    # (i.e. a truncated reply) is removed here.
+    text = _UNCLOSED_THINK_BLOCK.sub("", text).strip()
+    if not text:
+        raise JudgeError("judge returned only a reasoning block, no verdict")
+
+    # Look for the verdict on its labelled line first; only then anywhere.
+    verdict_match = re.search(r"VERDICT:\s*(PASS|FAIL)", text, re.IGNORECASE)
+    if verdict_match is None:
+        verdict_match = re.search(r"\b(PASS|FAIL)\b", text, re.IGNORECASE)
+    if verdict_match is None:
+        raise JudgeError(f"no PASS/FAIL verdict in judge reply: {text[:120]!r}")
+    verdict = verdict_match.group(1).upper() == "PASS"
 
     # Prefer an explicit REASON: line; otherwise the text after the verdict line.
-    reason = ""
-    reason_match = re.search(r"REASON:\s*(.+)", out, re.IGNORECASE | re.DOTALL)
+    reason_match = re.search(r"REASON:\s*(.+)", text, re.IGNORECASE | re.DOTALL)
     if reason_match:
         reason = reason_match.group(1).strip()
     else:
         # Strip the verdict token and any leading label, take what remains.
-        tail = re.sub(r"VERDICT:\s*(PASS|FAIL)", "", out, flags=re.IGNORECASE).strip()
-        reason = tail
+        reason = re.sub(
+            r"VERDICT:\s*(PASS|FAIL)", "", text, flags=re.IGNORECASE
+        ).strip()
     # First sentence only — drop any trailing ramble.
     reason = re.split(r"(?<=[.!?])\s", reason)[0].strip()
     return verdict, reason

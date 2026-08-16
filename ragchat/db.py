@@ -119,6 +119,38 @@ class ConfigOverride(Base):
     updated_at = Column(Float, default=now)
 
 
+class EvalRun(Base):
+    """State of a benchmark run, so it can span many serverless requests.
+
+    On Vercel the repo directory is read-only and the function is frozen the
+    moment a response is sent, so the old approach (background thread writing
+    ``eval/last_run_status.json``) could never work: the very first write raised
+    EROFS and the thread died silently. Run state therefore lives here, in the
+    same Postgres the app already uses, which also means a poll that lands on a
+    different function instance still sees the run.
+
+    ``results`` accumulates one JSON entry per scored question, so a partially
+    complete run is still displayable.
+    """
+
+    __tablename__ = "eval_runs"
+    id = Column(String, primary_key=True, default=new_id)
+    status = Column(String, default="running")  # running | done | error | cancelled
+    total = Column(Integer, default=0)          # questions in this run
+    completed = Column(Integer, default=0)      # questions scored so far
+    # Corpus files indexed so far (JSON list of filenames). Indexing is itself
+    # chunked one file per step, because embedding the whole corpus in a single
+    # request would blow the function time limit before scoring even starts.
+    indexed_files = Column(Text, nullable=True)
+    retrieval_only = Column(Boolean, default=False)
+    results = Column(Text, nullable=True)       # JSON list of per-question entries
+    metrics = Column(Text, nullable=True)       # JSON scorecard (written at the end)
+    config = Column(Text, nullable=True)        # JSON config snapshot (F19)
+    error = Column(Text, nullable=True)
+    started_at = Column(Float, default=now)
+    updated_at = Column(Float, default=now)
+
+
 def get_config_override(key: str):
     ensure_db()
     s = SessionLocal()

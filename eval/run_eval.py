@@ -27,8 +27,7 @@ sys.path.insert(0, str(ROOT))
 from ragchat.config import load_config  # noqa: E402
 from ragchat.embeddings import ProxyEmbeddings, openai_client  # noqa: E402
 from ragchat.pipeline import NOT_FOUND_ANSWER, ask, ingest_document_text, retrieve  # noqa: E402
-from ragchat.vectordb import collection_name  # noqa: E402
-from ragchat.store import get_client  # noqa: E402
+from ragchat.vectordb import delete_document_chunks  # noqa: E402
 from eval.metrics import (  # noqa: E402
     MATCH_THRESHOLD,
     context_recall,
@@ -42,36 +41,227 @@ from eval import judges  # noqa: E402
 EVAL_USER = "__eval__"
 CORPUS_DIR = EVAL_DIR / "corpus"
 GOLDEN = EVAL_DIR / "golden.jsonl"
-JUDGE_MODEL = judges.JUDGE_MODEL
+
+
+def corpus_files() -> list[Path]:
+    """Corpus documents, in the order they are indexed."""
+    return [
+        p for p in sorted(CORPUS_DIR.glob("*")) if p.suffix.lower() in (".md", ".txt")
+    ]
 
 
 def reset_eval_collection(cfg) -> None:
-    client = get_client()
-    name = collection_name(EVAL_USER, cfg.embedding_model)
-    try:
-        client.delete_collection(name)
-    except Exception:
-        pass
+    """Drop previously-indexed eval chunks, on EITHER vector backend.
+
+    This used to reach straight into ``ragchat.store.get_client()`` (Chroma),
+    which raises on a Neon/pgvector deploy. Deleting per document id is the
+    backend-agnostic equivalent — and unlike ``prune_chunks(user, set())`` it
+    actually removes rows (prune deliberately no-ops on an empty valid-doc set
+    so it can never wipe a user who simply has no documents yet).
+
+    ``load_corpus`` uses the filename as the doc_id, so the two agree.
+    """
+    for path in corpus_files():
+        try:
+            delete_document_chunks(EVAL_USER, path.name, cfg.embedding_model)
+        except Exception as exc:  # a stale-index warning must not abort the run
+            print(f"  (could not reset {path.name}: {exc})")
 
 
-def load_corpus(cfg) -> None:
-    for path in sorted(CORPUS_DIR.glob("*")):
-        if path.suffix.lower() in (".md", ".txt"):
-            text = path.read_text(encoding="utf-8", errors="replace")
-            n = ingest_document_text(EVAL_USER, path.name, path.name, text, cfg)
-            print(f"  indexed {path.name} ({n} chunks)")
+def load_corpus(cfg) -> int:
+    """Index every corpus file for the eval user. Returns the chunk count."""
+    total = 0
+    for path in corpus_files():
+        text = path.read_text(encoding="utf-8", errors="replace")
+        n = ingest_document_text(EVAL_USER, path.name, path.name, text, cfg)
+        total += n
+        print(f"  indexed {path.name} ({n} chunks)")
+    return total
 
 
-def embed_passages(passages: list[str], model: str) -> list[list[float]]:
+def load_golden(limit: int | None = None) -> list[dict]:
+    """Parse golden.jsonl (optionally truncated to `limit` questions)."""
+    items = [
+        json.loads(line) for line in GOLDEN.read_text().splitlines() if line.strip()
+    ]
+    return items[:limit] if limit else items
+
+
+def embed_passages(
+    passages: list[str], model: str, provider: str | None = None
+) -> list[list[float]]:
+    """Embed golden passages with the LIVE embedding provider.
+
+    `provider` is required in practice: omitting it made ProxyEmbeddings fall
+    back to the EMBEDDING_PROVIDER *env default*, so with the Settings UI set to
+    OpenRouter every benchmark run sent an OpenRouter model id to Google's
+    endpoint and 404'd on the first scoring step (indexing had already used the
+    right provider, which is why only scoring broke). Env vars are boot
+    defaults, never live behaviour — read the config.
+    """
     if not passages:
         return []
-    emb = ProxyEmbeddings(model)
+    emb = ProxyEmbeddings(model, provider=provider)
     return emb.embed_documents(passages)
 
 
 def judge_answer(question: str, expected: str, answer: str) -> tuple[bool, str]:
     # Kept for backwards compatibility; correctness now routed through judges.py
     return judges.answer_correctness(question, expected, answer)
+
+
+def _safe_judge(fn, *args) -> tuple[bool | None, str]:
+    """Run a judge, converting a JudgeError into (None, reason).
+
+    None means "not graded" — distinct from False ("graded, failed"). The
+    caller drops None from the aggregate rather than counting it as a miss,
+    so a broken judge can no longer silently drag a metric to 0%.
+    """
+    try:
+        return fn(*args)
+    except judges.JudgeError as exc:
+        return None, f"judge unavailable: {exc}"
+    except Exception as exc:  # noqa: BLE001
+        return None, f"judge error: {exc}"
+
+
+def score_item(item: dict, cfg, retrieval_only: bool = False) -> dict:
+    """Score ONE golden question end-to-end and return its result entry.
+
+    Factored out of run_benchmark so the serverless chunked runner can score a
+    handful of questions per HTTP request (see ragchat/app.py) while the CLI
+    still runs the whole set in one process.
+    """
+    question = item["question"]
+    golden_embs = item.get("_golden_embs")
+    if golden_embs is None:
+        golden_embs = embed_passages(
+            item.get("golden_passages", []),
+            cfg.embedding_model,
+            provider=cfg.embedding_provider,
+        )
+
+    chunks = retrieve(EVAL_USER, question, cfg)
+    # Embed the retrieved chunk texts with the same model used for the golden
+    # passages so we can cosine-match (user decision #3: embedding-cosine).
+    chunk_texts = [c["text"] for c in chunks]
+    _emb = ProxyEmbeddings(cfg.embedding_model, provider=cfg.embedding_provider)
+    chunk_embs = _emb.embed_documents(chunk_texts) if chunk_texts else []
+
+    k = cfg.top_k
+    cr = context_recall(chunk_embs, golden_embs)
+    entry = {
+        "question": question,
+        "unanswerable": item["unanswerable"],
+        "needs": item.get("needs", ["single_passage"]),
+        "type": item.get("type", ""),
+        "expected_source": item.get("golden_doc", ""),
+        "expected": item.get("expected", ""),
+        "context_recall": round(cr, 4),
+        "precision_at_k": round(precision_at_k(chunk_embs, golden_embs, k), 4),
+        "mrr": round(mrr_at_k(chunk_embs, golden_embs, k), 4),
+        "ndcg_at_k": round(ndcg_at_k(chunk_embs, golden_embs, k), 4),
+        "hit_rate_at_k": hit_rate_at_k(chunk_embs, golden_embs, k),
+        "retrieved": [
+            {"title": c["title"], "similarity": round(c["similarity"], 4)}
+            for c in chunks[:k]
+            if c.get("similarity") is not None
+        ],
+    }
+    if retrieval_only:
+        return entry
+
+    res = ask(EVAL_USER, question, [], cfg)
+    entry["answer"] = res["answer"]
+    entry["not_found"] = res["not_found"]
+    context_text = "\n\n".join(
+        f"[{j+1}] {c['title']}\n{c['text']}" for j, c in enumerate(chunks[:k])
+    )
+    if item["unanswerable"]:
+        # Correct iff the system refused (did not fabricate).
+        entry["correct"] = bool(res["not_found"])
+        entry["faithful"] = None
+        entry["relevant"] = None
+    else:
+        entry["faithful"], entry["faithful_reason"] = _safe_judge(
+            judges.faithfulness, question, context_text, res["answer"]
+        )
+        entry["relevant"], entry["relevant_reason"] = _safe_judge(
+            judges.answer_relevancy, question, res["answer"]
+        )
+        entry["correct"], entry["correct_reason"] = _safe_judge(
+            judges.answer_correctness,
+            question,
+            item["expected"],
+            res["answer"],
+            item.get("golden_passages"),
+        )
+    return entry
+
+
+def aggregate(results: list[dict], retrieval_only: bool = False) -> dict:
+    """Aggregate per-question entries into the scorecard metrics."""
+    answerable = [r for r in results if not r["unanswerable"]]
+    unanswerable = [r for r in results if r["unanswerable"]]
+    multi_doc = [r for r in answerable if "multi_doc" in r.get("needs", [])]
+
+    def _mean(vals):
+        return round(sum(vals) / len(vals), 4) if vals else 0.0
+
+    def _rate(rows, key):
+        """Pass-rate over rows that were actually graded (None = ungraded)."""
+        graded = [r for r in rows if r.get(key) is not None]
+        return _mean([1 if r[key] else 0 for r in graded]) if graded else None
+
+    metrics = {
+        "context_recall": _mean([r["context_recall"] for r in answerable]),
+        "precision_at_k": _mean([r["precision_at_k"] for r in answerable]),
+        "mrr": _mean([r["mrr"] for r in answerable]),
+        "ndcg_at_k": _mean([r["ndcg_at_k"] for r in answerable]),
+        "hit_rate_at_k": _mean([r["hit_rate_at_k"] for r in answerable]),
+    }
+    if not retrieval_only:
+        metrics["faithfulness"] = _rate(answerable, "faithful")
+        metrics["answer_relevancy"] = _rate(answerable, "relevant")
+        metrics["answer_correctness"] = _rate(answerable, "correct")
+        metrics["not_found_rate_unanswerables"] = _rate(unanswerable, "correct")
+        if multi_doc:
+            metrics["context_recall_multi_doc"] = _mean(
+                [r["context_recall"] for r in multi_doc]
+            )
+        # How many judge calls came back ungraded — surfaced so a broken judge
+        # shows up as an explicit count instead of a mysteriously low score.
+        metrics["n_ungraded"] = sum(
+            1
+            for r in answerable
+            if r.get("faithful") is None or r.get("relevant") is None
+        )
+    metrics["n_answerable"] = len(answerable)
+    metrics["n_unanswerable"] = len(unanswerable)
+    metrics["n_multi_doc"] = len(multi_doc)
+    return metrics
+
+
+def config_snapshot(cfg) -> dict:
+    """The config the run was executed under (PRD F19), for report comparability."""
+    return {
+        "chunk_size": cfg.chunk_size,
+        "chunk_overlap": cfg.chunk_overlap,
+        "splitter": cfg.splitter,
+        "top_k": cfg.top_k,
+        "candidate_k": cfg.candidate_k,
+        "similarity_threshold": cfg.similarity_threshold,
+        "hybrid_search": cfg.hybrid_search,
+        "reranker": cfg.reranker,
+        "reranker_provider": cfg.reranker_provider,
+        "query_rewrite": cfg.query_rewrite,
+        "llm_model": cfg.llm_model,
+        "judge_model": judges.judge_model(),
+        "temperature": cfg.temperature,
+        "embedding_model": cfg.embedding_model,
+        "embedding_provider": cfg.embedding_provider,
+        "fingerprint": cfg.fingerprint(),
+    }
 
 
 def run_benchmark(limit: int | None = None, retrieval_only: bool = False) -> dict:
@@ -84,133 +274,47 @@ def run_benchmark(limit: int | None = None, retrieval_only: bool = False) -> dic
     """
     cfg = load_config()
     print(f"Config fingerprint: {cfg.fingerprint()}")
-    print(f"Judge model: {JUDGE_MODEL} | MATCH_THRESHOLD (cosine): {MATCH_THRESHOLD}")
+    print(
+        f"Judge model: {judges.judge_model()} | MATCH_THRESHOLD (cosine): {MATCH_THRESHOLD}"
+    )
     print("Indexing corpus...")
     reset_eval_collection(cfg)
     load_corpus(cfg)
 
-    items = [json.loads(line) for line in GOLDEN.read_text().splitlines() if line.strip()]
-    if limit:
-        items = items[:limit]
+    items = load_golden(limit)
 
     # Pre-embed golden passages once per question.
     for it in items:
-        it["_golden_embs"] = embed_passages(it.get("golden_passages", []), cfg.embedding_model)
+        it["_golden_embs"] = embed_passages(
+            it.get("golden_passages", []),
+            cfg.embedding_model,
+            provider=cfg.embedding_provider,
+        )
 
     results = []
     for i, item in enumerate(items, start=1):
-        question = item["question"]
-        chunks = retrieve(EVAL_USER, question, cfg)
-        # Embed the retrieved chunk texts with the same model used for the
-        # golden passages so we can cosine-match (user decision #3: embedding-cosine).
-        chunk_texts = [c["text"] for c in chunks]
-        _emb = ProxyEmbeddings(cfg.embedding_model)
-        chunk_embs = _emb.embed_documents(chunk_texts) if chunk_texts else []
-
-        k = cfg.top_k
-        cr = context_recall(chunk_embs, item["_golden_embs"])
-        prec = precision_at_k(chunk_embs, item["_golden_embs"], k)
-        mrr = mrr_at_k(chunk_embs, item["_golden_embs"], k)
-        ndcg = ndcg_at_k(chunk_embs, item["_golden_embs"], k)
-        hr = hit_rate_at_k(chunk_embs, item["_golden_embs"], k)
-
-        entry = {
-            "question": question,
-            "unanswerable": item["unanswerable"],
-            "needs": item.get("needs", ["single_passage"]),
-            "type": item.get("type", ""),
-            "expected_source": item.get("golden_doc", ""),
-            "expected": item.get("expected", ""),
-            "context_recall": round(cr, 4),
-            "precision_at_k": round(prec, 4),
-            "mrr": round(mrr, 4),
-            "ndcg_at_k": round(ndcg, 4),
-            "hit_rate_at_k": hr,
-            "retrieved": [
-                {"title": c["title"], "similarity": round(c["similarity"], 4)}
-                for c in chunks[:k]
-            ],
-        }
-
-        if not retrieval_only:
-            res = ask(EVAL_USER, question, [], cfg)
-            entry["answer"] = res["answer"]
-            entry["not_found"] = res["not_found"]
-            context_text = "\n\n".join(
-                f"[{j+1}] {c['title']}\n{c['text']}" for j, c in enumerate(chunks[:k])
-            )
-            if item["unanswerable"]:
-                # Correct iff the system refused (did not fabricate).
-                entry["correct"] = bool(res["not_found"])
-                entry["faithful"] = None
-                entry["relevant"] = None
-            else:
-                fh, fh_r = judges.faithfulness(question, context_text, res["answer"])
-                rv, rv_r = judges.answer_relevancy(question, res["answer"])
-                cr_ok, cr_r = judges.answer_correctness(
-                    question, item["expected"], res["answer"], item.get("golden_passages")
-                )
-                entry["faithful"] = fh
-                entry["faithful_reason"] = fh_r
-                entry["relevant"] = rv
-                entry["relevant_reason"] = rv_r
-                entry["correct"] = cr_ok
-                entry["correct_reason"] = cr_r
-
+        entry = score_item(item, cfg, retrieval_only=retrieval_only)
         results.append(entry)
-        status = "✓" if entry.get("correct", cr > 0) else "✗"
-        print(f"  [{i}/{len(items)}] {status} {question[:60]}")
+        status = "✓" if entry.get("correct", entry["context_recall"] > 0) else "✗"
+        print(f"  [{i}/{len(items)}] {status} {entry['question'][:60]}")
 
-    # Aggregate
-    answerable = [r for r in results if not r["unanswerable"]]
-    unanswerable = [r for r in results if r["unanswerable"]]
-    multi_doc = [r for r in answerable if "multi_doc" in r["needs"]]
-
-    def _mean(vals):
-        return round(sum(vals) / len(vals), 4) if vals else 0.0
-
-    metrics = {
-        "context_recall": _mean([r["context_recall"] for r in answerable]),
-        "precision_at_k": _mean([r["precision_at_k"] for r in answerable]),
-        "mrr": _mean([r["mrr"] for r in answerable]),
-        "ndcg_at_k": _mean([r["ndcg_at_k"] for r in answerable]),
-        "hit_rate_at_k": _mean([r["hit_rate_at_k"] for r in answerable]),
-    }
-    if not retrieval_only:
-        metrics["faithfulness"] = _mean([1 if r["faithful"] else 0 for r in answerable if r["faithful"] is not None])
-        metrics["answer_relevancy"] = _mean([1 if r["relevant"] else 0 for r in answerable if r["relevant"] is not None])
-        metrics["answer_correctness"] = _mean([1 if r["correct"] else 0 for r in answerable if r.get("correct") is not None])
-        metrics["not_found_rate_unanswerables"] = _mean([1 if r["correct"] else 0 for r in unanswerable]) if unanswerable else None
-        if multi_doc:
-            metrics["context_recall_multi_doc"] = _mean([r["context_recall"] for r in multi_doc])
-    metrics["n_answerable"] = len(answerable)
-    metrics["n_unanswerable"] = len(unanswerable)
-    metrics["n_multi_doc"] = len(multi_doc)
+    metrics = aggregate(results, retrieval_only=retrieval_only)
 
     run_dir = EVAL_DIR / "runs" / datetime.now().strftime("%Y%m%d_%H%M%S")
     run_dir.mkdir(parents=True, exist_ok=True)
     report = {
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
         "run_dir": str(run_dir),
-        "config": {
-            "chunk_size": cfg.chunk_size,
-            "chunk_overlap": cfg.chunk_overlap,
-            "splitter": cfg.splitter,
-            "top_k": cfg.top_k,
-            "candidate_k": cfg.candidate_k,
-            "similarity_threshold": cfg.similarity_threshold,
-            "hybrid_search": cfg.hybrid_search,
-            "reranker": cfg.reranker,
-            "query_rewrite": cfg.query_rewrite,
-            "llm_model": cfg.llm_model,
-            "temperature": cfg.temperature,
-            "embedding_model": cfg.embedding_model,
-            "fingerprint": cfg.fingerprint(),
-        },
+        "config": config_snapshot(cfg),
         "metrics": metrics,
         "results": results,
     }
     (run_dir / "report.json").write_text(json.dumps(report, indent=2))
+
+    def _m(key):
+        """Render a metric, or an explicit dash when nothing was graded."""
+        v = metrics.get(key)
+        return "—" if v is None else v
 
     md = [
         f"# Eval run {run_dir.name}",
@@ -219,19 +323,21 @@ def run_benchmark(limit: int | None = None, retrieval_only: bool = False) -> dic
         "",
         "| Metric | Value | Target |",
         "|---|---|---|",
-        f"| Context Recall | {metrics['context_recall']} | ≥ 0.80 |",
-        f"| Precision@k | {metrics['precision_at_k']} | ≥ 0.70 |",
-        f"| MRR | {metrics['mrr']} | ≥ 0.65 |",
-        f"| NDCG@k | {metrics['ndcg_at_k']} | ≥ 0.70 |",
-        f"| Hit Rate@k | {metrics['hit_rate_at_k']} | ≥ 0.80 |",
+        f"| Context Recall | {_m('context_recall')} | ≥ 0.80 |",
+        f"| Precision@k | {_m('precision_at_k')} | ≥ 0.70 |",
+        f"| MRR | {_m('mrr')} | ≥ 0.65 |",
+        f"| NDCG@k | {_m('ndcg_at_k')} | ≥ 0.70 |",
+        f"| Hit Rate@k | {_m('hit_rate_at_k')} | ≥ 0.80 |",
     ]
     if not retrieval_only:
         md += [
-            f"| Faithfulness | {metrics['faithfulness']} | ≥ 0.90 |",
-            f"| Answer Relevancy | {metrics['answer_relevancy']} | ≥ 0.85 |",
-            f"| Answer Correctness | {metrics['answer_correctness']} | ≥ 0.80 |",
-            f"| Not-found rate (unanswerables) | {metrics['not_found_rate_unanswerables']} | ≥ 0.90 |",
+            f"| Faithfulness | {_m('faithfulness')} | ≥ 0.90 |",
+            f"| Answer Relevancy | {_m('answer_relevancy')} | ≥ 0.85 |",
+            f"| Answer Correctness | {_m('answer_correctness')} | ≥ 0.80 |",
+            f"| Not-found rate (unanswerables) | {_m('not_found_rate_unanswerables')} | ≥ 0.90 |",
         ]
+        if metrics.get("n_ungraded"):
+            md += ["", f"> ⚠ {metrics['n_ungraded']} question(s) could not be graded — check the judge model."]
     md += [
         "",
         "| Question | Type | CtxRecall | Faithful | Correct |",

@@ -24,6 +24,7 @@ except Exception:
     pass
 
 import yaml
+from openai import OpenAI
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG_PATH = ROOT / "config.yaml"
@@ -112,9 +113,12 @@ def normalize_embedding_model(name: str) -> str:
     Chroma collection, so re-pointing RAG_EMBEDDING_MODEL at the identical
     model does not create a duplicate (empty) index.
     """
+    # The empty-name fallback must be a model the endpoint actually serves.
+    # It used to be text-embedding-005, which 404s on Google's OpenAI-compatible
+    # endpoint.
     return name.replace("text-embedding-3-small/", "").replace(
         "models/", ""
-    ) or "text-embedding-005"
+    ) or "gemini-embedding-001"
 
 
 settings = Settings()
@@ -127,8 +131,15 @@ _FALLBACK_CHAT_MODELS = ["deepseek-v4-pro", "qwen3.8-max", "qwen3-coder"]
 # dimension per chunks table). OpenRouter honors `dimensions=768` for every
 # model listed below (verified live), so each is safe to select. See
 # embeddings.EMBEDDING_768_MODELS.
+#
+# Gemini exposes exactly ONE *allowlisted* embedder here: gemini-embedding-001,
+# confirmed live at 768 dims. Google also serves gemini-embedding-2 and
+# -2-preview, deliberately excluded until their 768 support is verified — see
+# embeddings.EMBEDDING_768_MODELS. (text-embedding-004/005 do NOT exist on
+# Google's OpenAI-compatible endpoint and 404 — see config.yaml.) Everything
+# else in the dropdown comes from OpenRouter.
 _FALLBACK_EMBEDDING_MODELS: dict[str, list[str]] = {
-    "gemini": ["models/gemini-embedding-001", "text-embedding-005"],
+    "gemini": ["models/gemini-embedding-001"],
     "openrouter": [
         "openai/text-embedding-3-small",
         "openai/text-embedding-3-large",
@@ -144,7 +155,12 @@ _FALLBACK_EMBEDDING_MODELS: dict[str, list[str]] = {
 # without going stale for long.
 _MODEL_CACHE_TTL = 300.0
 
-_cache: dict = {"chat": None, "embedding": None, "at": 0.0}
+# Cache is keyed BY PROVIDER. It used to be a single global slot, which meant
+# the embedding list discovered for whichever provider happened to be asked for
+# first was then served for every provider — so picking "Gemini" in Settings
+# could return OpenRouter's models (and vice versa). Each provider now gets its
+# own entry: {provider: {"chat": [...], "embedding": [...], "at": ts}}.
+_cache: dict[str, dict] = {}
 
 
 def _classify_model(model_id: str) -> str | None:
@@ -182,6 +198,7 @@ def discover_models(provider: str = "gemini") -> dict[str, list[str]]:
     out during a transient proxy outage.
     """
     emb_models: list[str] = []
+    chat_models: list[str] = []
     try:
         client = _client_for_provider(provider)
         resp = client.models.list()
@@ -189,24 +206,16 @@ def discover_models(provider: str = "gemini") -> dict[str, list[str]]:
             mid = getattr(m, "id", None)
             if not mid:
                 continue
-            if _classify_model(mid) == "embedding":
+            kind = _classify_model(mid)
+            if kind == "embedding":
                 emb_models.append(mid)
+            # When this provider IS the generation endpoint, the same response
+            # already carries the chat models — classify them here rather than
+            # issuing a second identical /v1/models request.
+            elif provider == "gemini":
+                chat_models.append(mid)
     except Exception:
         pass
-
-    # Chat models: always from the generation endpoint (Gemini/proxy).
-    chat_models: list[str] = []
-    if provider == "gemini":
-        # Only re-query when this is the generation endpoint too.
-        try:
-            gen = _client_for_provider("gemini")
-            resp = gen.models.list()
-            for m in getattr(resp, "data", []) or []:
-                mid = getattr(m, "id", None)
-                if mid and _classify_model(mid) == "chat":
-                    chat_models.append(mid)
-        except Exception:
-            pass
 
     if emb_models:
         # Only expose 768-dim models (Neon/pgvector stores one fixed dimension
@@ -223,26 +232,78 @@ def discover_models(provider: str = "gemini") -> dict[str, list[str]]:
 
 def embedding_models_for(provider: str) -> list[str]:
     """Live embedding-model list for `provider` (Gemini or OpenRouter)."""
-    return discover_models(provider).get("embedding", [])
+    return model_catalog(provider).get("embedding", [])
 
 
-def model_catalog() -> dict[str, list[str]]:
-    """Cached live model catalog (chat + embedding).
+# Cache key for the chat list. Chat models are NOT provider-scoped — generation
+# always goes to the Gemini/proxy endpoint no matter which embedding provider is
+# selected — so they get one shared entry rather than a copy per provider.
+_CHAT_KEY = "__chat__"
 
-    Chat models come from the generation endpoint; embedding models come from
-    the currently-selected embedding provider so the dropdown reflects what that
-    provider actually serves.
+
+def _is_live_chat(chat: list[str] | None) -> bool:
+    """True only for a genuinely discovered chat list.
+
+    ``discover_models`` returns ``_FALLBACK_CHAT_MODELS`` when the endpoint is
+    unreachable, so a truthy list is NOT proof of a live result. The distinction
+    matters because the fallback must never be cached: Google's free tier
+    rate-limits bursts of /v1/models, and one throttled call caching its
+    placeholder names would hide the real catalog for the whole TTL.
+    """
+    return bool(chat) and list(chat) != list(_FALLBACK_CHAT_MODELS)
+
+
+def _chat_models() -> list[str]:
+    """Chat models from the GENERATION endpoint, cached independently.
+
+    Kept out of the per-provider entries deliberately. When the chat list lived
+    there, discovery for OpenRouter (whose /v1/models carries no chat models)
+    fell back to the static list and *cached it under that provider* — so
+    selecting OpenRouter embeddings replaced a 51-model chat dropdown with 3
+    stale placeholder names for the whole TTL, purely as a side effect of which
+    provider happened to be asked for first. One shared entry, refreshed only
+    from the endpoint that actually serves chat models, can't drift that way.
     """
     now = time.time()
-    if _cache["chat"] is not None and (now - _cache["at"]) < _MODEL_CACHE_TTL:
-        return {"chat": _cache["chat"], "embedding": _cache["embedding"]}
+    hit = _cache.get(_CHAT_KEY)
+    if hit is not None and hit.get("chat") and (now - hit["at"]) < _MODEL_CACHE_TTL:
+        return hit["chat"]
+
+    chat = discover_models("gemini").get("chat")
+    if not _is_live_chat(chat):
+        # Serve the fallback but do NOT cache it, so the next call retries.
+        return list(_FALLBACK_CHAT_MODELS)
+    _cache[_CHAT_KEY] = {"chat": chat, "at": now}
+    return chat
+
+
+def model_catalog(provider: str | None = None) -> dict[str, list[str]]:
+    """Cached live model catalog (chat + embedding) for one embedding provider.
+
+    `provider` selects which endpoint's EMBEDDING models are returned. Chat
+    models always come from the generation endpoint. When omitted, the
+    deployment-default provider is used.
+
+    Embedding lists are cached per provider, so asking for Gemini can never hand
+    back the list that was discovered for OpenRouter.
+    """
     from .embeddings import embedding_provider
 
-    catalog = discover_models(embedding_provider())
-    _cache["chat"] = catalog["chat"]
-    _cache["embedding"] = catalog["embedding"]
-    _cache["at"] = now
-    return catalog
+    p = (provider or embedding_provider()).lower()
+    now = time.time()
+    hit = _cache.get(p)
+    if hit is not None and (now - hit["at"]) < _MODEL_CACHE_TTL:
+        return {"chat": _chat_models(), "embedding": hit["embedding"]}
+
+    catalog = discover_models(p)
+    _cache[p] = {"embedding": catalog["embedding"], "at": now}
+    # The gemini response IS the generation endpoint's, so it already carries the
+    # chat models. Seed the shared chat entry from it instead of letting
+    # _chat_models() issue a second identical /v1/models request — but only when
+    # the list is genuinely live, never the fallback.
+    if _is_live_chat(catalog.get("chat")):
+        _cache[_CHAT_KEY] = {"chat": catalog["chat"], "at": now}
+    return {"chat": _chat_models(), "embedding": catalog["embedding"]}
 
 
 def is_known_model(model: str, kind: str, provider: str | None = None) -> bool:
@@ -257,7 +318,7 @@ def is_known_model(model: str, kind: str, provider: str | None = None) -> bool:
     that switches provider+model together must validate against the target
     provider, not the one currently booted.
     """
-    from .embeddings import _PROVIDER_DEFAULT_MODEL
+    from .embeddings import _PROVIDER_DEFAULT_MODEL, embedding_provider
 
     if kind == "embedding":
         # Scope validation to the provider the model actually belongs to.
