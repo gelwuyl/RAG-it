@@ -14,6 +14,7 @@ from sqlalchemy import (
     String,
     Text,
     create_engine,
+    inspect,
     text,
 )
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
@@ -141,16 +142,36 @@ def set_config_override(key: str, value: str) -> None:
         s.close()
 
 
+def _reconcile_columns(engine) -> None:
+    """Add any model columns missing from existing DB tables.
+
+    `create_all` only creates tables that are absent; it never alters existing
+    ones. On Neon a table created by an older app version can be missing
+    columns the current models expect (e.g. messages.citations / eval_line /
+    eval_data), which makes every query on that table fail with UndefinedColumn.
+    This reconciles column drift without a full migration tool.
+    """
+    inspector = inspect(engine)
+    for table_name, table in Base.metadata.tables.items():
+        try:
+            existing = {c["name"] for c in inspector.get_columns(table_name)}
+        except Exception:
+            # Table missing entirely — create_all handles it.
+            continue
+        for col in table.columns:
+            if col.name in existing:
+                continue
+            ddl = col.type.compile(dialect=engine.dialect)
+            with engine.begin() as conn:
+                conn.execute(
+                    text(f"ALTER TABLE {table_name} ADD COLUMN {col.name} {ddl}")
+                )
+
+
 def init_db() -> None:
     Base.metadata.create_all(engine)
-    # Add columns that may not exist on an already-created table (safe on Neon).
-    with engine.begin() as conn:
-        for col, ctype in (("eval_line", "TEXT"), ("eval_data", "TEXT")):
-            try:
-                conn.execute(text(f"ALTER TABLE messages ADD COLUMN {col} {ctype}"))
-            except Exception:
-                # already exists (or table not yet present) — ignore
-                pass
+    # Reconcile column drift on tables that already existed (safe on Neon).
+    _reconcile_columns(engine)
 
 
 # Self-healing schema init for serverless cold starts. Vercel's @vercel/python

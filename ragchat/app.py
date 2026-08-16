@@ -9,11 +9,10 @@ from typing import Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
-import traceback as _traceback
 
 from . import auth as authn
 from .config import (
@@ -50,19 +49,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-@app.exception_handler(Exception)
-async def _debug_exception_handler(request: Request, exc: Exception):
-    # TEMPORARY diagnostic: surface the real traceback for /api routes so the
-    # deployed Postgres-specific failure can be read without Vercel log access.
-    if request.url.path.startswith("/api/"):
-        tb = _traceback.format_exc()
-        return JSONResponse(
-            status_code=500,
-            content={"detail": f"{type(exc).__name__}: {exc}", "traceback": tb[-3000:]},
-        )
-    raise exc
 
 
 LOCAL_USERNAME = "local"
