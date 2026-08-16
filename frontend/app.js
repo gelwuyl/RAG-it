@@ -57,6 +57,15 @@ function escapeHtml(s) {
     .replaceAll('"', "&quot;");
 }
 
+// Shared markup for the "nothing here yet" panels.
+function emptyState(icon, title, text) {
+  return `<div class="empty-state">
+      <span class="empty-icon" aria-hidden="true">${icon}</span>
+      ${title ? `<p class="empty-title">${escapeHtml(title)}</p>` : ""}
+      <p class="empty-text">${escapeHtml(text)}</p>
+    </div>`;
+}
+
 // ---------- auth ----------
 
 function showAuth() {
@@ -93,7 +102,34 @@ async function initAuth() {
 
 // ---------- sources ----------
 
-const STATUS_ICON = { ready: "✓", indexing: "…", pending: "…", failed: "✗" };
+// Backend status -> human label + badge colour class.
+const STATUS_META = {
+  ready: { label: "ready", cls: "ready" },
+  indexing: { label: "embedding…", cls: "working" },
+  pending: { label: "queued", cls: "working" },
+  failed: { label: "error", cls: "error" },
+};
+
+// File-type chips: a short uppercase tag in a type-coloured square, so a
+// source list is scannable at a glance (PDF vs web page vs spreadsheet).
+const EXT_KINDS = {
+  pdf: ["pdf", "PDF"],
+  md: ["doc", "MD"], markdown: ["doc", "MD"], rst: ["doc", "RST"],
+  html: ["web", "HTML"], htm: ["web", "HTML"],
+  txt: ["text", "TXT"], log: ["text", "LOG"],
+  csv: ["data", "CSV"], json: ["data", "JSON"], yaml: ["data", "YML"], yml: ["data", "YML"],
+  mp3: ["audio", "MP3"], wav: ["audio", "WAV"], m4a: ["audio", "M4A"],
+  mp4: ["video", "MP4"], mov: ["video", "MOV"], webm: ["video", "WEBM"],
+};
+
+function sourceKind(doc) {
+  if (doc.source_type === "url") return { kind: "web", tag: "WEB" };
+  const name = String(doc.path_or_url || doc.title || "");
+  const ext = name.includes(".") ? name.split(".").pop().toLowerCase() : "";
+  const hit = EXT_KINDS[ext];
+  if (hit) return { kind: hit[0], tag: hit[1] };
+  return { kind: "text", tag: (ext || "file").slice(0, 4).toUpperCase() };
+}
 
 function renderFolders(folders) {
   const list = $("folder-list");
@@ -102,16 +138,16 @@ function renderFolders(folders) {
     const item = document.createElement("div");
     item.className = "source-item";
     item.innerHTML = `
-      <div class="row">
-        <span>📁</span>
-        <span class="title" title="${escapeHtml(f.path)}">${escapeHtml(f.path)}</span>
-      </div>
-      <div class="row">
-        <span class="status muted small">${f.n_docs} docs</span>
-        <span style="flex:1"></span>
+      <span class="src-icon" data-kind="folder" aria-hidden="true">DIR</span>
+      <span class="src-title" title="${escapeHtml(f.path)}">${escapeHtml(f.path)}</span>
+      <span class="src-actions">
         <button class="icon-btn" data-act="rescan" title="Rescan folder">↻</button>
         <button class="icon-btn" data-act="remove" title="Remove folder source">✕</button>
-      </div>`;
+      </span>
+      <span class="src-sub">
+        <span class="badge-status ready">folder</span>
+        <span class="src-meta">${f.n_docs} docs</span>
+      </span>`;
     item.querySelector('[data-act="rescan"]').onclick = async () => {
       try {
         toast("Rescanning…");
@@ -136,18 +172,20 @@ function renderDocs(docs) {
   for (const d of docs) {
     const item = document.createElement("div");
     item.className = "source-item";
-    const icon = d.source_type === "url" ? "🌐" : "📄";
+    const { kind, tag } = sourceKind(d);
+    const status = STATUS_META[d.status] || { label: d.status || "unknown", cls: "" };
     const sub = d.source_type === "url" ? d.path_or_url : (d.path_or_url || "upload");
     item.innerHTML = `
-      <div class="row">
-        <span>${icon}</span>
-        <span class="title" title="${escapeHtml(sub || "")}">${escapeHtml(d.title)}</span>
-        <button class="icon-btn" data-act="delete" title="Delete">✕</button>
-      </div>
-      <div class="row">
-        <span class="status ${d.status}">${STATUS_ICON[d.status] || ""} ${d.status}${d.n_chunks ? ` · ${d.n_chunks} chunks` : ""}</span>
-      </div>
-      ${d.error ? `<div class="row error-text small">${escapeHtml(d.error)}</div>` : ""}`;
+      <span class="src-icon" data-kind="${kind}" aria-hidden="true">${escapeHtml(tag)}</span>
+      <span class="src-title" title="${escapeHtml(sub || "")}">${escapeHtml(d.title)}</span>
+      <span class="src-actions">
+        <button class="icon-btn" data-act="delete" title="Delete source">✕</button>
+      </span>
+      <span class="src-sub">
+        <span class="badge-status ${status.cls}">${escapeHtml(status.label)}</span>
+        ${d.n_chunks ? `<span class="src-meta">${d.n_chunks} chunks</span>` : ""}
+      </span>
+      ${d.error ? `<span class="src-error">${escapeHtml(d.error)}</span>` : ""}`;
     item.querySelector('[data-act="delete"]').onclick = async () => {
       try {
         await api(`/api/documents/${d.id}`, { method: "DELETE" });
@@ -165,6 +203,8 @@ async function refreshSources() {
   ]);
   renderFolders(folders);
   renderDocs(docs);
+  $("source-count").textContent = String(docs.length + folders.length);
+  $("sources-empty").classList.toggle("hidden", docs.length + folders.length > 0);
   return docs;
 }
 
@@ -465,9 +505,11 @@ async function refreshChats(selectId = null) {
   } else {
     state.currentChatId = null;
     renderChats();
-    $("messages").innerHTML = `<div class="empty-hint" id="empty-hint">
-      Add sources on the left, then ask anything about them.
-      Answers are grounded in your documents and cite their sources.</div>`;
+    $("messages").innerHTML = emptyState(
+      "◈",
+      "Ask a question to see results",
+      "Add sources on the left, then ask anything about them. Answers are grounded in your documents and cite their sources."
+    );
   }
 }
 
@@ -485,7 +527,11 @@ async function openChat(chatId) {
   const box = $("messages");
   box.innerHTML = "";
   if (chat.messages.length === 0) {
-    box.innerHTML = `<div class="empty-hint">Start by asking a question about your documents.</div>`;
+    box.innerHTML = emptyState(
+      "◈",
+      "Ask a question to see results",
+      "This conversation is empty. Ask something about your documents to get a cited, grounded answer."
+    );
     return;
   }
   for (const m of chat.messages) {
@@ -504,10 +550,18 @@ function renderAssistantContent(el, content, citations) {
   if (citations.length) {
     const wrap = document.createElement("div");
     wrap.className = "citations";
+    const label = document.createElement("span");
+    label.className = "citations-label";
+    label.textContent = "Sources";
+    wrap.appendChild(label);
     for (const c of citations) {
       const chip = document.createElement("button");
       chip.className = "cite-chip";
-      chip.textContent = `[${c.number}] ${c.title}`;
+      chip.type = "button";
+      chip.title = `Show the passage from “${c.title}”`;
+      chip.innerHTML =
+        `<span class="cite-num">${c.number}</span>` +
+        `<span class="cite-name">${escapeHtml(c.title)}</span>`;
       chip.onclick = () => showExcerpt(c);
       wrap.appendChild(chip);
     }
@@ -569,7 +623,7 @@ function buildEvalBlock(evalData, evalLine) {
 
 function appendMessage(role, content, citations = [], isPending = false, evalLine = "", evalData = null) {
   const box = $("messages");
-  const hint = box.querySelector(".empty-hint");
+  const hint = box.querySelector(".empty-state");
   if (hint) hint.remove();
 
   const el = document.createElement("div");
@@ -647,14 +701,22 @@ $("question-input").addEventListener("keydown", (e) => {
 
 function showExcerpt(citation) {
   $("excerpt-content").classList.remove("hidden");
+  $("excerpt-close").classList.remove("hidden");
   document.querySelector(".excerpt-empty").classList.add("hidden");
   $("excerpt-title").textContent = citation.title;
   $("excerpt-ref").textContent = citation.ref || "";
   $("excerpt-text").textContent = citation.excerpt;
+  // On mobile the excerpt sits at the very bottom of the page — bring it up.
+  if (window.matchMedia("(max-width: 767px)").matches) {
+    $("excerpt-pane").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 }
 
 $("excerpt-close").onclick = () => {
   $("excerpt-content").classList.add("hidden");
+  $("excerpt-close").classList.add("hidden");
+  $("excerpt-title").textContent = "";
+  $("excerpt-ref").textContent = "";
   document.querySelector(".excerpt-empty").classList.remove("hidden");
 };
 
@@ -707,7 +769,7 @@ function renderScorecard(metrics) {
     el.appendChild(row);
   }
   if (!shown) {
-    el.innerHTML = `<p class="muted small">No generation metrics in this run yet.</p>`;
+    el.innerHTML = emptyState("◔", "", "No generation metrics in this run yet.");
   }
 }
 
@@ -715,7 +777,7 @@ function renderEvalQuestions(results) {
   const el = $("eval-questions");
   el.innerHTML = "";
   if (!results || !results.length) {
-    el.innerHTML = `<p class="muted small">No per-question results.</p>`;
+    el.innerHTML = emptyState("◔", "", "No per-question results.");
     return;
   }
   for (const r of results) {
@@ -755,8 +817,12 @@ function renderEval(data) {
   const statusEl = $("eval-status");
   const runBtn = $("eval-run-btn");
   if (!data || data.status === "none") {
-    statusEl.textContent = "No benchmark run yet. Click “Run benchmark” to score the system against the golden set.";
-    $("eval-scorecard").innerHTML = "";
+    statusEl.textContent = "";
+    $("eval-scorecard").innerHTML = emptyState(
+      "◎",
+      "No benchmark run yet",
+      "Run the RAGAS-style benchmark to score retrieval and generation against the golden set."
+    );
     $("eval-questions").innerHTML = "";
     runBtn.disabled = false;
     return;
@@ -812,6 +878,39 @@ $("eval-run-btn").onclick = async () => {
     $("eval-run-btn").disabled = false;
   }
 };
+
+// ---------- collapsible panes (tablet / mobile) ----------
+
+// On narrow viewports the side panes stack, so Sources and Evaluation become
+// collapsible sections; the chat stays expanded. CSS only honours `.collapsed`
+// below 1100px, so a stale class can never hide a desktop pane.
+const NARROW = window.matchMedia("(max-width: 1099px)");
+const MOBILE = window.matchMedia("(max-width: 767px)");
+
+function setCollapsed(paneId, btnId, collapsed) {
+  $(paneId).classList.toggle("collapsed", collapsed);
+  $(btnId).setAttribute("aria-expanded", String(!collapsed));
+}
+
+function bindPaneToggle(paneId, btnId) {
+  $(btnId).onclick = () => {
+    setCollapsed(paneId, btnId, !$(paneId).classList.contains("collapsed"));
+  };
+}
+
+bindPaneToggle("eval-pane", "eval-toggle");
+bindPaneToggle("sources-pane", "sources-toggle");
+
+// Default state per breakpoint: below 1100px the Evaluation scorecard starts
+// folded so Sources + Chat keep the room. Sources stays open — adding a source
+// is the first thing you do — but can be folded by hand on mobile.
+function applyBreakpointDefaults() {
+  setCollapsed("eval-pane", "eval-toggle", NARROW.matches);
+  if (!MOBILE.matches) setCollapsed("sources-pane", "sources-toggle", false);
+}
+applyBreakpointDefaults();
+NARROW.addEventListener("change", applyBreakpointDefaults);
+MOBILE.addEventListener("change", applyBreakpointDefaults);
 
 // ---------- boot ----------
 
