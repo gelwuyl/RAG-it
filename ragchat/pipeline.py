@@ -362,6 +362,13 @@ def ask(
             for i, c in enumerate(pool[: min(2, len(pool))])
         ]
     eval_d = _eval_answer(effective_query, answer, context, cfg)
+    # Enrich the eval dict with the retrieval top-similarity and end-to-end
+    # latency so the UI can render a self-contained, readable performance block
+    # (no need to parse the terse eval_line string).
+    if eval_d is not None:
+        sims = [c["similarity"] for c in pool if c.get("similarity") is not None]
+        eval_d["top_sim"] = round(max(sims), 4) if sims else None
+        eval_d["latency_ms"] = round((time.time() - t0) * 1000)
     return {
         "answer": answer,
         "not_found": False,

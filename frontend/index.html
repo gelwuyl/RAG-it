@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>RAG Chat</title>
-    <link rel="stylesheet" href="/styles.css?v=3" />
+    <link rel="stylesheet" href="/styles.css?v=4" />
     <script>
       // Boot diagnostics: collect load/runtime errors so a broken app.js
       // shows a visible message instead of a silently dead UI.
@@ -102,22 +102,33 @@
           </form>
         </main>
 
-        <!-- Right: excerpt -->
-        <aside class="pane excerpt-pane" id="excerpt-pane">
-          <div class="excerpt-empty">
-            <h2>Excerpt</h2>
-            <p class="muted">Click a citation <span class="cite-demo">[1]</span> to see the source passage.</p>
+        <!-- Right: evaluation -->
+        <aside class="pane eval-pane" id="eval-pane">
+          <div class="eval-pane-header">
+            <h2>Evaluation</h2>
+            <button id="eval-run-btn" class="btn btn-small" title="Run the RAGAS-style benchmark on the golden set">Run benchmark</button>
           </div>
-          <div id="excerpt-content" class="hidden">
-            <div class="excerpt-header">
-              <h2 id="excerpt-title"></h2>
-              <button id="excerpt-close" class="btn btn-small">✕</button>
-            </div>
-            <p id="excerpt-ref" class="muted small"></p>
-            <pre id="excerpt-text"></pre>
-          </div>
+          <div id="eval-status" class="eval-status muted small"></div>
+          <div id="eval-scorecard" class="eval-scorecard"></div>
+          <div id="eval-questions" class="eval-questions"></div>
         </aside>
       </div>
+
+      <!-- Bottom: excerpt (full width under chat + evaluation) -->
+      <aside class="excerpt-pane" id="excerpt-pane">
+        <div class="excerpt-empty">
+          <h2>Excerpt</h2>
+          <p class="muted">Click a citation <span class="cite-demo">[1]</span> to see the source passage.</p>
+        </div>
+        <div id="excerpt-content" class="hidden">
+          <div class="excerpt-header">
+            <h2 id="excerpt-title"></h2>
+            <button id="excerpt-close" class="btn btn-small">✕</button>
+          </div>
+          <p id="excerpt-ref" class="muted small"></p>
+          <pre id="excerpt-text"></pre>
+        </div>
+      </aside>
     </div>
 
     <div id="toast" class="toast hidden"></div>
@@ -218,6 +229,6 @@
       </div>
     </div>
 
-    <script type="module" src="/app.js?v=3"></script>
+    <script type="module" src="/app.js?v=4"></script>
   </body>
 </html>

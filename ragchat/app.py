@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -617,7 +618,8 @@ def get_chat(
                 "content": m.content,
                 "citations": json.loads(m.citations) if m.citations else [],
                 "eval_line": m.eval_line or "",
-                }
+                "eval_data": json.loads(m.eval_data) if m.eval_data else None,
+            }
             for m in msgs
         ],
     }
@@ -656,6 +658,7 @@ def ask_chat(
             content=result["answer"],
             citations=json.dumps(result["citations"]),
             eval_line=result.get("eval_line") or None,
+            eval_data=json.dumps(result["eval"]) if result.get("eval") else None,
         )
     )
     db.commit()
@@ -790,6 +793,95 @@ def update_config(body: ConfigUpdateIn):
         },
         "needs_reindex": needs_reindex,
     }
+
+
+# ---------- eval benchmark (RAGAS-style scorecard) ----------
+
+import threading
+from pathlib import Path as _Path
+
+_EVAL_DIR = _Path(__file__).resolve().parent.parent / "eval"
+_EVAL_STATUS_FILE = _EVAL_DIR / "last_run_status.json"
+_eval_thread: threading.Thread | None = None
+
+
+def _eval_status() -> dict:
+    """Read the latest benchmark status + report, or a clear 'none' state."""
+    if _EVAL_STATUS_FILE.exists():
+        try:
+            return json.loads(_EVAL_STATUS_FILE.read_text())
+        except Exception:
+            pass
+    # Fall back to the most recent report under eval/runs/ if no status file.
+    runs = sorted(_EVAL_DIR.glob("runs/*/report.json"), reverse=True)
+    if runs:
+        try:
+            report = json.loads(runs[0].read_text())
+            return {
+                "status": "done",
+                "run_dir": str(runs[0].parent),
+                "metrics": report.get("metrics", {}),
+                "results": report.get("results", []),
+                "config": report.get("config", {}),
+                "timestamp": report.get("timestamp", ""),
+            }
+        except Exception:
+            pass
+    return {"status": "none", "message": "No benchmark run yet."}
+
+
+def _run_benchmark() -> None:
+    """Run the eval harness in a background thread and persist a status file."""
+    try:
+        import sys as _sys
+
+        _sys.path.insert(0, str(_EVAL_DIR.parent))
+        from eval.run_eval import run_benchmark as _bench
+
+        _EVAL_STATUS_FILE.write_text(
+            json.dumps({"status": "running", "started_at": time.time()})
+        )
+        report = _bench()
+        _EVAL_STATUS_FILE.write_text(
+            json.dumps(
+                {
+                    "status": "done",
+                    "run_dir": report.get("run_dir", ""),
+                    "metrics": report.get("metrics", {}),
+                    "results": report.get("results", []),
+                    "config": report.get("config", {}),
+                    "timestamp": report.get("timestamp", ""),
+                }
+            )
+        )
+    except Exception as exc:  # never crash the worker silently
+        _EVAL_STATUS_FILE.write_text(
+            json.dumps({"status": "error", "error": str(exc)[:300]})
+        )
+    finally:
+        global _eval_thread
+        _eval_thread = None
+
+
+@app.get("/api/eval")
+def get_eval():
+    """Latest benchmark report (RAGAS-style scorecard) for the Evaluation tab."""
+    return _eval_status()
+
+
+@app.post("/api/eval/run")
+def run_eval():
+    """Trigger a local benchmark run. Runs in a background thread so the UI can
+    poll GET /api/eval for progress. On Vercel (read-only FS / short-lived
+    functions) this is best run locally; the tab still displays the latest
+    report that was generated locally."""
+    global _eval_thread
+    status = _eval_status()
+    if status.get("status") == "running":
+        return {"status": "running", "message": "A benchmark is already running."}
+    _eval_thread = threading.Thread(target=_run_benchmark, daemon=True)
+    _eval_thread.start()
+    return {"status": "started", "message": "Benchmark started — poll GET /api/eval."}
 
 
 @app.get("/api/health")

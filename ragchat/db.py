@@ -98,7 +98,8 @@ class Message(Base):
     role = Column(String)  # user | assistant
     content = Column(Text)
     citations = Column(Text, nullable=True)  # JSON list of {number, doc_id, title, ref, excerpt}
-    eval_line = Column(Text, nullable=True)  # grey perf line shown under assistant answers
+    eval_line = Column(Text, nullable=True)  # terse grey perf line (back-compat)
+    eval_data = Column(Text, nullable=True)  # JSON of the full eval dict (faith/relevancy + reasons)
     created_at = Column(Float, default=now)
     conversation = relationship("Conversation", back_populates="messages")
 
@@ -143,7 +144,7 @@ def init_db() -> None:
     Base.metadata.create_all(engine)
     # Add columns that may not exist on an already-created table (safe on Neon).
     with engine.begin() as conn:
-        for col, ctype in (("eval_line", "TEXT"),):
+        for col, ctype in (("eval_line", "TEXT"), ("eval_data", "TEXT")):
             try:
                 conn.execute(text(f"ALTER TABLE messages ADD COLUMN {col} {ctype}"))
             except Exception:

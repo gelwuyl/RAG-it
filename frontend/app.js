@@ -8,6 +8,7 @@ const state = {
   currentChatId: null,
   currentCitations: [], // citations of the last assistant message, for the excerpt pane
   models: { chat: [], embedding: [] }, // proxy model catalog for the settings dropdowns
+  evalPolling: null,
 };
 
 // Human-friendly labels for known models. With live proxy discovery the
@@ -70,7 +71,6 @@ function showApp() {
 
 async function initAuth() {
   // Single-user mode: sign in automatically as the built-in local account.
-  // (Full auth — Google OAuth / local accounts — is deferred per PRD.)
   try {
     const status = await api("/api/auth/status");
     if (!status.authenticated) {
@@ -81,13 +81,11 @@ async function initAuth() {
     const nameEl = $("user-name");
     if (nameEl) nameEl.textContent = state.user?.name || "";
   } catch (e) {
-    // Auth failed but we still show the app shell — the user will see
-    // errors when they try to chat, rather than a blank screen.
     console.error("auth failed:", e);
   }
   showApp();
   try {
-    await Promise.all([refreshSources(), refreshChats(), refreshHybridToggle()]);
+    await Promise.all([refreshSources(), refreshChats(), refreshHybridToggle(), loadEval()]);
   } catch (e) {
     console.error("boot fetch failed:", e);
   }
@@ -491,7 +489,7 @@ async function openChat(chatId) {
     return;
   }
   for (const m of chat.messages) {
-    appendMessage(m.role, m.content, m.citations || [], false, m.eval_line || "");
+    appendMessage(m.role, m.content, m.citations || [], false, m.eval_line || "", m.eval_data || null);
   }
   box.scrollTop = box.scrollHeight;
 }
@@ -524,7 +522,52 @@ function renderAssistantContent(el, content, citations) {
   });
 }
 
-function appendMessage(role, content, citations = [], isPending = false, evalLine = "") {
+// Build a readable evaluation block from the full eval dict (preferred) or the
+// terse eval_line string (legacy). This is what makes "top sim" / "rel" / etc.
+// understandable instead of cryptic abbreviations.
+function buildEvalBlock(evalData, evalLine) {
+  const wrap = document.createElement("div");
+  wrap.className = "eval-block";
+
+  if (evalData && typeof evalData === "object") {
+    const rows = [];
+    if (evalData.top_sim != null) {
+      rows.push(["Top similarity", evalData.top_sim.toFixed(2), "how closely the best retrieved chunk matched your question (1.00 = exact)"]);
+    }
+    if (evalData.faithful != null) {
+      rows.push(["Faithfulness", evalData.faithful ? "PASS" : "FAIL", evalData.faithful_reason || "every claim is supported by the sources"]);
+    }
+    if (evalData.relevant != null) {
+      rows.push(["Relevancy", evalData.relevant ? "PASS" : "FAIL", evalData.relevant_reason || "the answer addresses your question"]);
+    }
+    if (evalData.latency_ms != null) {
+      rows.push(["Latency", `${(evalData.latency_ms / 1000).toFixed(1)} s`, "time to generate this answer"]);
+    }
+    if (rows.length) {
+      for (const [label, value, gloss] of rows) {
+        const row = document.createElement("div");
+        row.className = "eval-row";
+        const vClass = value === "PASS" ? "pass" : value === "FAIL" ? "fail" : "";
+        row.innerHTML = `<span class="eval-label">${label}</span>` +
+          `<span class="eval-value ${vClass}">${escapeHtml(String(value))}</span>` +
+          `<span class="eval-gloss">${escapeHtml(gloss)}</span>`;
+        wrap.appendChild(row);
+      }
+      return wrap;
+    }
+  }
+  // Fallback: show the terse line as-is (legacy messages before eval_data existed).
+  if (evalLine) {
+    const row = document.createElement("div");
+    row.className = "eval-row";
+    row.innerHTML = `<span class="eval-label">Eval</span>` +
+      `<span class="eval-gloss">${escapeHtml(evalLine)}</span>`;
+    wrap.appendChild(row);
+  }
+  return wrap;
+}
+
+function appendMessage(role, content, citations = [], isPending = false, evalLine = "", evalData = null) {
   const box = $("messages");
   const hint = box.querySelector(".empty-hint");
   if (hint) hint.remove();
@@ -539,11 +582,8 @@ function appendMessage(role, content, citations = [], isPending = false, evalLin
         el.classList.add("not-found");
       }
       renderAssistantContent(el, content, citations);
-      if (evalLine) {
-        const ev = document.createElement("div");
-        ev.className = "eval-line";
-        ev.textContent = evalLine;
-        el.appendChild(ev);
+      if (evalData || evalLine) {
+        el.appendChild(buildEvalBlock(evalData, evalLine));
       }
     }
   } else {
@@ -578,7 +618,7 @@ $("ask-form").onsubmit = async (e) => {
       body: JSON.stringify({ question }),
     });
     pending.remove();
-    appendMessage("assistant", result.answer, result.citations, false, result.eval_line || "");
+    appendMessage("assistant", result.answer, result.citations, false, result.eval_line || "", result.eval || null);
     chatStatusOverride.delete(state.currentChatId); // answered -> green dot
     // keep the chat list titles/statuses in sync
     const c = state.chats.find((x) => x.id === state.currentChatId);
@@ -603,7 +643,7 @@ $("question-input").addEventListener("keydown", (e) => {
   }
 });
 
-// ---------- excerpt pane ----------
+// ---------- excerpt pane (bottom) ----------
 
 function showExcerpt(citation) {
   $("excerpt-content").classList.remove("hidden");
@@ -616,6 +656,161 @@ function showExcerpt(citation) {
 $("excerpt-close").onclick = () => {
   $("excerpt-content").classList.add("hidden");
   document.querySelector(".excerpt-empty").classList.remove("hidden");
+};
+
+// ---------- evaluation tab (right) ----------
+
+// RAGAS-style metric targets (from eval/EVAL_SPEC.md). Used to render the
+// scorecard bars and the pass/fail colouring.
+const EVAL_TARGETS = {
+  context_recall: { label: "Context Recall", target: 0.80, higher: true },
+  precision_at_k: { label: "Precision@k", target: 0.70, higher: true },
+  mrr: { label: "MRR", target: 0.65, higher: true },
+  ndcg_at_k: { label: "NDCG@k", target: 0.70, higher: true },
+  hit_rate_at_k: { label: "Hit Rate@k", target: 0.80, higher: true },
+  faithfulness: { label: "Faithfulness", target: 0.90, higher: true },
+  answer_relevancy: { label: "Answer Relevancy", target: 0.85, higher: true },
+  answer_correctness: { label: "Answer Correctness", target: 0.80, higher: true },
+  not_found_rate_unanswerables: { label: "Not-found rate (unanswerables)", target: 0.90, higher: true },
+};
+
+function fmtPct(v) {
+  if (v == null) return "—";
+  return `${Math.round(v * 100)}%`;
+}
+
+function renderScorecard(metrics) {
+  const el = $("eval-scorecard");
+  el.innerHTML = "";
+  const keys = Object.keys(EVAL_TARGETS);
+  let shown = 0;
+  for (const k of keys) {
+    const t = EVAL_TARGETS[k];
+    const v = metrics[k];
+    if (v == null) continue;
+    shown++;
+    const pct = Math.round(v * 100);
+    const targetPct = Math.round(t.target * 100);
+    const meets = v >= t.target;
+    const row = document.createElement("div");
+    row.className = "score-row";
+    row.innerHTML = `
+      <div class="score-head">
+        <span class="score-name">${t.label}</span>
+        <span class="score-val ${meets ? "pass" : "fail"}">${pct}%</span>
+      </div>
+      <div class="score-bar">
+        <div class="score-fill ${meets ? "pass" : "fail"}" style="width:${Math.min(100, pct)}%"></div>
+        <div class="score-target" style="left:${Math.min(100, targetPct)}%" title="Target ${targetPct}%"></div>
+      </div>
+      <div class="score-foot">target ${targetPct}%</div>`;
+    el.appendChild(row);
+  }
+  if (!shown) {
+    el.innerHTML = `<p class="muted small">No generation metrics in this run yet.</p>`;
+  }
+}
+
+function renderEvalQuestions(results) {
+  const el = $("eval-questions");
+  el.innerHTML = "";
+  if (!results || !results.length) {
+    el.innerHTML = `<p class="muted small">No per-question results.</p>`;
+    return;
+  }
+  for (const r of results) {
+    const card = document.createElement("div");
+    card.className = "eval-q";
+    const fh = r.faithful == null ? "—" : (r.faithful ? "✓" : "✗");
+    const cd = r.correct == null ? "—" : (r.correct ? "✓" : "✗");
+    const fhClass = r.faithful == null ? "" : (r.faithful ? "pass" : "fail");
+    const cdClass = r.correct == null ? "" : (r.correct ? "pass" : "fail");
+    card.innerHTML = `
+      <div class="eval-q-head">
+        <span class="eval-q-text">${escapeHtml(r.question)}</span>
+      </div>
+      <div class="eval-q-metrics">
+        <span class="badge ${fhClass}">faith ${fh}</span>
+        <span class="badge ${cdClass}">correct ${cd}</span>
+        <span class="badge">recall ${r.context_recall != null ? r.context_recall.toFixed(2) : "—"}</span>
+      </div>
+      <div class="eval-q-io">
+        <div class="io-col"><span class="io-label">Expected</span><span class="io-text">${escapeHtml(r.expected || "—")}</span></div>
+        <div class="io-col"><span class="io-label">Actual</span><span class="io-text">${escapeHtml(r.answer || "—")}</span></div>
+      </div>`;
+    el.appendChild(card);
+  }
+}
+
+async function loadEval() {
+  try {
+    const data = await api("/api/eval");
+    renderEval(data);
+  } catch (e) {
+    console.error("eval load failed:", e);
+  }
+}
+
+function renderEval(data) {
+  const statusEl = $("eval-status");
+  const runBtn = $("eval-run-btn");
+  if (!data || data.status === "none") {
+    statusEl.textContent = "No benchmark run yet. Click “Run benchmark” to score the system against the golden set.";
+    $("eval-scorecard").innerHTML = "";
+    $("eval-questions").innerHTML = "";
+    runBtn.disabled = false;
+    return;
+  }
+  if (data.status === "running") {
+    statusEl.textContent = "Benchmark running… (indexing corpus + scoring golden questions)";
+    runBtn.disabled = true;
+    if (!state.evalPolling) startEvalPolling();
+    return;
+  }
+  if (data.status === "error") {
+    statusEl.textContent = "Benchmark failed: " + (data.error || "unknown error");
+    runBtn.disabled = false;
+    return;
+  }
+  // done
+  runBtn.disabled = false;
+  const ts = data.timestamp ? ` · ${data.timestamp}` : "";
+  statusEl.textContent = "Latest benchmark" + ts;
+  renderScorecard(data.metrics || {});
+  renderEvalQuestions(data.results || []);
+}
+
+function startEvalPolling() {
+  if (state.evalPolling) return;
+  state.evalPolling = setInterval(async () => {
+    try {
+      const data = await api("/api/eval");
+      renderEval(data);
+      if (data.status !== "running") {
+        clearInterval(state.evalPolling);
+        state.evalPolling = null;
+      }
+    } catch (e) {
+      clearInterval(state.evalPolling);
+      state.evalPolling = null;
+    }
+  }, 2500);
+}
+
+$("eval-run-btn").onclick = async () => {
+  try {
+    $("eval-run-btn").disabled = true;
+    $("eval-status").textContent = "Starting benchmark…";
+    const r = await api("/api/eval/run", { method: "POST" });
+    if (r.status === "running" || r.status === "started") {
+      startEvalPolling();
+    } else {
+      await loadEval();
+    }
+  } catch (e) {
+    toast("Benchmark failed: " + e.message, true);
+    $("eval-run-btn").disabled = false;
+  }
 };
 
 // ---------- boot ----------

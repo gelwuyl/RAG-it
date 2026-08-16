@@ -74,12 +74,14 @@ def judge_answer(question: str, expected: str, answer: str) -> tuple[bool, str]:
     return judges.answer_correctness(question, expected, answer)
 
 
-def main() -> None:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--limit", type=int, default=None)
-    ap.add_argument("--retrieval-only", action="store_true")
-    args = ap.parse_args()
+def run_benchmark(limit: int | None = None, retrieval_only: bool = False) -> dict:
+    """Run the full eval harness and return the report dict.
 
+    Callable form used by the in-app Evaluation tab (POST /api/eval/run).
+    Mirrors the CLI `main()` exactly, but returns the report instead of only
+    printing it, so the web layer can persist it to a status file and the UI
+    can poll for progress.
+    """
     cfg = load_config()
     print(f"Config fingerprint: {cfg.fingerprint()}")
     print(f"Judge model: {JUDGE_MODEL} | MATCH_THRESHOLD (cosine): {MATCH_THRESHOLD}")
@@ -88,8 +90,8 @@ def main() -> None:
     load_corpus(cfg)
 
     items = [json.loads(line) for line in GOLDEN.read_text().splitlines() if line.strip()]
-    if args.limit:
-        items = items[: args.limit]
+    if limit:
+        items = items[:limit]
 
     # Pre-embed golden passages once per question.
     for it in items:
@@ -118,6 +120,7 @@ def main() -> None:
             "needs": item.get("needs", ["single_passage"]),
             "type": item.get("type", ""),
             "expected_source": item.get("golden_doc", ""),
+            "expected": item.get("expected", ""),
             "context_recall": round(cr, 4),
             "precision_at_k": round(prec, 4),
             "mrr": round(mrr, 4),
@@ -129,7 +132,7 @@ def main() -> None:
             ],
         }
 
-        if not args.retrieval_only:
+        if not retrieval_only:
             res = ask(EVAL_USER, question, [], cfg)
             entry["answer"] = res["answer"]
             entry["not_found"] = res["not_found"]
@@ -145,7 +148,7 @@ def main() -> None:
                 fh, fh_r = judges.faithfulness(question, context_text, res["answer"])
                 rv, rv_r = judges.answer_relevancy(question, res["answer"])
                 cr_ok, cr_r = judges.answer_correctness(
-                    question, item["expected"], res["answer"]
+                    question, item["expected"], res["answer"], item.get("golden_passages")
                 )
                 entry["faithful"] = fh
                 entry["faithful_reason"] = fh_r
@@ -173,7 +176,7 @@ def main() -> None:
         "ndcg_at_k": _mean([r["ndcg_at_k"] for r in answerable]),
         "hit_rate_at_k": _mean([r["hit_rate_at_k"] for r in answerable]),
     }
-    if not args.retrieval_only:
+    if not retrieval_only:
         metrics["faithfulness"] = _mean([1 if r["faithful"] else 0 for r in answerable if r["faithful"] is not None])
         metrics["answer_relevancy"] = _mean([1 if r["relevant"] else 0 for r in answerable if r["relevant"] is not None])
         metrics["answer_correctness"] = _mean([1 if r["correct"] else 0 for r in answerable if r.get("correct") is not None])
@@ -188,6 +191,7 @@ def main() -> None:
     run_dir.mkdir(parents=True, exist_ok=True)
     report = {
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "run_dir": str(run_dir),
         "config": {
             "chunk_size": cfg.chunk_size,
             "chunk_overlap": cfg.chunk_overlap,
@@ -221,7 +225,7 @@ def main() -> None:
         f"| NDCG@k | {metrics['ndcg_at_k']} | ≥ 0.70 |",
         f"| Hit Rate@k | {metrics['hit_rate_at_k']} | ≥ 0.80 |",
     ]
-    if not args.retrieval_only:
+    if not retrieval_only:
         md += [
             f"| Faithfulness | {metrics['faithfulness']} | ≥ 0.90 |",
             f"| Answer Relevancy | {metrics['answer_relevancy']} | ≥ 0.85 |",
@@ -243,6 +247,15 @@ def main() -> None:
     (run_dir / "report.md").write_text("\n".join(md))
     print(f"\nMetrics: {json.dumps(metrics, indent=2)}")
     print(f"Report written to {run_dir}")
+    return report
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--limit", type=int, default=None)
+    ap.add_argument("--retrieval-only", action="store_true")
+    args = ap.parse_args()
+    run_benchmark(limit=args.limit, retrieval_only=args.retrieval_only)
 
 
 if __name__ == "__main__":
