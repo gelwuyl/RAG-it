@@ -123,9 +123,13 @@ settings = Settings()
 # keep the UI populated offline; they are NOT an allowlist — any model the
 # proxy actually returns is accepted (see model_catalog below).
 _FALLBACK_CHAT_MODELS = ["deepseek-v4-pro", "qwen3.8-max", "qwen3-coder"]
+# Only 768-dim embedding models are exposed (Neon/pgvector stores ONE fixed
+# dimension per chunks table). Anything else (qwen3-embedding-8b @1536,
+# text-embedding-3-small/large) is intentionally hidden so a user can never
+# select a model that fails to insert. See embeddings.EMBEDDING_768_MODELS.
 _FALLBACK_EMBEDDING_MODELS: dict[str, list[str]] = {
-    "gemini": ["text-embedding-005", "gemini-embedding"],
-    "openrouter": ["openai/text-embedding-3-small", "openai/text-embedding-3-large", "qwen3-embedding-8b"],
+    "gemini": ["models/gemini-embedding-001", "text-embedding-005"],
+    "openrouter": ["google/gemini-embedding-001"],
 }
 
 # How long a successful discovery result is cached (seconds). The proxy model
@@ -198,7 +202,12 @@ def discover_models(provider: str = "gemini") -> dict[str, list[str]]:
             pass
 
     if emb_models:
-        return {"chat": sorted(chat_models), "embedding": sorted(emb_models)}
+        # Only expose 768-dim models (Neon/pgvector stores one fixed dimension
+        # per chunks table). Intersect the live discovery with the known 768
+        # allowlist so a 1536 model the provider catalogs can never reach the UI.
+        allowed = set(_FALLBACK_EMBEDDING_MODELS.get(provider, []))
+        emb_models = sorted(set(emb_models) & allowed) or sorted(allowed)
+        return {"chat": sorted(chat_models), "embedding": emb_models}
     return {
         "chat": list(_FALLBACK_CHAT_MODELS),
         "embedding": list(_FALLBACK_EMBEDDING_MODELS.get(provider, _FALLBACK_EMBEDDING_MODELS["gemini"])),

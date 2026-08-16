@@ -52,6 +52,19 @@ _PROVIDER_DIMS: dict[str, int] = {
     "openrouter": 1536,
 }
 
+# The Neon/pgvector backend uses a SINGLE shared `chunks` table with one fixed
+# vector dimension, so the app can only safely store embeddings of ONE
+# dimension at a time. To avoid silent dimension-mismatch insert failures, the
+# UI only exposes 768-dim embedding models (Gemini's native dim, and the 768-dim
+# models OpenRouter serves). Everything else (qwen3-embedding-8b @1536,
+# text-embedding-3-small/large) is hidden from the dropdown. This is the
+# stability-first constraint: pick a model here and it will always fit the
+# stored column. Add a known 768-dim model slug to this allowlist to expose it.
+EMBEDDING_768_MODELS: dict[str, list[str]] = {
+    "gemini": ["models/gemini-embedding-001", "text-embedding-005"],
+    "openrouter": ["google/gemini-embedding-001"],
+}
+
 # Provider -> base URL for the OpenAI-compatible /v1 API.
 _PROVIDER_BASE_URL: dict[str, str] = {
     "gemini": os.environ.get(
@@ -109,7 +122,17 @@ def _resolve_provider(provider: str | None) -> str:
 
 
 def embedding_dim(provider: str | None = None, model: str | None = None) -> int:
-    """Dimension to request for the given embedding provider."""
+    """Dimension to request for the given embedding provider/model.
+
+    Returns 768 for any model in EMBEDDING_768_MODELS (the Neon-safe set the UI
+    exposes), regardless of provider — so selecting e.g. OpenRouter's
+    google/gemini-embedding-001 asks for 768 dims and fits the stored column.
+    Falls back to the provider default otherwise.
+    """
+    if model:
+        for dim_models in EMBEDDING_768_MODELS.values():
+            if model in dim_models:
+                return 768
     if _resolve_provider(provider) == "openrouter":
         return _PROVIDER_DIMS["openrouter"]  # 1536 (text-embedding-3-small)
     return _PROVIDER_DIMS["gemini"]  # gemini-embedding-001 is fixed at 768

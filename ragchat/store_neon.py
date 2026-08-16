@@ -16,6 +16,7 @@ persistent memory between requests (PRD §5 hybrid_search).
 """
 from __future__ import annotations
 
+import os
 import re
 
 from sqlalchemy import (
@@ -32,29 +33,55 @@ from sqlalchemy.engine import Engine
 from pgvector.sqlalchemy import Vector
 
 from .config import settings
+from .embeddings import embedding_dim
 
 # ---------------------------------------------------------------------------
-# Schema
+# Schema — dimension-aware
 # ---------------------------------------------------------------------------
-
-DIM = 768
+#
+# pgvector fixes a column's vector dimension on first row, so a single shared
+# `chunks` table can only hold ONE dimension at a time. Embedding models differ
+# in dimension (Gemini 768, OpenRouter 1536), so the column must match the
+# ACTIVE embedding model. We derive DIM from the current embedding provider and
+# recreate the table if the live column dimension differs.
+#
+# Recreation is destructive (drops all chunks), so it is gated behind
+# NEON_ALLOW_DIM_MIGRATION=1. Without it, a dimension mismatch raises a clear,
+# actionable error instead of silently losing data.
 
 _metadata = MetaData()
 
-chunks_table = Table(
-    "chunks",
-    _metadata,
-    Column("id", String, primary_key=True),
-    Column("user_id", String, nullable=False),
-    Column("embedding_model", String, nullable=False),
-    Column("doc_id", String, nullable=False),
-    Column("title", String, nullable=False),
-    Column("fingerprint", String, nullable=False),
-    Column("chunk_index", Integer, nullable=False),
-    Column("ref", String, nullable=False),
-    Column("text", String, nullable=False),
-    Column("embedding", Vector(DIM), nullable=False),
-)
+
+def _target_dim() -> int:
+    """Dimension required by the currently-selected embedding provider/model."""
+    try:
+        from .config import load_config
+
+        cfg = load_config()
+        return embedding_dim(cfg.embedding_provider, cfg.embedding_model)
+    except Exception:
+        return embedding_dim()
+
+
+def _build_chunks_table(dim: int) -> Table:
+    return Table(
+        "chunks",
+        _metadata,
+        Column("id", String, primary_key=True),
+        Column("user_id", String, nullable=False),
+        Column("embedding_model", String, nullable=False),
+        Column("doc_id", String, nullable=False),
+        Column("title", String, nullable=False),
+        Column("fingerprint", String, nullable=False),
+        Column("chunk_index", Integer, nullable=False),
+        Column("ref", String, nullable=False),
+        Column("text", String, nullable=False),
+        Column("embedding", Vector(dim), nullable=False),
+    )
+
+
+# Module-level handle used by add/delete/prune; rebuilt when dim changes.
+chunks_table = _build_chunks_table(_target_dim())
 
 
 _engine: Engine | None = None
@@ -73,6 +100,24 @@ def _get_engine() -> Engine:
     return _engine
 
 
+def _live_embedding_dim(conn) -> int | None:
+    """Return the dimension of chunks.embedding as defined in Postgres, or None
+    if the table/column doesn't exist yet."""
+    row = conn.execute(
+        text(
+            "SELECT atttypmod FROM pg_attribute a "
+            "JOIN pg_class c ON c.oid = a.attrelid "
+            "JOIN pg_namespace n ON n.oid = c.relnamespace "
+            "WHERE c.relname = 'chunks' AND a.attname = 'embedding' "
+            "AND NOT a.attisdropped"
+        )
+    ).fetchone()
+    # pgvector stores dim in atttypmod; -1 means unconstrained (no dim set).
+    if row is None:
+        return None
+    return None if row[0] == -1 else int(row[0])
+
+
 def _ensure_table(conn) -> None:
     """Create the table, the pgvector extension, and the HNSW index once.
 
@@ -81,11 +126,27 @@ def _ensure_table(conn) -> None:
     manual commit inside the begin() context closes the transaction and makes
     the surrounding `with` block raise "Can't operate on closed transaction".
     """
-    # CREATE EXTENSION IF NOT EXISTS is idempotent; on managed Postgres that
-    # disallows it, the table/index DDL below surfaces a clear error instead.
+    global chunks_table
+    target = _target_dim()
     conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+    live_dim = _live_embedding_dim(conn)
+    if live_dim is not None and live_dim != target:
+        # Dimension drift (e.g. switched Gemini 768 -> OpenRouter 1536). The
+        # existing chunks were embedded with the OLD dimension and are invalid
+        # for the new model, so the column must be recreated.
+        if os.environ.get("NEON_ALLOW_DIM_MIGRATION") == "1":
+            conn.execute(text("DROP TABLE IF EXISTS chunks"))
+            chunks_table = _build_chunks_table(target)
+        else:
+            raise RuntimeError(
+                f"chunks.embedding dimension mismatch: table is vector({live_dim}), "
+                f"but the selected embedding model needs vector({target}). "
+                "Switching embedding models requires recreating the chunks table. "
+                "Set NEON_ALLOW_DIM_MIGRATION=1 and restart to migrate (drops all "
+                "existing chunks, which are invalid for the new model anyway)."
+            )
     _metadata.create_all(conn)
-    # HNSW cosine index — valid at 768 dimensions (well under pgvector's 2000-dim HNSW ceiling).
+    # HNSW cosine index — valid up to pgvector's 2000-dim HNSW ceiling.
     conn.execute(
         text(
             "CREATE INDEX IF NOT EXISTS chunks_embedding_hnsw "
