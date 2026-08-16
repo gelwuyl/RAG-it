@@ -124,12 +124,19 @@ settings = Settings()
 # proxy actually returns is accepted (see model_catalog below).
 _FALLBACK_CHAT_MODELS = ["deepseek-v4-pro", "qwen3.8-max", "qwen3-coder"]
 # Only 768-dim embedding models are exposed (Neon/pgvector stores ONE fixed
-# dimension per chunks table). Anything else (qwen3-embedding-8b @1536,
-# text-embedding-3-small/large) is intentionally hidden so a user can never
-# select a model that fails to insert. See embeddings.EMBEDDING_768_MODELS.
+# dimension per chunks table). OpenRouter honors `dimensions=768` for every
+# model listed below (verified live), so each is safe to select. See
+# embeddings.EMBEDDING_768_MODELS.
 _FALLBACK_EMBEDDING_MODELS: dict[str, list[str]] = {
     "gemini": ["models/gemini-embedding-001", "text-embedding-005"],
-    "openrouter": ["google/gemini-embedding-001"],
+    "openrouter": [
+        "openai/text-embedding-3-small",
+        "openai/text-embedding-3-large",
+        "qwen/qwen3-embedding-8b",
+        "qwen/qwen3-embedding-4b",
+        "perplexity/pplx-embed-v1-0.6b",
+        "google/gemini-embedding-001",
+    ],
 }
 
 # How long a successful discovery result is cached (seconds). The proxy model
