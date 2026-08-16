@@ -274,7 +274,15 @@ def google_login():
     return resp
 
 
+# Registered BOTH with and without the trailing slash on purpose. The redirect
+# URI must match the Google Console entry character for character, so whichever
+# form is registered there is the form Google sends the user back to — and the
+# app must answer on it. Serving only one meant a console entry ending in "/"
+# completed the whole consent flow and then 404'd on return, which looks like
+# "Google sign-in is broken" rather than a one-character config difference.
+# Starlette's redirect_slashes does not rescue this case.
 @app.get("/api/auth/google/callback")
+@app.get("/api/auth/google/callback/", include_in_schema=False)
 async def google_callback(request: Request, db: Session = Depends(get_session)):
     code = request.query_params.get("code")
     state = request.query_params.get("state")
