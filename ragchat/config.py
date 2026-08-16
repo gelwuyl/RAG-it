@@ -8,6 +8,7 @@ into a fingerprint stored with each chunk (PRD F18).
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import time
 from dataclasses import dataclass
@@ -220,10 +221,37 @@ class PipelineConfig:
 
 
 def load_config() -> PipelineConfig:
-    """Re-read config.yaml on every call so tuning needs no restart."""
+    """Build the live pipeline config.
+
+    Source order (later wins):
+      1. config.yaml on disk (read-only on Vercel — fine for reading)
+      2. a DB-backed override row (config_overrides), which is the writable
+         store used by the settings UI on serverless/read-only deploys.
+
+    Re-read on every call so tuning needs no restart (PRD F16).
+    """
     data: dict = {}
     if CONFIG_PATH.exists():
         data = yaml.safe_load(CONFIG_PATH.read_text()) or {}
+
+    # Merge the DB override (if any) on top of the file. The override is the
+    # writable path the settings UI uses; on Vercel config.yaml is read-only so
+    # all writes go to the DB.
+    try:
+        from .db import get_config_override
+
+        row = get_config_override("pipeline")
+        if row is not None and row.value:
+            override = json.loads(row.value)
+            for section, kv in override.items():
+                if isinstance(kv, dict):
+                    data.setdefault(section, {}).update(kv)
+                else:
+                    data[section] = kv
+    except Exception:
+        # Never let a DB hiccup break config loading.
+        pass
+
     c = data.get("chunking", {})
     r = data.get("retrieval", {})
     q = data.get("query", {})
@@ -244,3 +272,32 @@ def load_config() -> PipelineConfig:
         embedding_model=str(e.get("model", settings.default_embedding_model)),
         web_augmentation=bool(g.get("web_augmentation", False)),
     )
+
+
+def save_config_override(cfg: "PipelineConfig") -> None:
+    """Persist a config to the writable DB store (config_overrides).
+
+    Used by the settings UI on serverless/read-only deploys where config.yaml
+    cannot be written. Raises on failure so the caller can surface a 500 with a
+    real reason instead of an opaque read-only-filesystem crash.
+    """
+    from .db import set_config_override
+
+    payload = {
+        "chunking": {"chunk_size": cfg.chunk_size, "chunk_overlap": cfg.chunk_overlap, "splitter": cfg.splitter},
+        "retrieval": {
+            "top_k": cfg.top_k,
+            "candidate_k": cfg.candidate_k,
+            "similarity_threshold": cfg.similarity_threshold,
+            "hybrid_search": cfg.hybrid_search,
+            "reranker": cfg.reranker,
+        },
+        "query": {"query_rewrite": cfg.query_rewrite},
+        "generation": {
+            "llm_model": cfg.llm_model,
+            "temperature": cfg.temperature,
+            "web_augmentation": cfg.web_augmentation,
+        },
+        "embedding": {"model": cfg.embedding_model},
+    }
+    set_config_override("pipeline", json.dumps(payload))

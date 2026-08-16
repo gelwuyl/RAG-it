@@ -14,7 +14,15 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from . import auth as authn
-from .config import CONFIG_PATH, UPLOAD_DIR, load_config, model_catalog, is_known_model, settings
+from .config import (
+    CONFIG_PATH,
+    UPLOAD_DIR,
+    load_config,
+    model_catalog,
+    is_known_model,
+    save_config_override,
+    settings,
+)
 from .db import (
     Conversation,
     Document,
@@ -667,36 +675,34 @@ def eval_config():
 
 @app.post("/api/eval/hybrid-search")
 def toggle_hybrid_search():
-    """Toggle hybrid_search (KEYWORD/BM25 fusion) on/off in config.yaml. The
-    config is re-read every request, so the change takes effect on the next
-    ask. This is real vector+keyword fusion, NOT web search."""
-    import yaml as _yaml
+    """Toggle hybrid_search (KEYWORD/BM25 fusion) on/off. The config is
+    re-read every request, so the change takes effect on the next ask. This is
+    real vector+keyword fusion, NOT web search. Persisted to the DB (writable)
+    because config.yaml is read-only on Vercel serverless."""
+    from dataclasses import replace
 
-    data = _yaml.safe_load(CONFIG_PATH.read_text()) or {}
-    data.setdefault("retrieval", {})["hybrid_search"] = not data.get(
-        "retrieval", {}
-    ).get("hybrid_search", False)
-    CONFIG_PATH.write_text(_yaml.dump(data, default_flow_style=False))
-    return {"hybrid_search": data["retrieval"]["hybrid_search"]}
+    cfg = load_config()
+    cfg = replace(cfg, hybrid_search=not cfg.hybrid_search)
+    save_config_override(cfg)
+    return {"hybrid_search": cfg.hybrid_search}
 
 
 @app.post("/api/eval/web-augmentation")
 def toggle_web_augmentation():
-    """Toggle web_augmentation (DuckDuckGo fallback) on/off in config.yaml.
+    """Toggle web_augmentation (DuckDuckGo fallback) on/off.
 
     This is a fallback ONLY — when on, web results are appended as labeled
     [web] chunks only when the user's own documents do not clear the
     relevance threshold (pipeline.py:ask). It never overrides grounded
     answers. Default off to preserve strict document grounding (PRD F13).
+    Persisted to the DB (writable) because config.yaml is read-only on Vercel.
     """
-    import yaml as _yaml
+    from dataclasses import replace
 
-    data = _yaml.safe_load(CONFIG_PATH.read_text()) or {}
-    data.setdefault("generation", {})["web_augmentation"] = not data.get(
-        "generation", {}
-    ).get("web_augmentation", False)
-    CONFIG_PATH.write_text(_yaml.dump(data, default_flow_style=False))
-    return {"web_augmentation": data["generation"]["web_augmentation"]}
+    cfg = load_config()
+    cfg = replace(cfg, web_augmentation=not cfg.web_augmentation)
+    save_config_override(cfg)
+    return {"web_augmentation": cfg.web_augmentation}
 
 
 class ConfigUpdateIn(BaseModel):
@@ -718,11 +724,11 @@ class ConfigUpdateIn(BaseModel):
 
 @app.put("/api/eval/config")
 def update_config(body: ConfigUpdateIn):
-    """Write tuning knobs back to config.yaml. Returns the new config snapshot
-    and whether a re-index is needed (index-affecting keys changed)."""
-    import yaml as _yaml
+    """Persist tuning knobs to the DB-backed config store (config.yaml is
+    read-only on Vercel serverless). Returns the new config snapshot and
+    whether a re-index is needed (index-affecting keys changed)."""
+    from dataclasses import replace
 
-    data = _yaml.safe_load(CONFIG_PATH.read_text()) or {}
     updates = body.model_dump(exclude_none=True)
     # Reject unknown models up front instead of failing mid-ask with a proxy
     # error. "Unknown" means not in the live proxy catalog AND not the current
@@ -736,29 +742,10 @@ def update_config(body: ConfigUpdateIn):
     index_affecting = {"chunk_size", "chunk_overlap", "splitter", "embedding_model"}
     needs_reindex = bool(index_affecting & set(updates.keys()))
 
-    # Map flat keys back to nested config.yaml sections
-    section_map = {
-        "chunk_size": ("chunking", "chunk_size"),
-        "chunk_overlap": ("chunking", "chunk_overlap"),
-        "splitter": ("chunking", "splitter"),
-        "top_k": ("retrieval", "top_k"),
-        "candidate_k": ("retrieval", "candidate_k"),
-        "similarity_threshold": ("retrieval", "similarity_threshold"),
-        "hybrid_search": ("retrieval", "hybrid_search"),
-        "reranker": ("retrieval", "reranker"),
-        "query_rewrite": ("query", "query_rewrite"),
-        "llm_model": ("generation", "llm_model"),
-        "temperature": ("generation", "temperature"),
-        "embedding_model": ("embedding", "model"),
-        "web_augmentation": ("generation", "web_augmentation"),
-    }
-    for key, value in updates.items():
-        section, subkey = section_map.get(key, (None, None))
-        if section:
-            data.setdefault(section, {})[subkey] = value
-
-    CONFIG_PATH.write_text(_yaml.dump(data, default_flow_style=False))
     cfg = load_config()
+    cfg = replace(cfg, **updates)
+    save_config_override(cfg)
+    cfg = load_config()  # re-read so the snapshot reflects what was persisted
     return {
         "config": {
             "chunk_size": cfg.chunk_size,

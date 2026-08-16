@@ -101,6 +101,42 @@ class Message(Base):
     conversation = relationship("Conversation", back_populates="messages")
 
 
+class ConfigOverride(Base):
+    """Single-row store for the live pipeline config (PRD F16).
+
+    On Vercel the repo (and thus config.yaml) is read-only, so tuning knobs
+    are persisted here (Neon/Postgres, writable) instead of the file. When a
+    row exists it fully replaces config.yaml as the config source.
+    """
+
+    __tablename__ = "config_overrides"
+    key = Column(String, primary_key=True)
+    value = Column(Text)  # JSON-encoded full config dict
+    updated_at = Column(Float, default=now)
+
+
+def get_config_override(key: str):
+    s = SessionLocal()
+    try:
+        return s.get(ConfigOverride, key)
+    finally:
+        s.close()
+
+
+def set_config_override(key: str, value: str) -> None:
+    s = SessionLocal()
+    try:
+        row = s.get(ConfigOverride, key)
+        if row is None:
+            row = ConfigOverride(key=key)
+            s.add(row)
+        row.value = value
+        row.updated_at = now()
+        s.commit()
+    finally:
+        s.close()
+
+
 def init_db() -> None:
     Base.metadata.create_all(engine)
 

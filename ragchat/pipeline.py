@@ -23,7 +23,7 @@ import re
 
 from .chunking import refine_refs, split_document
 from .config import PipelineConfig, settings
-from .embeddings import openai_client, ProxyEmbeddings
+from .embeddings import openai_client, ProxyEmbeddings, retry_call
 from .vectordb import add_chunks, query_chunks
 
 EMBED_BATCH = 16
@@ -90,7 +90,8 @@ def ingest_document_text(
 
 def _chat(model: str, messages: list[dict], temperature: float) -> str:
     client = openai_client()
-    resp = client.chat.completions.create(
+    resp = retry_call(
+        client.chat.completions.create,
         model=model,
         messages=messages,
         temperature=temperature,
@@ -219,7 +220,16 @@ def ask(
 ) -> dict:
     """Answer a question. Returns {answer, not_found, citations}."""
     effective_query = rewrite_query(query, history, cfg)
-    chunks = retrieve(user_id, effective_query, cfg)
+    try:
+        chunks = retrieve(user_id, effective_query, cfg)
+    except Exception as exc:
+        # Embedding/retrieval failure (e.g. transient 429 after retries) must
+        # not crash the request with a 500 — return a clean, user-facing answer.
+        return {
+            "answer": f"I couldn't search your documents right now ({exc}). Please try again in a moment.",
+            "not_found": True,
+            "citations": [],
+        }
 
     # Decision: do the user's own documents answer this?
     doc_sims = [c["similarity"] for c in chunks if c.get("similarity") is not None]
@@ -248,14 +258,22 @@ def ask(
         + (f"Conversation so far:\n{convo}\n\n" if convo else "")
         + f"Question: {effective_query}"
     )
-    answer = _chat(
-        cfg.llm_model,
-        [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_prompt},
-        ],
-        cfg.temperature,
-    )
+    try:
+        answer = _chat(
+            cfg.llm_model,
+            [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": user_prompt},
+            ],
+            cfg.temperature,
+        )
+    except Exception as exc:
+        # Generation failure (quota, model error) must not crash with a 500.
+        return {
+            "answer": f"I couldn't generate an answer right now ({exc}). Your documents are still indexed — please try again shortly.",
+            "not_found": True,
+            "citations": [],
+        }
 
     if NOT_FOUND_ANSWER.lower() in answer.lower():
         return {"answer": NOT_FOUND_ANSWER, "not_found": True, "citations": []}
