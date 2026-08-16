@@ -161,6 +161,24 @@ def test_fallback_chat_list_is_never_cached():
     assert "qwen3.8-max" in _cfg.model_catalog("openrouter")["chat"]
 
 
+def test_legacy_bare_model_id_still_validates():
+    """A stored id must not become unsaveable when the allowlist respells it.
+
+    OpenRouter serves both `qwen3-embedding-8b` and `qwen/qwen3-embedding-8b`.
+    A config saved under the bare spelling, validated against an allowlist
+    holding the prefixed one, failed every save — and since each save re-sends
+    the stored model, the Settings dialog could not be saved at all, even for
+    an unrelated change like top_k. There was no way out from the UI.
+    """
+    _install_fake({"openrouter": ["qwen/qwen3-embedding-8b"]})
+    assert _cfg.is_known_model("qwen/qwen3-embedding-8b", "embedding", provider="openrouter")
+    assert _cfg.is_known_model("qwen3-embedding-8b", "embedding", provider="openrouter"), (
+        "the bare spelling of an allowlisted model must remain valid"
+    )
+    # A genuinely different model is still rejected.
+    assert not _cfg.is_known_model("acme/not-a-real-embedder", "embedding", provider="openrouter")
+
+
 def test_gemini_exposes_exactly_one_embedding_model():
     """Gemini serves one usable embedder; every other option is OpenRouter's."""
     assert _cfg._FALLBACK_EMBEDDING_MODELS["gemini"] == ["models/gemini-embedding-001"]

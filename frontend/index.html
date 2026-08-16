@@ -222,13 +222,11 @@
               <label for="set-sim-threshold">Similarity threshold</label>
               <input id="set-sim-threshold" type="number" min="0.0" max="1.0" step="0.05" />
             </div>
-            <div class="field">
-              <label for="set-reranker">Reranker (LLM cross-encoder)</label>
-              <select id="set-reranker">
-                <option value="false">Off</option>
-                <option value="true">On</option>
-              </select>
-            </div>
+            <!-- The reranker on/off toggle lives in the dedicated "Reranker"
+                 fieldset below, next to its provider. It used to be duplicated
+                 here with the SAME id="set-reranker", which is invalid HTML:
+                 getElementById returns only the first match, so the lower
+                 control was dead and changing it did nothing. -->
             <div class="field">
               <label for="set-hybrid-search">Keyword fusion (BM25)</label>
               <select id="set-hybrid-search">
@@ -301,6 +299,6 @@
       </div>
     </div>
 
-    <script type="module" src="/app.js?v=7"></script>
+    <script type="module" src="/app.js?v=8"></script>
   </body>
 </html>

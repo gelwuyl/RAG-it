@@ -6,7 +6,7 @@ import json
 import os
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -751,18 +751,28 @@ def toggle_web_augmentation():
 
 
 class ConfigUpdateIn(BaseModel):
-    """Partial config update — only the keys present are written."""
-    chunk_size: int | None = None
-    chunk_overlap: int | None = None
-    splitter: str | None = None
-    top_k: int | None = None
-    candidate_k: int | None = None
-    similarity_threshold: float | None = None
+    """Partial config update — only the keys present are written.
+
+    Bounds mirror the min/max on the Settings inputs. The HTML attributes are
+    advisory only — the form is read with JS and posted as JSON, so nothing
+    stopped an out-of-range value from being persisted. Unbounded values fail
+    in ways that look like a broken app rather than a bad setting:
+    ``top_k=0`` or ``similarity_threshold>1`` make retrieval return nothing, so
+    every question answers "not found"; a negative ``chunk_size`` gets clamped
+    to 1 in chunking.py and produces one-character chunks. A 422 naming the
+    field is far easier to act on.
+    """
+    chunk_size: int | None = Field(default=None, ge=128, le=1024)
+    chunk_overlap: int | None = Field(default=None, ge=0, le=256)
+    splitter: Literal["recursive", "markdown_header", "semantic"] | None = None
+    top_k: int | None = Field(default=None, ge=1, le=20)
+    candidate_k: int | None = Field(default=None, ge=1, le=100)
+    similarity_threshold: float | None = Field(default=None, ge=0.0, le=1.0)
     hybrid_search: bool | None = None
     reranker: bool | None = None
     query_rewrite: bool | None = None
     llm_model: str | None = None
-    temperature: float | None = None
+    temperature: float | None = Field(default=None, ge=0.0, le=1.0)
     embedding_model: str | None = None
     embedding_provider: str | None = None
     reranker_provider: str | None = None
@@ -806,6 +816,21 @@ def update_config(body: ConfigUpdateIn):
                     status_code=422,
                     detail=f"OpenRouter not configured — set {env_var} in .env before selecting OpenRouter for {key}.",
                 )
+    # Overlap must stay below chunk size or every chunk is mostly duplicated
+    # context. chunking.py clamps this defensively, but silently honouring an
+    # impossible pair hides a setting the user can see and fix. Compare against
+    # the saved chunk_size when only one of the two is being changed.
+    live = load_config()
+    new_size = updates.get("chunk_size", live.chunk_size)
+    new_overlap = updates.get("chunk_overlap", live.chunk_overlap)
+    if new_overlap >= new_size:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"chunk_overlap ({new_overlap}) must be smaller than chunk_size "
+                f"({new_size})."
+            ),
+        )
     index_affecting = {"chunk_size", "chunk_overlap", "splitter", "embedding_model", "embedding_provider"}
     needs_reindex = bool(index_affecting & set(updates.keys()))
 

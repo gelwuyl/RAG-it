@@ -483,7 +483,20 @@ async function refreshEmbeddingModels(provider, preferred) {
     list = [];
   }
   if (!list.length) list = [defaultEmbedModelFor(provider)];
-  const want = preferred && list.includes(preferred) ? preferred : defaultEmbedModelFor(provider);
+  // Trust `preferred` whenever the caller supplies it: it is passed ONLY when
+  // the model is already known to belong to this provider (initial load, or
+  // switching back to the provider it was saved under). On a genuine provider
+  // switch the caller passes null, so the default still wins.
+  //
+  // It must be kept even when the allowlist lacks that exact spelling. A saved
+  // id can be a legacy bare form (`qwen3-embedding-8b`) of a listed one
+  // (`qwen/qwen3-embedding-8b`) — OpenRouter serves both. Requiring an exact
+  // list match silently swapped the dropdown to the provider default, so
+  // opening Settings and pressing Save WITHOUT TOUCHING the embedding fields
+  // rewrote the saved model, changed the fingerprint, and invalidated the whole
+  // index. fillModelSelect appends an unlisted current value, so it stays
+  // visible and selected.
+  const want = preferred || defaultEmbedModelFor(provider);
   fillModelSelect("set-embedding-model", list, want);
 }
 
@@ -591,7 +604,10 @@ $("settings-save").onclick = async () => {
     });
     // Re-evaluate the OpenRouter-key warning from the live server response
     // (it reflects the actual env state, e.g. after a Vercel redeploy).
-    updateProviderWarnings(res.openrouter_configured);
+    // PUT /api/eval/config nests this under `config` — reading it off the top
+    // level yielded undefined, so saving any change while OpenRouter was
+    // selected raised "no OPENROUTER_API_KEY found" even with a valid key.
+    updateProviderWarnings(res.config?.openrouter_configured);
     if (res.needs_reindex) {
       $("settings-note").classList.remove("hidden");
       if (body.embedding_model !== loadedEmbeddingModel || body.embedding_provider !== loadedEmbeddingProvider) {
@@ -1064,18 +1080,61 @@ function renderEval(data) {
 // does a bounded piece of work and commits it, so this loop is resumable: if
 // the tab is closed mid-run, reopening it picks up from the last committed
 // slice rather than starting over.
+// A step that overruns the serverless time limit returns 504 (or 502/503) and,
+// crucially, has NOT committed its slice — so re-issuing the request simply
+// redoes that same slice. Aborting the whole benchmark on the first such blip
+// threw away a run that was actually fine and resumable, which is what produced
+// "Benchmark failed: Request failed (504)" near the end of a run: the free-tier
+// quota depletes as the run proceeds, the server's own retry/backoff stretches a
+// step past the limit, and one timeout killed everything. Waiting and retrying
+// also gives the rate limit time to recover.
+const EVAL_TRANSIENT_STATUS = /\((408|409|425|429|500|502|503|504)\)/;
+// A function that hits its time limit does not always answer with a tidy 504 —
+// it often just drops the connection, which surfaces as a fetch-level TypeError
+// ("Failed to fetch" / "NetworkError" / "Load failed") with no status at all.
+// Same cause, same safe response: the slice never committed, so retry it.
+const EVAL_TRANSIENT_NETWORK = /failed to fetch|networkerror|network request failed|load failed/i;
+const EVAL_STEP_MAX_RETRIES = 5;
+
+function isTransientEvalError(err) {
+  const msg = (err && err.message) || "";
+  return EVAL_TRANSIENT_STATUS.test(msg) || EVAL_TRANSIENT_NETWORK.test(msg);
+}
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
 async function driveEvalRun() {
   if (state.evalRunning) return;
   state.evalRunning = true;
+  let failures = 0;
   try {
     for (;;) {
-      const data = await api("/api/eval/step", { method: "POST" });
+      let data;
+      try {
+        data = await api("/api/eval/step", { method: "POST" });
+        failures = 0; // a slice landed — reset the budget
+      } catch (e) {
+        if (!isTransientEvalError(e) || ++failures > EVAL_STEP_MAX_RETRIES) throw e;
+        const wait = Math.min(2000 * 2 ** (failures - 1), 15000);
+        $("eval-status").textContent =
+          `Step timed out — retrying in ${Math.round(wait / 1000)}s ` +
+          `(attempt ${failures}/${EVAL_STEP_MAX_RETRIES}). Progress so far is saved.`;
+        await sleep(wait);
+        if (!state.evalRunning) break; // superseded while we were waiting
+        continue;
+      }
       renderEval(data);
       if (data.status !== "running") break;
       if (!state.evalRunning) break; // cancelled by a new run starting
     }
   } catch (e) {
-    $("eval-status").textContent = "Benchmark failed: " + e.message;
+    // Reopening the Evaluation tab resumes: loadEval() sees a run still marked
+    // "running" and restarts the driver from the last committed slice. The Run
+    // button deliberately does NOT resume — it supersedes the row and starts a
+    // fresh run — so don't point the user at it here.
+    $("eval-status").textContent =
+      "Benchmark paused: " + e.message +
+      " — progress is saved; reopen the Evaluation tab to resume.";
     $("eval-run-btn").disabled = false;
   } finally {
     state.evalRunning = false;

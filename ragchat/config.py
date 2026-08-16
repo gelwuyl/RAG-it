@@ -318,16 +318,27 @@ def is_known_model(model: str, kind: str, provider: str | None = None) -> bool:
     that switches provider+model together must validate against the target
     provider, not the one currently booted.
     """
-    from .embeddings import _PROVIDER_DEFAULT_MODEL, embedding_provider
+    from .embeddings import (
+        _PROVIDER_DEFAULT_MODEL,
+        embedding_provider,
+        same_embedding_model,
+    )
 
     if kind == "embedding":
         # Scope validation to the provider the model actually belongs to.
         check_provider = (provider or embedding_provider()).lower()
-        if model in set(embedding_models_for(check_provider)):
+        # Compare ignoring the vendor prefix so a legacy bare id already sitting
+        # in the saved config (e.g. `qwen3-embedding-8b`) still validates against
+        # the allowlist's prefixed spelling (`qwen/qwen3-embedding-8b`). Exact
+        # matching locked users out of saving Settings at all — every save
+        # re-submits the stored model, so a stored id the allowlist no longer
+        # spelled the same way rejected every save, including ones that changed
+        # nothing about the embedding.
+        if any(same_embedding_model(model, m) for m in embedding_models_for(check_provider)):
             return True
-        if model == settings.default_embedding_model:
+        if same_embedding_model(model, settings.default_embedding_model):
             return True
-        if model in set(_PROVIDER_DEFAULT_MODEL.values()):
+        if any(same_embedding_model(model, m) for m in _PROVIDER_DEFAULT_MODEL.values()):
             return True
         return False
 

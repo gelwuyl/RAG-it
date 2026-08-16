@@ -99,6 +99,21 @@ _PROVIDER_DEFAULT_MODEL: dict[str, str] = {
     "openrouter": "openai/text-embedding-3-small",
 }
 
+def same_embedding_model(a: str, b: str) -> bool:
+    """True if two ids name the SAME embedding model, ignoring vendor prefix.
+
+    Providers spell one model several ways: OpenRouter serves both
+    ``qwen3-embedding-8b`` and ``qwen/qwen3-embedding-8b`` (verified live), and
+    Gemini's ids carry a ``models/`` prefix that config normalisation strips.
+    Comparing raw strings therefore rejects a model the provider will happily
+    serve — and because the *saved* config could hold the bare spelling while
+    the allowlist held the prefixed one, Settings became unsaveable: every save
+    re-sent the stored id and got "Unknown embedding model" back, with no way
+    to fix it from the UI.
+    """
+    return (a or "").rsplit("/", 1)[-1].lower() == (b or "").rsplit("/", 1)[-1].lower()
+
+
 # Generation (chat) client — always Google / proxy base url (unchanged).
 _gen_client: OpenAI | None = None
 # Embedding clients, keyed BY PROVIDER. This used to be a single slot, which
