@@ -205,7 +205,10 @@ def query_chunks(
     eng = _get_engine()
     with eng.begin() as conn:
         _ensure_table(conn)
-        q = list(embedding)
+        # Pass the query vector as a vector-format STRING ("[x,y,z]"). psycopg2
+        # serializes a Python list as a Postgres array literal "{x,y,z}", which
+        # pgvector cannot parse; the string form casts cleanly via CAST(:q AS vector).
+        q = "[" + ",".join(str(float(x)) for x in embedding) + "]"
         # Wider vector net when fusing, so FTS can promote chunks the vector
         # ranker missed.
         v_lim = max(n_results, 30) if bm25_index else n_results
@@ -213,12 +216,12 @@ def query_chunks(
         vec_sql = text(
             """
             SELECT id, text, doc_id, title, ref,
-                   1.0 - (embedding <=> :q) AS similarity
+                   1.0 - (embedding <=> CAST(:q AS vector)) AS similarity
             FROM chunks
             WHERE user_id = :u
               AND embedding_model = :m
               AND fingerprint = :f
-            ORDER BY embedding <=> :q
+            ORDER BY embedding <=> CAST(:q AS vector)
             LIMIT :lim
             """
         )
