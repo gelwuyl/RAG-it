@@ -781,10 +781,15 @@ def update_config(body: ConfigUpdateIn):
     # deployment default (so a discovery miss can't lock you out).
     if "llm_model" in updates and not is_known_model(updates["llm_model"], "chat"):
         raise HTTPException(status_code=422, detail=f"Unknown LLM model: {updates['llm_model']}")
-    if "embedding_model" in updates and not is_known_model(updates["embedding_model"], "embedding"):
-        raise HTTPException(
-            status_code=422, detail=f"Unknown embedding model: {updates['embedding_model']}"
-        )
+    if "embedding_model" in updates:
+        # Validate against the provider being saved (which may differ from the
+        # currently-booted one), so a model valid for OpenRouter isn't rejected
+        # just because the boot provider is Gemini.
+        emb_provider = str(updates.get("embedding_provider") or load_config().embedding_provider).lower()
+        if not is_known_model(updates["embedding_model"], "embedding", provider=emb_provider):
+            raise HTTPException(
+                status_code=422, detail=f"Unknown embedding model: {updates['embedding_model']}"
+            )
     # Validate provider switches; block OpenRouter if no key is configured
     # (a silent failure later is worse than a clear 422 here). Gemini always
     # allowed (uses GEMINI_API_KEY / proxy).

@@ -229,24 +229,36 @@ def model_catalog() -> dict[str, list[str]]:
     return catalog
 
 
-def is_known_model(model: str, kind: str) -> bool:
+def is_known_model(model: str, kind: str, provider: str | None = None) -> bool:
     """True if `model` is in the live catalog for `kind`, OR is a deployment
     default for that kind (so a discovery miss can't reject a model the
-    provider will still serve). Accepts every provider's canonical default
-    embedding model, not just the Gemini one.
+    provider will still serve).
+
+    When `provider` is given (e.g. the embedding provider being saved), the
+    check is scoped to that provider's model list, not the boot-default
+    provider's catalog. This matters because a model valid for OpenRouter
+    (e.g. ``qwen3-embedding-8b``) is not in the Gemini catalog, and a save
+    that switches provider+model together must validate against the target
+    provider, not the one currently booted.
     """
     from .embeddings import _PROVIDER_DEFAULT_MODEL
+
+    if kind == "embedding":
+        # Scope validation to the provider the model actually belongs to.
+        check_provider = (provider or embedding_provider()).lower()
+        if model in set(embedding_models_for(check_provider)):
+            return True
+        if model == settings.default_embedding_model:
+            return True
+        if model in set(_PROVIDER_DEFAULT_MODEL.values()):
+            return True
+        return False
 
     catalog = model_catalog()
     if model in catalog[kind]:
         return True
     if kind == "chat" and model == settings.default_llm_model:
         return True
-    if kind == "embedding":
-        if model == settings.default_embedding_model:
-            return True
-        if model in set(_PROVIDER_DEFAULT_MODEL.values()):
-            return True
     return False
 
 
