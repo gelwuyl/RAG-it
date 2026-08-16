@@ -1,4 +1,4 @@
-// RAG Chat frontend — vanilla JS, talks to the FastAPI backend via /api.
+// RAG-it frontend — vanilla JS, talks to the FastAPI backend via /api.
 
 const $ = (id) => document.getElementById(id);
 

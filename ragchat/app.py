@@ -43,7 +43,7 @@ from .loaders import fetch_url, load_bytes, page_title, TEXT_EXTENSIONS, HTML_EX
 from .pipeline import ingest_document_text, ask
 from .vectordb import delete_document_chunks, prune_chunks
 
-app = FastAPI(title="RAG Chat")
+app = FastAPI(title="RAG-it")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173"],  # Vite dev server during development
