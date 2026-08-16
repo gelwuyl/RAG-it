@@ -208,6 +208,7 @@ class PipelineConfig:
     temperature: float
     embedding_model: str
     web_augmentation: bool
+    eval_show: bool
 
     def fingerprint(self) -> str:
         """Hash of the index-affecting settings (PRD F18).
@@ -271,6 +272,7 @@ def load_config() -> PipelineConfig:
         temperature=float(g.get("temperature", 0.0)),
         embedding_model=str(e.get("model", settings.default_embedding_model)),
         web_augmentation=bool(g.get("web_augmentation", False)),
+        eval_show=bool(data.get("evaluation", {}).get("show", True)),
     )
 
 
@@ -299,5 +301,6 @@ def save_config_override(cfg: "PipelineConfig") -> None:
             "web_augmentation": cfg.web_augmentation,
         },
         "embedding": {"model": cfg.embedding_model},
+        "evaluation": {"show": cfg.eval_show},
     }
     set_config_override("pipeline", json.dumps(payload))

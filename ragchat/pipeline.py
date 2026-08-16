@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 
 from .chunking import refine_refs, split_document
 from .config import PipelineConfig, settings
@@ -212,13 +213,62 @@ def _effective_threshold(cfg: PipelineConfig) -> float:
     return cfg.similarity_threshold if cfg.similarity_threshold > 0 else NOT_FOUND_MIN_SIM
 
 
+def _eval_answer(question: str, answer: str, context_text: str, cfg: PipelineConfig) -> dict | None:
+    """LLM-as-judge faithfulness + relevancy for the live grey eval line.
+
+    Returns {faithful, faithful_reason, relevant, relevant_reason} or None when
+    eval is disabled or the judge call fails. Never raises — a judge failure
+    must not turn a good answer into a 500.
+    """
+    if not cfg.eval_show:
+        return None
+    try:
+        from eval.judges import faithfulness, answer_relevancy
+    except Exception:
+        return None
+    try:
+        fh, fh_r = faithfulness(question, context_text, answer)
+    except Exception:
+        fh, fh_r = None, ""
+    try:
+        ar, ar_r = answer_relevancy(question, answer)
+    except Exception:
+        ar, ar_r = None, ""
+    return {
+        "faithful": fh,
+        "faithful_reason": fh_r,
+        "relevant": ar,
+        "relevant_reason": ar_r,
+    }
+
+
+def _build_eval_line(eval_d: dict | None, chunks: list[dict], latency_ms: float) -> str:
+    """Compact grey-line string: retrieval sim + web count + judge verdicts + latency."""
+    parts: list[str] = []
+    sims = [c["similarity"] for c in chunks if c.get("similarity") is not None]
+    if sims:
+        parts.append(f"top sim {max(sims):.2f}")
+    web = sum(1 for c in chunks if str(c.get("doc_id", "")).startswith("web:"))
+    if web:
+        parts.append(f"{web} web")
+    if eval_d:
+        if eval_d.get("faithful") is not None:
+            parts.append("faith " + ("PASS" if eval_d["faithful"] else "FAIL"))
+        if eval_d.get("relevant") is not None:
+            parts.append("rel " + ("PASS" if eval_d["relevant"] else "FAIL"))
+    if latency_ms is not None:
+        parts.append(f"{latency_ms:.0f} ms")
+    return " · ".join(parts)
+
+
 def ask(
     user_id: str,
     query: str,
     history: list[dict],
     cfg: PipelineConfig,
 ) -> dict:
-    """Answer a question. Returns {answer, not_found, citations}."""
+    """Answer a question. Returns {answer, not_found, citations, eval_line, eval}."""
+    t0 = time.time()
     effective_query = rewrite_query(query, history, cfg)
     try:
         chunks = retrieve(user_id, effective_query, cfg)
@@ -276,7 +326,12 @@ def ask(
         }
 
     if NOT_FOUND_ANSWER.lower() in answer.lower():
-        return {"answer": NOT_FOUND_ANSWER, "not_found": True, "citations": []}
+        return {
+            "answer": NOT_FOUND_ANSWER,
+            "not_found": True,
+            "citations": [],
+            "eval_line": _build_eval_line(None, pool, (time.time() - t0) * 1000),
+        }
 
     used = sorted(
         {int(m) for m in re.findall(r"\[(\d+)\]", answer) if 1 <= int(m) <= len(pool)}
@@ -306,4 +361,11 @@ def ask(
             }
             for i, c in enumerate(pool[: min(2, len(pool))])
         ]
-    return {"answer": answer, "not_found": False, "citations": citations}
+    eval_d = _eval_answer(effective_query, answer, context, cfg)
+    return {
+        "answer": answer,
+        "not_found": False,
+        "citations": citations,
+        "eval_line": _build_eval_line(eval_d, pool, (time.time() - t0) * 1000),
+        "eval": eval_d,
+    }

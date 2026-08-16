@@ -271,6 +271,44 @@ def query_chunks(
         return _rrf_fuse(chunks, fres, n_results)
 
 
+def prune_chunks(
+    user_id: str,
+    valid_doc_ids: set[str],
+    stale_fingerprints: set[str] | None = None,
+) -> int:
+    """Delete chunks that are no longer backed by a Document row (orphans),
+    and optionally chunks under a stale config fingerprint.
+
+    Returns the number of chunk rows removed. This is the cleanup that keeps
+    the vector store from accumulating 'ghost' chunks after deletes/re-indexes.
+    """
+    eng = _get_engine()
+    removed = 0
+    with eng.begin() as conn:
+        _ensure_table(conn)
+        # Orphans: chunk doc_id with no live Document. Guard the empty-set case
+        # (NOT IN () is invalid SQL and would otherwise match nothing — but we
+        # must never delete a user's chunks just because they have no docs yet).
+        if valid_doc_ids:
+            res = conn.execute(
+                chunks_table.delete().where(
+                    chunks_table.c.user_id == user_id,
+                    chunks_table.c.doc_id.notin_(valid_doc_ids),
+                )
+            )
+            removed += getattr(res, "rowcount", 0) or 0
+        # Stale fingerprints (e.g. old embedding model) — only when explicitly requested.
+        if stale_fingerprints:
+            res2 = conn.execute(
+                chunks_table.delete().where(
+                    chunks_table.c.user_id == user_id,
+                    chunks_table.c.fingerprint.in_(stale_fingerprints),
+                )
+            )
+            removed += getattr(res2, "rowcount", 0) or 0
+    return removed
+
+
 def _rrf_fuse(vector_chunks: list[dict], fts_rows: list, n_results: int) -> list[dict]:
     """Reciprocal Rank Fusion (k=60) of vector + Postgres FTS result lists."""
     K = 60

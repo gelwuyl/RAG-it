@@ -38,7 +38,7 @@ from .db import (
 )
 from .loaders import fetch_url, load_bytes, page_title, TEXT_EXTENSIONS, HTML_EXTENSIONS, PDF_EXTENSIONS
 from .pipeline import ingest_document_text, ask
-from .vectordb import delete_document_chunks
+from .vectordb import delete_document_chunks, prune_chunks
 
 app = FastAPI(title="RAG Chat")
 app.add_middleware(
@@ -406,6 +406,26 @@ def delete_document(
     return {"ok": True}
 
 
+@app.post("/api/documents/prune")
+def prune_orphan_chunks(
+    user: User = Depends(authn.get_current_user),
+    db: Session = Depends(get_session),
+):
+    """Remove Neon vector chunks whose Document row no longer exists (orphans),
+    plus any chunk under a stale config fingerprint. Keeps the vector store
+    free of 'ghost' chunks after deletes / embedding-model changes.
+    """
+    valid = {d.id for d in db.query(Document).filter(Document.user_id == user.id).all()}
+    current_fp = load_config().fingerprint()
+    stale = {
+        r.fingerprint
+        for r in db.query(Document).filter(Document.user_id == user.id).all()
+        if r.config_fingerprint and r.config_fingerprint != current_fp
+    }
+    removed = prune_chunks(user.id, valid, stale or None)
+    return {"ok": True, "removed": removed}
+
+
 @app.post("/api/documents/reindex")
 def reindex_all(
     user: User = Depends(authn.get_current_user),
@@ -596,7 +616,8 @@ def get_chat(
                 "role": m.role,
                 "content": m.content,
                 "citations": json.loads(m.citations) if m.citations else [],
-            }
+                "eval_line": m.eval_line or "",
+                }
             for m in msgs
         ],
     }
@@ -634,6 +655,7 @@ def ask_chat(
             role="assistant",
             content=result["answer"],
             citations=json.dumps(result["citations"]),
+            eval_line=result.get("eval_line") or None,
         )
     )
     db.commit()
@@ -669,6 +691,7 @@ def eval_config():
         "temperature": cfg.temperature,
         "embedding_model": cfg.embedding_model,
         "web_augmentation": cfg.web_augmentation,
+        "eval_show": cfg.eval_show,
         "fingerprint": cfg.fingerprint(),
     }
 
@@ -720,6 +743,7 @@ class ConfigUpdateIn(BaseModel):
     temperature: float | None = None
     embedding_model: str | None = None
     web_augmentation: bool | None = None
+    eval_show: bool | None = None
 
 
 @app.put("/api/eval/config")
@@ -761,6 +785,7 @@ def update_config(body: ConfigUpdateIn):
             "temperature": cfg.temperature,
             "embedding_model": cfg.embedding_model,
             "web_augmentation": cfg.web_augmentation,
+            "eval_show": cfg.eval_show,
             "fingerprint": cfg.fingerprint(),
         },
         "needs_reindex": needs_reindex,

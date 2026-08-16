@@ -79,3 +79,11 @@ def delete_document_chunks(
     user_id: str, doc_id: str, embedding_model: str | None = None
 ) -> None:
     return _impl().delete_document_chunks(user_id, doc_id, embedding_model)
+
+
+def prune_chunks(
+    user_id: str,
+    valid_doc_ids: set[str],
+    stale_fingerprints: set[str] | None = None,
+) -> int:
+    return _impl().prune_chunks(user_id, valid_doc_ids, stale_fingerprints)

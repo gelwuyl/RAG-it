@@ -70,9 +70,14 @@
 
           <div class="pane-footer">
             <button id="reindex-btn" class="btn btn-small" title="Re-chunk all sources under the current config">Re-index all</button>
+            <button id="prune-btn" class="btn btn-small" title="Delete orphaned Neon vector chunks (no matching document)">Prune ghosts</button>
             <div class="hybrid-row">
               <span class="hybrid-label" title="Vector + BM25 keyword fusion (real hybrid search, not web)">Keyword fusion</span>
               <button id="hybrid-toggle" class="btn btn-small" title="Toggle BM25 keyword fusion on/off (improves exact-match retrieval; never adds web text)">Off</button>
+            </div>
+            <div class="hybrid-row">
+              <span class="hybrid-label" title="When ON, web results are appended as labeled [web] chunks ONLY if your documents don't answer the question (fallback, not grounding)">Web fallback</span>
+              <button id="web-toggle" class="btn btn-small" title="Toggle web augmentation fallback on/off">Off</button>
             </div>
           </div>
         </aside>

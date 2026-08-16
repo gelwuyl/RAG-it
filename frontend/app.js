@@ -279,6 +279,35 @@ $("hybrid-toggle").onclick = async () => {
   }
 };
 
+// Web augmentation fallback (DuckDuckGo [web] chunks only when documents don't answer).
+$("web-toggle").onclick = async () => {
+  try {
+    const r = await api("/api/eval/web-augmentation", { method: "POST" });
+    const btn = $("web-toggle");
+    if (r.web_augmentation) {
+      btn.textContent = "On";
+      btn.classList.add("on");
+      toast("Web fallback ON — web text used only when docs don't answer");
+    } else {
+      btn.textContent = "Off";
+      btn.classList.remove("on");
+      toast("Web fallback OFF — strictly grounded in your documents");
+    }
+  } catch (e) {
+    toast(e.message, true);
+  }
+};
+
+// Prune orphaned Neon vector chunks (no matching Document row) + stale fingerprints.
+$("prune-btn").onclick = async () => {
+  try {
+    const r = await api("/api/documents/prune", { method: "POST" });
+    toast(`Pruned ${r.removed} orphaned vector chunk(s)`);
+  } catch (e) {
+    toast(e.message, true);
+  }
+};
+
 /* Tuning parameters modal */
 function openSettings() {
   $("settings-overlay").classList.remove("hidden");
@@ -462,7 +491,7 @@ async function openChat(chatId) {
     return;
   }
   for (const m of chat.messages) {
-    appendMessage(m.role, m.content, m.citations || [], false);
+    appendMessage(m.role, m.content, m.citations || [], false, m.eval_line || "");
   }
   box.scrollTop = box.scrollHeight;
 }
@@ -495,7 +524,7 @@ function renderAssistantContent(el, content, citations) {
   });
 }
 
-function appendMessage(role, content, citations = [], isPending = false) {
+function appendMessage(role, content, citations = [], isPending = false, evalLine = "") {
   const box = $("messages");
   const hint = box.querySelector(".empty-hint");
   if (hint) hint.remove();
@@ -510,6 +539,12 @@ function appendMessage(role, content, citations = [], isPending = false) {
         el.classList.add("not-found");
       }
       renderAssistantContent(el, content, citations);
+      if (evalLine) {
+        const ev = document.createElement("div");
+        ev.className = "eval-line";
+        ev.textContent = evalLine;
+        el.appendChild(ev);
+      }
     }
   } else {
     el.textContent = content;
@@ -543,7 +578,7 @@ $("ask-form").onsubmit = async (e) => {
       body: JSON.stringify({ question }),
     });
     pending.remove();
-    appendMessage("assistant", result.answer, result.citations);
+    appendMessage("assistant", result.answer, result.citations, false, result.eval_line || "");
     chatStatusOverride.delete(state.currentChatId); // answered -> green dot
     // keep the chat list titles/statuses in sync
     const c = state.chats.find((x) => x.id === state.currentChatId);

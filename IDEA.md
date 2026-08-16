@@ -1,0 +1,1 @@
+A multi-user RAG web app built for chat with an LLM grounded in your own documents (PDFs, web pages, Markdown/text), with citations, a tunable pipeline, and an evaluation harness to measure tuning changes.

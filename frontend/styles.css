@@ -193,6 +193,16 @@ body {
 .msg.assistant.not-found { background: var(--not-found-bg); border-color: var(--not-found-border); font-style: italic; }
 .msg.pending { color: var(--muted); font-style: italic; }
 
+.eval-line {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0.2px;
+  border-top: 1px dashed var(--border);
+  padding-top: 6px;
+}
+
 .cite-marker {
   display: inline-block; background: #e8f0fe; color: var(--primary);
   border-radius: 4px; padding: 0 5px; margin: 0 2px; font-size: 12px;
