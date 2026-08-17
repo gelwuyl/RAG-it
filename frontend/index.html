@@ -22,7 +22,7 @@
         }
       })();
     </script>
-    <link rel="stylesheet" href="/landing.css?v=4" />
+    <link rel="stylesheet" href="/landing.css?v=5" />
   </head>
   <body>
     <button id="theme-toggle" class="theme-toggle" type="button"
@@ -56,6 +56,40 @@
         </p>
       </div>
     </header>
+
+    <!-- =================== what the stages do (bridge) ===================
+         Unnumbered on purpose: it is the plain-language read of the pipeline,
+         and it sits BEFORE 01 because it is the most legible thing on the
+         page — someone who reads only this knows what the app does. The
+         numbered section that follows is the same five stages with their
+         serverless constraints attached, for the reader who wants them. -->
+    <section class="stages">
+      <div class="wrap">
+        <div class="stage-notes">
+          <div class="stage-note">
+            <span class="stage-key">Rewrite</span>
+            <p>Questions are rarely phrased the way a document is. The query is
+              restated before it is searched.</p>
+          </div>
+          <div class="stage-note">
+            <span class="stage-key">Retrieve</span>
+            <p>Meaning-based vector search fused with exact keyword matching, so
+              names and IDs are not lost to paraphrase.</p>
+          </div>
+          <div class="stage-note">
+            <span class="stage-key">Rerank</span>
+            <p>A language model re-scores the candidates against the question,
+              which catches what similarity alone misses.</p>
+          </div>
+          <div class="stage-note">
+            <span class="stage-key">Judge</span>
+            <p>A second model checks the answer against its own sources. When it
+              cannot decide, that is reported as ungraded — never as a
+              failure.</p>
+          </div>
+        </div>
+      </div>
+    </section>
 
     <!-- ====================== 01 · the pipeline ===================== -->
     <section>

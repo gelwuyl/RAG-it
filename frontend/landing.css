@@ -243,6 +243,39 @@ section { padding: 88px 0; }
   display: block;
 }
 
+/* ---------- the four stages, in plain language ----------
+   A band between the hero and 01. Shorter padding than a numbered section
+   and a hairline underneath, so it reads as a caption on the hero rather
+   than as a section someone forgot to number.
+
+   Each label gets a rule the full width of its column: with four columns of
+   ragged prose and no boxes, those rules are the only thing holding the row
+   on a grid. The label stays --text, not accent — lime is reserved for what
+   is live or selected, and none of this is either. */
+.stages { padding: 56px 0; border-bottom: 1px solid var(--border); }
+
+.stage-notes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(212px, 1fr));
+  gap: 34px;
+}
+.stage-key {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: var(--text-micro);
+  letter-spacing: var(--tracking-telemetry);
+  text-transform: uppercase;
+  color: var(--text);
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.stage-note p {
+  margin: 14px 0 0;
+  color: var(--muted);
+  font-size: var(--text-prose);
+  max-width: 34ch;
+}
+
 /* ---------- pipeline: the diagram and its constraints, vertical ----------
 
    The horizontal SVG and the separate Architecture table are gone; both are
