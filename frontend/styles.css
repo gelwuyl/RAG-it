@@ -195,19 +195,25 @@ input::placeholder, textarea::placeholder { color: var(--faint); }
   display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
   margin-left: auto;
 }
-/* `~` rather than `+`: the guest badge now sits between these two, so the
-   original adjacent-sibling rule silently stopped matching and the top bar
-   grew a second margin-left:auto. Only one of the two ever occupies space —
-   a guest has no name, a signed-in account has no badge. */
-.user-name:not(:empty) ~ .topbar-actions,
-.guest-badge:not(.hidden) ~ .topbar-actions { margin-left: 0; }
+.user-name:not(:empty) ~ .topbar-actions { margin-left: 0; }
+
+/* ---------- identity cluster ----------
+   The guest status and the sign-in control are ONE idea, so they live in one
+   flex container and wrap as a unit. Previously the badge sat before
+   .topbar-actions and the button after it, which at common widths put the
+   note mid-bar and pushed the button onto a second row on the far side —
+   the reason and the action visually unrelated. */
+.topbar-identity {
+  display: flex; align-items: center; gap: 10px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
 
 /* ---------- guest workspace badge ----------
    Telemetry register (PRODUCT_UX_PLAN.md §1): mono, uppercase, letterspaced,
    deliberately low contrast. It is a status readout, not a call to action —
-   the actual sign-in button lives in .auth-slot beside it. */
+   the actual sign-in button sits immediately beside it. */
 .guest-badge {
-  margin-left: auto;
   display: inline-flex; align-items: center; gap: 8px;
   min-width: 0;
   font-family: var(--font-mono);
@@ -252,7 +258,9 @@ input::placeholder, textarea::placeholder { color: var(--faint); }
 }
 
 /* Optional Google sign-in: last item in the top bar, never a layout owner. */
-.auth-slot { display: flex; align-items: center; margin-left: 8px; }
+/* No margin of its own: .topbar-identity owns the spacing between the guest
+   badge and this control, so they read as one cluster. */
+.auth-slot { display: flex; align-items: center; }
 .google-btn {
   display: inline-flex; align-items: center; gap: 8px;
   white-space: nowrap;
@@ -1020,7 +1028,9 @@ fieldset legend {
   .brand-sub { display: none; }
   .user-name { font-size: 12px; }
   /* Keep the sign-in control on the brand row; the toggles wrap below it. */
-  .auth-slot { order: 2; margin-left: auto; }
+  /* Reorder the CLUSTER, not the button inside it — `order` only applies
+     among flex siblings, and .auth-slot is no longer one of the top bar's. */
+  .topbar-identity { order: 2; margin-left: auto; }
   .topbar-actions { order: 3; width: 100%; margin-left: 0; }
   .user-name:not(:empty) + .topbar-actions { margin-left: 0; }
   .user-chip { max-width: 190px; }
@@ -1075,7 +1085,7 @@ fieldset legend {
 @media (max-width: 400px) {
   .topbar-actions .btn { flex: 1 1 auto; }
   /* Too narrow to share the brand row — give the sign-in control its own. */
-  .auth-slot { width: 100%; margin-left: 0; }
+  .topbar-identity, .auth-slot { width: 100%; margin-left: 0; }
   .google-btn, .user-chip { width: 100%; max-width: none; justify-content: center; }
 }
 
