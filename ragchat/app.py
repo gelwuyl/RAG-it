@@ -1000,6 +1000,21 @@ def list_models(provider: str | None = None):
     return {**model_catalog(emb_provider), "provider": emb_provider}
 
 
+@app.get("/api/presets")
+def list_presets():
+    """The named configurations offered in Settings.
+
+    Served rather than duplicated in the frontend: the eval harness scores these
+    same values (``run_eval --preset <id>``), and a preset the benchmark measures
+    has to be the preset the UI ships or the numbers describe a configuration
+    nobody can select. `index_keys` lets the UI badge a card with "needs
+    re-index" by comparing them against what is actually saved.
+    """
+    from .presets import INDEX_KEYS, PRESET_KEYS, PRESETS
+
+    return {"presets": PRESETS, "keys": list(PRESET_KEYS), "index_keys": list(INDEX_KEYS)}
+
+
 @app.get("/api/eval/config")
 def eval_config():
     cfg = load_config()

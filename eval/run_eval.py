@@ -264,15 +264,36 @@ def config_snapshot(cfg) -> dict:
     }
 
 
-def run_benchmark(limit: int | None = None, retrieval_only: bool = False) -> dict:
+def run_benchmark(
+    limit: int | None = None,
+    retrieval_only: bool = False,
+    preset: str | None = None,
+) -> dict:
     """Run the full eval harness and return the report dict.
 
     Callable form used by the in-app Evaluation tab (POST /api/eval/run).
     Mirrors the CLI `main()` exactly, but returns the report instead of only
     printing it, so the web layer can persist it to a status file and the UI
     can poll for progress.
+
+    `preset` scores one of the named Settings configurations (ragchat.presets)
+    instead of the live config. The override is applied IN MEMORY with
+    dataclasses.replace and never persisted: `config_overrides` is a single row
+    shared by every user of the deployment, so a benchmark that wrote it would
+    re-point the pipeline for everyone for the duration of the run — and leave it
+    re-pointed if the run died halfway.
     """
     cfg = load_config()
+    if preset:
+        from dataclasses import replace
+
+        from ragchat.presets import get_preset
+
+        entry = get_preset(preset)
+        if entry is None:
+            raise SystemExit(f"Unknown preset: {preset}")
+        cfg = replace(cfg, **entry["values"])
+        print(f"Preset: {entry['name']} ({preset}) — {entry['values']}")
     print(f"Config fingerprint: {cfg.fingerprint()}")
     print(
         f"Judge model: {judges.judge_model()} | MATCH_THRESHOLD (cosine): {MATCH_THRESHOLD}"
@@ -305,6 +326,9 @@ def run_benchmark(limit: int | None = None, retrieval_only: bool = False) -> dic
     report = {
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
         "run_dir": str(run_dir),
+        # Which named configuration this run scored, if any. Without it, comparing
+        # four runs means reverse-engineering the preset from the config snapshot.
+        "preset": preset,
         "config": config_snapshot(cfg),
         "metrics": metrics,
         "results": results,
@@ -360,8 +384,18 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--limit", type=int, default=None)
     ap.add_argument("--retrieval-only", action="store_true")
+    ap.add_argument(
+        "--preset",
+        default=None,
+        help="score a named Settings preset instead of the live config "
+             "(applied in memory, never persisted)",
+    )
     args = ap.parse_args()
-    run_benchmark(limit=args.limit, retrieval_only=args.retrieval_only)
+    run_benchmark(
+        limit=args.limit,
+        retrieval_only=args.retrieval_only,
+        preset=args.preset,
+    )
 
 
 if __name__ == "__main__":

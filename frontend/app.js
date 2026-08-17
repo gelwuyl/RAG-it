@@ -1060,65 +1060,74 @@ function setSettingsReadOnly(readOnly) {
 // ---------- presets (PRODUCT_UX_PLAN.md §7) ----------
 //
 // The default view is four named configurations, each stating what it trades
-// away; the fifteen individual fields stay one click behind "Advanced".
+// away; the individual fields stay one click behind "Advanced".
+//
+// The VALUES are not here. They are served from GET /api/presets
+// (ragchat/presets.py), because the eval harness scores those same values via
+// `run_eval --preset <id>` — and a preset the benchmark measures has to be the
+// preset the UI ships, or the published numbers describe a configuration nobody
+// can select. Two copies of the table drift the first time one is tuned.
 //
 // Presets deliberately do NOT touch the model or provider fields. Those are
 // deployment facts rather than tradeoffs — switching embedding provider
 // re-points every vector in the store, and 422s outright when that provider has
 // no key configured — so a card called "Fast" has no business deciding them.
-const PRESET_KEYS = [
-  "chunk_size", "chunk_overlap", "splitter", "top_k", "candidate_k",
-  "similarity_threshold", "reranker", "query_rewrite", "temperature",
-];
 
-// Keys whose change invalidates existing chunks — the same set the backend uses
-// to decide `needs_reindex` (app.py:1129), minus the embedding fields no preset
-// touches. A card's badge is computed against the SAVED config, not against
-// another preset, so it promises a re-index only when one is really coming.
-const PRESET_INDEX_KEYS = ["chunk_size", "chunk_overlap", "splitter"];
+// How each preset key maps to its control, and how to read it back. The ids are
+// hardcoded in app.html either way, so this is the one place that knows both.
+const FIELD_BY_KEY = {
+  chunk_size: ["set-chunk-size", "int"],
+  chunk_overlap: ["set-chunk-overlap", "int"],
+  splitter: ["set-splitter", "str"],
+  top_k: ["set-top-k", "int"],
+  candidate_k: ["set-candidate-k", "int"],
+  similarity_threshold: ["set-sim-threshold", "float"],
+  reranker: ["set-reranker", "bool"],
+  query_rewrite: ["set-query-rewrite", "bool"],
+  temperature: ["set-temperature", "float"],
+};
 
-const PRESETS = [
-  {
-    id: "fast",
-    name: "Fast",
-    desc: "One model call per question. No rerank, no rewrite, a small pool — the quickest answer this pipeline can give.",
-    values: {
-      chunk_size: 512, chunk_overlap: 75, splitter: "recursive",
-      top_k: 3, candidate_k: 10, similarity_threshold: 0.0,
-      reranker: false, query_rewrite: false, temperature: 0.0,
-    },
-  },
-  {
-    id: "balanced",
-    name: "Balanced",
-    desc: "The shipped default. Follow-ups are rewritten so they still retrieve; everything else stays cheap.",
-    values: {
-      chunk_size: 512, chunk_overlap: 75, splitter: "recursive",
-      top_k: 4, candidate_k: 20, similarity_threshold: 0.0,
-      reranker: false, query_rewrite: true, temperature: 0.0,
-    },
-  },
-  {
-    id: "accurate",
-    name: "High accuracy",
-    desc: "Smaller chunks, a 40-wide candidate pool and an LLM rerank pass. One extra model call per question, and slower.",
-    values: {
-      chunk_size: 384, chunk_overlap: 96, splitter: "recursive",
-      top_k: 6, candidate_k: 40, similarity_threshold: 0.0,
-      reranker: true, query_rewrite: true, temperature: 0.0,
-    },
-  },
-  {
-    id: "low-cost",
-    name: "Low cost",
-    desc: "Bigger chunks means roughly a third fewer embedding calls to index, and the smallest prompt per question.",
-    values: {
-      chunk_size: 768, chunk_overlap: 64, splitter: "recursive",
-      top_k: 3, candidate_k: 8, similarity_threshold: 0.0,
-      reranker: false, query_rewrite: false, temperature: 0.0,
-    },
-  },
-];
+function readField(key) {
+  const spec = FIELD_BY_KEY[key];
+  if (!spec) return undefined;
+  const raw = $(spec[0])?.value;
+  if (raw == null) return undefined;
+  if (spec[1] === "int") return parseInt(raw, 10);
+  if (spec[1] === "float") return parseFloat(raw);
+  if (spec[1] === "bool") return raw === "true";
+  return raw;
+}
+
+function writeField(key, value) {
+  const spec = FIELD_BY_KEY[key];
+  const el = spec && $(spec[0]);
+  if (!el) return;
+  el.value = spec[1] === "bool" ? String(value) : value;
+}
+
+// Filled from GET /api/presets when the modal opens.
+let presets = [];
+let presetKeys = [];
+// Local default, deliberately: this list only drives the "you should re-index"
+// note, and losing the note because a fetch failed would be worse than the small
+// duplication. The server value replaces it when the fetch succeeds.
+let presetIndexKeys = ["chunk_size", "chunk_overlap", "splitter"];
+
+async function loadPresets() {
+  try {
+    const r = await api("/api/presets");
+    presets = Array.isArray(r.presets) ? r.presets : [];
+    presetKeys = Array.isArray(r.keys) && r.keys.length ? r.keys : presetKeys;
+    presetIndexKeys = Array.isArray(r.index_keys) && r.index_keys.length
+      ? r.index_keys
+      : presetIndexKeys;
+  } catch (e) {
+    // The advanced fields still work; only the shortcut is missing. Saying so
+    // beats rendering an empty block that looks like a layout bug.
+    presets = [];
+    console.error("presets unavailable:", e);
+  }
+}
 
 // Config as last read from (or written to) the server. Presets compare their
 // chunking against this to decide whether to warn about a re-index.
@@ -1134,32 +1143,31 @@ function sameSetting(a, b) {
 }
 
 function readPresetFieldsFromForm() {
-  return {
-    chunk_size: parseInt($("set-chunk-size").value, 10),
-    chunk_overlap: parseInt($("set-chunk-overlap").value, 10),
-    splitter: $("set-splitter").value,
-    top_k: parseInt($("set-top-k").value, 10),
-    candidate_k: parseInt($("set-candidate-k").value, 10),
-    similarity_threshold: parseFloat($("set-sim-threshold").value),
-    reranker: $("set-reranker").value === "true",
-    query_rewrite: $("set-query-rewrite").value === "true",
-    temperature: parseFloat($("set-temperature").value),
-  };
+  const out = {};
+  for (const k of presetKeys) out[k] = readField(k);
+  return out;
 }
 
 function matchPreset(vals) {
-  return PRESETS.find((p) => PRESET_KEYS.every((k) => sameSetting(p.values[k], vals[k]))) || null;
+  return presets.find((p) => presetKeys.every((k) => sameSetting(p.values[k], vals[k]))) || null;
 }
 
 function presetNeedsReindex(preset) {
   if (!loadedConfig) return false;
-  return PRESET_INDEX_KEYS.some((k) => !sameSetting(preset.values[k], loadedConfig[k]));
+  return presetIndexKeys.some((k) => !sameSetting(preset.values[k], loadedConfig[k]));
 }
 
 function renderPresets() {
   const list = $("preset-list");
   if (!list) return;
-  list.innerHTML = PRESETS.map((p) => {
+  if (!presets.length) {
+    // Honest about the gap rather than rendering an empty block that reads as a
+    // layout bug. Advanced still has every field.
+    list.innerHTML = `<p class="preset-none muted small">Presets could not be
+      loaded — the fields under Advanced still work.</p>`;
+    return;
+  }
+  list.innerHTML = presets.map((p) => {
     const badge = presetNeedsReindex(p)
       ? `<span class="index-badge">needs re-index</span>`
       : "";
@@ -1185,18 +1193,9 @@ function applyPreset(id) {
   // The refusal belongs on the whole modal, not on Save alone — a guest filling
   // the form and then being told no has been misled by the intervening step.
   if (guestBlocked("settings-save")) return;
-  const preset = PRESETS.find((p) => p.id === id);
+  const preset = presets.find((p) => p.id === id);
   if (!preset) return;
-  const v = preset.values;
-  $("set-chunk-size").value = v.chunk_size;
-  $("set-chunk-overlap").value = v.chunk_overlap;
-  $("set-splitter").value = v.splitter;
-  $("set-top-k").value = v.top_k;
-  $("set-candidate-k").value = v.candidate_k;
-  $("set-sim-threshold").value = v.similarity_threshold;
-  $("set-reranker").value = String(v.reranker);
-  $("set-query-rewrite").value = String(v.query_rewrite);
-  $("set-temperature").value = v.temperature;
+  for (const [k, v] of Object.entries(preset.values)) writeField(k, v);
   updatePresetSelection();
   const note = $("settings-note");
   note.textContent = presetNeedsReindex(preset)
@@ -1303,6 +1302,7 @@ async function loadSettingsIntoForm() {
     const [cfg, models] = await Promise.all([
       api("/api/eval/config"),
       api("/api/models"),
+      loadPresets(),
     ]);
     state.models = models;
     $("set-chunk-size").value = cfg.chunk_size;
@@ -1445,7 +1445,7 @@ $("settings-save").onclick = async () => {
     // changed nothing index-affecting. Compare against the config we loaded
     // before believing it: a warning that fires every time teaches the user to
     // ignore the one time it matters.
-    const chunkingChanged = !loadedConfig || PRESET_INDEX_KEYS.some(
+    const chunkingChanged = !loadedConfig || presetIndexKeys.some(
       (k) => !sameSetting(body[k], loadedConfig[k])
     );
     if (res.needs_reindex && (embeddingChanged || chunkingChanged)) {
