@@ -26,7 +26,7 @@
         }
       })();
     </script>
-    <link rel="stylesheet" href="/styles.css?v=19" />
+    <link rel="stylesheet" href="/styles.css?v=20" />
     <script>
       // Boot diagnostics: collect load/runtime errors so a broken app.js
       // shows a visible message instead of a silently dead UI.
@@ -102,6 +102,13 @@
             <button id="settings-btn" class="btn btn-small" type="button" title="Tuning parameters">⚙ Settings</button>
             <button id="theme-toggle" class="btn btn-small" type="button"
               title="Switch between the dark and light theme" aria-pressed="false">☾</button>
+            <!-- The palette's own affordance, in the telemetry register (plan §8).
+                 A keyboard shortcut nobody is told about does not exist. Hidden
+                 below 1100px by CSS: it has no meaning on touch and must not
+                 spend mobile topbar space. app.js writes the right key name for
+                 the platform into it. -->
+            <button id="palette-btn" class="palette-hint" type="button"
+              aria-label="Open the command palette">⌘K</button>
           </div>
           <!-- Identity: guest status and the sign-in control, kept in ONE
                container so they stay adjacent and wrap together. "Sign in to keep
@@ -291,6 +298,21 @@
 
     <div id="toast" class="toast hidden"></div>
 
+    <!-- Command palette (PRODUCT_UX_PLAN.md §8). Desktop only. -->
+    <div id="palette-overlay" class="palette-overlay hidden">
+      <div class="palette" role="dialog" aria-modal="true" aria-label="Command palette">
+        <input id="palette-input" class="palette-input" type="text" autocomplete="off"
+          spellcheck="false" placeholder="Jump to a chat, a source, or an action…"
+          role="combobox" aria-expanded="true" aria-controls="palette-list" />
+        <ul id="palette-list" class="palette-list" role="listbox" aria-label="Commands"></ul>
+        <div class="palette-foot">
+          <span>↑↓ move</span>
+          <span>⏎ run</span>
+          <span>esc close</span>
+        </div>
+      </div>
+    </div>
+
     <!-- Settings modal -->
     <div id="settings-overlay" class="modal-overlay hidden">
       <div class="modal">
@@ -472,6 +494,6 @@
       </div>
     </div>
 
-    <script type="module" src="/app.js?v=22"></script>
+    <script type="module" src="/app.js?v=23"></script>
   </body>
 </html>

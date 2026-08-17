@@ -2426,6 +2426,212 @@ $("chats-expand").onclick = () => setChatsCollapsed(false, true);
 applyChatsDefault();
 CHATS_AUTO.addEventListener("change", applyChatsDefault);
 
+// ---------- command palette (PRODUCT_UX_PLAN.md §8) ----------
+//
+// The one HUD marker adopted beyond the token system, and it earns its place by
+// being useful rather than decorative: in a four-column app, jumping to a chat or
+// a source without reaching for the mouse is the fastest path there is.
+//
+// DESKTOP ONLY — it has no meaning on touch. The gate is on the same 1100px
+// breakpoint where the columns stop being columns, and it covers the shortcut as
+// well as the button, so a narrow window has no hidden keyboard surface.
+const PALETTE_DESKTOP = window.matchMedia("(min-width: 1100px)");
+const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+
+let paletteRows = [];
+let paletteIndex = 0;
+
+// The fields worth reaching by name. Not all fifteen: a palette that lists every
+// input is a form, and the presets are the intended way in for most of them.
+// Labels carry no "Setting:" prefix — the group column beside them already says
+// it, and the duplication read as "Setting: Setting: chunk size".
+const PALETTE_SETTINGS = {
+  "set-chunk-size": "Chunk size",
+  "set-top-k": "Top-K (chunks to LLM)",
+  "set-candidate-k": "Candidate-K (pool before rerank)",
+  "set-sim-threshold": "Similarity threshold",
+  "set-llm-model": "LLM model",
+  "set-embedding-model": "Embedding model",
+  "set-reranker": "Reranker",
+};
+
+// Actions route through the REAL controls rather than re-implementing them: the
+// guest locks, disabled states and confirmations all live on those handlers, and
+// a palette that bypassed them would be a second, laxer way in.
+function clickThrough(id) {
+  return () => $(id)?.click();
+}
+
+function paletteCommands() {
+  const rows = [
+    { group: "Action", label: "New chat", run: clickThrough("new-chat-btn") },
+    { group: "Action", label: "Open settings", run: () => openSettings() },
+    { group: "Action", label: "Toggle theme (dark / light)", run: clickThrough("theme-toggle") },
+    { group: "Action", label: "Toggle keyword fusion", run: clickThrough("hybrid-toggle"), lock: "hybrid-toggle" },
+    { group: "Action", label: "Toggle web fallback", run: clickThrough("web-toggle"), lock: "web-toggle" },
+    { group: "Action", label: "Re-index all sources", run: clickThrough("reindex-btn"), lock: "reindex-btn" },
+    { group: "Action", label: "Run benchmark", run: clickThrough("eval-run-btn"), lock: "eval-run-btn" },
+    { group: "Action", label: "Prune ghost chunks", run: clickThrough("prune-btn"), lock: "prune-btn" },
+  ];
+  for (const c of state.chats) {
+    rows.push({
+      group: "Chat",
+      label: c.title,
+      run: () => { if (c.id !== state.currentChatId) openChat(c.id); },
+    });
+  }
+  // Sources come from the DOM rather than from state: the card list is already
+  // the authoritative rendering of them, and "jump to" means "show me that card".
+  for (const el of document.querySelectorAll("#doc-list .source-item, #folder-list .source-item")) {
+    const title = el.querySelector(".src-title")?.textContent?.trim();
+    if (!title) continue;
+    rows.push({ group: "Source", label: title, run: () => revealSource(el) });
+  }
+  // Settings fields, so "open a setting" is one keystroke and a name rather than
+  // a modal plus a disclosure plus a scroll.
+  for (const [id, label] of Object.entries(PALETTE_SETTINGS)) {
+    rows.push({
+      group: "Setting",
+      label,
+      run: () => {
+        openSettings();
+        setAdvanced(true, true);
+        const field = $(id);
+        field?.scrollIntoView({ block: "center" });
+        field?.focus();
+      },
+    });
+  }
+  // Mark what a guest cannot do BEFORE they press it. The handler still explains
+  // itself if they do — this only saves them the trip.
+  for (const r of rows) {
+    if (r.lock && state.isGuest) r.hint = "needs an account";
+  }
+  return rows;
+}
+
+function revealSource(el) {
+  el.scrollIntoView({ behavior: "smooth", block: "center" });
+  el.classList.add("is-revealed");
+  setTimeout(() => el.classList.remove("is-revealed"), 1200);
+}
+
+// Substring match, with a prefix hit ranked above a mid-word one. Deliberately
+// not fuzzy: with a handful of actions and a user's own chat titles, fuzzy
+// matching mostly produces confident wrong answers.
+function paletteFilter(q) {
+  const all = paletteCommands();
+  const needle = q.trim().toLowerCase();
+  if (!needle) return all;
+  return all
+    .map((r) => {
+      const hay = `${r.group} ${r.label}`.toLowerCase();
+      const at = hay.indexOf(needle);
+      const labelAt = r.label.toLowerCase().indexOf(needle);
+      return at === -1 ? null : { ...r, score: labelAt === 0 ? 0 : labelAt > 0 ? 1 : 2 };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.score - b.score);
+}
+
+function renderPalette() {
+  const list = $("palette-list");
+  if (!paletteRows.length) {
+    list.innerHTML = `<li class="palette-none">No match</li>`;
+    return;
+  }
+  list.innerHTML = paletteRows
+    .map((r, i) => `<li class="palette-row${i === paletteIndex ? " is-active" : ""}"
+        role="option" aria-selected="${i === paletteIndex}" data-i="${i}">
+        <span class="palette-group">${escapeHtml(r.group)}</span>
+        <span class="palette-label">${escapeHtml(r.label)}</span>
+        ${r.hint ? `<span class="palette-lock">${escapeHtml(r.hint)}</span>` : ""}
+      </li>`)
+    .join("");
+  list.querySelector(".is-active")?.scrollIntoView({ block: "nearest" });
+}
+
+function movePalette(delta) {
+  if (!paletteRows.length) return;
+  paletteIndex = (paletteIndex + delta + paletteRows.length) % paletteRows.length;
+  renderPalette();
+}
+
+function openPalette() {
+  if (!PALETTE_DESKTOP.matches) return;
+  $("palette-overlay").classList.remove("hidden");
+  const input = $("palette-input");
+  input.value = "";
+  paletteRows = paletteFilter("");
+  paletteIndex = 0;
+  renderPalette();
+  input.focus();
+}
+
+function closePalette() {
+  $("palette-overlay").classList.add("hidden");
+  // The input is inside a display:none subtree once closed, and a focused
+  // element in one keeps receiving keystrokes that go nowhere visible.
+  if (document.activeElement === $("palette-input")) $("palette-input").blur();
+}
+
+function runPalette(i) {
+  const row = paletteRows[i];
+  if (!row) return;
+  closePalette();
+  row.run();
+}
+
+$("palette-btn").onclick = openPalette;
+
+$("palette-input").addEventListener("input", (e) => {
+  paletteRows = paletteFilter(e.target.value);
+  paletteIndex = 0;
+  renderPalette();
+});
+
+$("palette-input").addEventListener("keydown", (e) => {
+  if (e.key === "ArrowDown") { e.preventDefault(); movePalette(1); }
+  else if (e.key === "ArrowUp") { e.preventDefault(); movePalette(-1); }
+  else if (e.key === "Enter") { e.preventDefault(); runPalette(paletteIndex); }
+  else if (e.key === "Escape") { e.preventDefault(); closePalette(); }
+});
+
+$("palette-list").addEventListener("click", (e) => {
+  const row = e.target.closest(".palette-row");
+  if (row) runPalette(Number(row.dataset.i));
+});
+
+// Hover moves the selection so the mouse and the keyboard cannot disagree about
+// which row Enter would run.
+$("palette-list").addEventListener("mousemove", (e) => {
+  const row = e.target.closest(".palette-row");
+  if (!row) return;
+  const i = Number(row.dataset.i);
+  if (i !== paletteIndex) { paletteIndex = i; renderPalette(); }
+});
+
+$("palette-overlay").addEventListener("click", (e) => {
+  if (e.target === $("palette-overlay")) closePalette();
+});
+
+document.addEventListener("keydown", (e) => {
+  if ((e.metaKey || e.ctrlKey) && (e.key === "k" || e.key === "K")) {
+    if (!PALETTE_DESKTOP.matches) return;
+    e.preventDefault();     // Ctrl+K would otherwise reach the browser's omnibox
+    if ($("palette-overlay").classList.contains("hidden")) openPalette();
+    else closePalette();
+  }
+});
+
+// Ctrl on Windows and Linux, ⌘ on a Mac. Getting this wrong makes the hint read
+// as a shortcut for someone else's computer.
+$("palette-btn").textContent = IS_MAC ? "⌘K" : "Ctrl K";
+
+// Crossing into a narrow window closes it: the overlay is desktop-only, and a
+// resize should not leave a dialog on screen that the layout no longer offers.
+PALETTE_DESKTOP.addEventListener("change", (e) => { if (!e.matches) closePalette(); });
+
 // ---------- boot ----------
 
 // Surface any script-load or runtime error captured by the inline collector
