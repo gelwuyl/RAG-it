@@ -56,14 +56,22 @@
      status. Mono, uppercase, letterspaced, small, deliberately LOW contrast.
 
      Before this there were ~40 hardcoded sizes from 8px to 22px with no system,
-     which is why the eval readout carried as much visual weight as the answer. */
-  --text-content: 17px;   /* the answer — the one thing the reader came for */
+     which is why the eval readout carried as much visual weight as the answer.
+
+     The whole ladder moved up one step, and the two PROSE sizes up two: the
+     descriptions were the thing people actually read and they were set at 13px,
+     smaller than the chrome around them. --text-prose now sits ABOVE --text-body
+     rather than below it, which is the point — an explanation should not be
+     quieter than a button label. The telemetry sizes move one step only, so the
+     gap between the two registers widens rather than closing. */
+  --text-content: 19px;   /* the answer — the one thing the reader came for */
   --lh-content: 1.65;
-  --text-body: 14px;      /* general UI */
-  --text-sm: 13px;
-  --text-xs: 12px;
-  --text-micro: 11px;     /* telemetry register */
-  --text-nano: 10px;      /* telemetry, subordinate (glosses, footnotes) */
+  --text-prose: 16px;     /* descriptive paragraphs: notes, card copy, empties */
+  --text-body: 15px;      /* general UI */
+  --text-sm: 14px;
+  --text-xs: 13px;
+  --text-micro: 12px;     /* telemetry register */
+  --text-nano: 11px;      /* telemetry, subordinate (glosses, footnotes) */
   /* 0.12em is what makes uppercase mono read as an instrument label rather than
      as shouting. Below ~0.08em it just looks like small caps text. */
   --tracking-telemetry: 0.12em;

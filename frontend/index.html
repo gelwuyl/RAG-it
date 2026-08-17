@@ -22,7 +22,7 @@
         }
       })();
     </script>
-    <link rel="stylesheet" href="/landing.css?v=3" />
+    <link rel="stylesheet" href="/landing.css?v=4" />
   </head>
   <body>
     <button id="theme-toggle" class="theme-toggle" type="button"
@@ -67,141 +67,122 @@
 
         <p class="pipeline-intro">
           A question does not go straight to a language model. It passes through
-          five stages, and each one is inspectable in the app.
+          five stages — and each one is shaped by a constraint of running this on
+          one serverless function.
         </p>
 
-        <div class="pipeline-scroll">
-          <svg class="pipeline-svg" viewBox="0 0 980 210" role="img"
-            aria-labelledby="pipe-title pipe-desc">
-            <title id="pipe-title">The retrieval pipeline</title>
-            <desc id="pipe-desc">A question is rewritten, then retrieved against
-              the indexed corpus by vector and keyword search, reranked, used to
-              generate a cited answer, and finally judged for faithfulness and
-              relevancy.</desc>
+        <!-- The pipeline diagram and the architecture notes, together.
+             This used to be a horizontal SVG here and a separate key/value
+             "Architecture" section further down, which meant the constraint
+             that explains a stage sat four screens away from the stage. Running
+             vertically puts each note in the gutter beside the box it belongs
+             to, and lets the whole thing reflow to one column on a phone —
+             something a fixed 980-wide viewBox could only scroll sideways.
 
-            <defs>
-              <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5"
-                markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-                <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--border-strong)" />
-              </marker>
-            </defs>
+             Drawn in CSS rather than SVG: boxes are text that wraps and scales
+             with the type, and the connectors are a 1px pseudo-element plus a
+             border-triangle arrowhead. No path data to keep in sync. -->
+        <div class="trace">
+          <div class="trace-rail">
+            <!-- Dashed, indented: indexing is an input to retrieval, not a
+                 stage a question passes through. Matches the dashed edge the
+                 old SVG used for the same reason. -->
+            <div class="trace-step is-aside">
+              <div class="trace-box">
+                <span class="trace-id">Input</span>
+                <span class="trace-label">Index
+                  <span class="trace-sub">chunked + embedded</span></span>
+              </div>
+            </div>
+            <div class="trace-step">
+              <div class="trace-box">
+                <span class="trace-id">Stage 01</span>
+                <span class="trace-label">Rewrite
+                  <span class="trace-sub">sharpen the query</span></span>
+              </div>
+            </div>
+            <div class="trace-step">
+              <div class="trace-box">
+                <span class="trace-id">Stage 02</span>
+                <span class="trace-label">Retrieve
+                  <span class="trace-sub">vector + BM25</span></span>
+              </div>
+            </div>
+            <div class="trace-step">
+              <div class="trace-box">
+                <span class="trace-id">Stage 03</span>
+                <span class="trace-label">Rerank
+                  <span class="trace-sub">LLM cross-encoder</span></span>
+              </div>
+            </div>
+            <div class="trace-step is-live">
+              <div class="trace-box">
+                <span class="trace-id">Stage 04</span>
+                <span class="trace-label">Generate
+                  <span class="trace-sub">answer + citations</span></span>
+              </div>
+            </div>
+            <div class="trace-step">
+              <div class="trace-box">
+                <span class="trace-id">Stage 05</span>
+                <span class="trace-label">Judge
+                  <span class="trace-sub">grade the answer</span></span>
+              </div>
+            </div>
+          </div>
 
-            <!-- Two things enter the pipeline from above, at different stages:
-                 the question at stage 01, and the pre-built index at stage 02.
-                 Drawing ingest as feeding REWRITE would be wrong — documents
-                 are chunked and embedded once, ahead of time, and retrieval
-                 reads that index. The dashed stroke marks it as the one edge
-                 that is not part of answering this question. -->
-            <g>
-              <rect x="1" y="10" width="150" height="46" rx="8"
-                fill="var(--panel-sunken)" stroke="var(--border)" />
-              <text x="76" y="30" text-anchor="middle" fill="var(--muted)"
-                font-family="var(--font-mono)" font-size="10"
-                letter-spacing="1.3">QUESTION</text>
-              <text x="76" y="46" text-anchor="middle" fill="var(--faint)"
-                font-family="var(--font-sans)" font-size="11">what you ask</text>
-              <path d="M 76 58 L 76 88" stroke="var(--border-strong)"
-                stroke-width="1" marker-end="url(#arrow)" fill="none" />
-
-              <rect x="201" y="10" width="150" height="46" rx="8"
-                fill="var(--panel-sunken)" stroke="var(--border)" />
-              <text x="276" y="30" text-anchor="middle" fill="var(--muted)"
-                font-family="var(--font-mono)" font-size="10"
-                letter-spacing="1.3">INDEX</text>
-              <text x="276" y="46" text-anchor="middle" fill="var(--faint)"
-                font-family="var(--font-sans)" font-size="11">chunked + embedded</text>
-            </g>
-
-            <!-- The five query-time stages. -->
-            <g>
-              <!-- 1 rewrite -->
-              <rect x="1" y="92" width="150" height="58" rx="8"
-                fill="var(--panel)" stroke="var(--border-strong)" />
-              <text x="76" y="115" text-anchor="middle" fill="var(--primary-ink)"
-                font-family="var(--font-mono)" font-size="10"
-                letter-spacing="1.3">01 REWRITE</text>
-              <text x="76" y="133" text-anchor="middle" fill="var(--muted)"
-                font-family="var(--font-sans)" font-size="11">sharpen the query</text>
-              <path d="M 155 121 L 197 121" stroke="var(--border-strong)"
-                stroke-width="1" marker-end="url(#arrow)" fill="none" />
-
-              <!-- 2 retrieve -->
-              <rect x="201" y="92" width="150" height="58" rx="8"
-                fill="var(--panel)" stroke="var(--border-strong)" />
-              <text x="276" y="115" text-anchor="middle" fill="var(--primary-ink)"
-                font-family="var(--font-mono)" font-size="10"
-                letter-spacing="1.3">02 RETRIEVE</text>
-              <text x="276" y="133" text-anchor="middle" fill="var(--muted)"
-                font-family="var(--font-sans)" font-size="11">vector + BM25</text>
-              <path d="M 355 121 L 397 121" stroke="var(--border-strong)"
-                stroke-width="1" marker-end="url(#arrow)" fill="none" />
-
-              <!-- 3 rerank -->
-              <rect x="401" y="92" width="150" height="58" rx="8"
-                fill="var(--panel)" stroke="var(--border-strong)" />
-              <text x="476" y="115" text-anchor="middle" fill="var(--primary-ink)"
-                font-family="var(--font-mono)" font-size="10"
-                letter-spacing="1.3">03 RERANK</text>
-              <text x="476" y="133" text-anchor="middle" fill="var(--muted)"
-                font-family="var(--font-sans)" font-size="11">LLM cross-encoder</text>
-              <path d="M 555 121 L 597 121" stroke="var(--border-strong)"
-                stroke-width="1" marker-end="url(#arrow)" fill="none" />
-
-              <!-- 4 generate -->
-              <rect x="601" y="92" width="150" height="58" rx="8"
-                fill="var(--panel)" stroke="var(--primary)" />
-              <text x="676" y="115" text-anchor="middle" fill="var(--primary-ink)"
-                font-family="var(--font-mono)" font-size="10"
-                letter-spacing="1.3">04 GENERATE</text>
-              <text x="676" y="133" text-anchor="middle" fill="var(--muted)"
-                font-family="var(--font-sans)" font-size="11">answer + citations</text>
-              <path d="M 755 121 L 797 121" stroke="var(--border-strong)"
-                stroke-width="1" marker-end="url(#arrow)" fill="none" />
-
-              <!-- 5 judge -->
-              <rect x="801" y="92" width="150" height="58" rx="8"
-                fill="var(--panel)" stroke="var(--border-strong)" />
-              <text x="876" y="115" text-anchor="middle" fill="var(--primary-ink)"
-                font-family="var(--font-mono)" font-size="10"
-                letter-spacing="1.3">05 JUDGE</text>
-              <text x="876" y="133" text-anchor="middle" fill="var(--muted)"
-                font-family="var(--font-sans)" font-size="11">grade the answer</text>
-            </g>
-
-            <!-- Retrieval reads the index. Dashed: built ahead of time, not
-                 part of answering this particular question. -->
-            <path d="M 276 58 L 276 88" stroke="var(--border-strong)"
-              stroke-width="1" stroke-dasharray="3 3"
-              marker-end="url(#arrow)" fill="none" />
-
-            <text x="476" y="182" text-anchor="middle" fill="var(--faint)"
-              font-family="var(--font-mono)" font-size="10" letter-spacing="1.1">
-              EVERY STAGE IS CONFIGURABLE AND INSPECTABLE
-            </text>
-          </svg>
+          <div class="trace-notes">
+            <div class="trace-note">
+              <span class="trace-key">Embeddings</span>
+              <p>One fixed <code>vector(768)</code> column shared by every model,
+                so models swap without a migration. The config fingerprint
+                changes with them and invalidates stale chunks.</p>
+            </div>
+            <div class="trace-note">
+              <span class="trace-key">Model output</span>
+              <p>Reasoning models emit a thinking trace. It is stripped before
+                the rewrite is used — otherwise 1,400 characters of deliberation
+                become the search query.</p>
+            </div>
+            <div class="trace-note">
+              <span class="trace-key">Storage</span>
+              <p>Neon Postgres with <code>pgvector</code> is both the application
+                database and the vector store. Chroma swaps in for local
+                development behind a single dispatch module.</p>
+            </div>
+            <div class="trace-note">
+              <span class="trace-key">Configuration</span>
+              <p>How wide the net is cast is re-read from the database on every
+                request, so tuning it takes effect on the next question with no
+                redeploy.</p>
+            </div>
+            <div class="trace-note">
+              <span class="trace-key">Runtime</span>
+              <p>One FastAPI serverless function. The repo directory is read-only
+                and the process freezes the instant a response is sent, so every
+                writable byte goes to the database.</p>
+            </div>
+            <div class="trace-note">
+              <span class="trace-key">Fail open</span>
+              <p>A judge that times out is a broken grader, not a bad answer. It
+                reports <code>ungraded</code> — never <code>failed</code>, which
+                would be a confident false claim about your documents.</p>
+            </div>
+          </div>
         </div>
 
-        <div class="stage-notes">
+        <!-- The three architecture facts that belong to no single stage. -->
+        <div class="platform">
           <div>
-            <span class="stage-note-name">Rewrite</span>
-            <p class="stage-note-text">Questions are rarely phrased the way a
-              document is. The query is restated before it is searched.</p>
+            <span class="trace-key">Benchmarks · long jobs</span>
+            <p>A background thread would be frozen the moment the response is
+              sent, so the benchmark is sliced: bounded steps, each committing
+              before it returns.</p>
           </div>
           <div>
-            <span class="stage-note-name">Retrieve</span>
-            <p class="stage-note-text">Meaning-based vector search fused with
-              exact keyword matching, so names and IDs are not lost to paraphrase.</p>
-          </div>
-          <div>
-            <span class="stage-note-name">Rerank</span>
-            <p class="stage-note-text">A language model re-scores the candidates
-              against the question, which catches what similarity alone misses.</p>
-          </div>
-          <div>
-            <span class="stage-note-name">Judge</span>
-            <p class="stage-note-text">A second model checks the answer against
-              its own sources. When it cannot decide, that is reported as
-              ungraded — never as a failure.</p>
+            <span class="trace-key">Interface · frontend</span>
+            <p>Vanilla JavaScript. No framework, no runtime dependencies, two
+              entry points and one stylesheet.</p>
           </div>
         </div>
       </div>
@@ -276,56 +257,6 @@
             <p class="card-text">46 golden questions over a 10-document corpus,
               including unanswerable ones — because refusing to answer is a
               behaviour worth measuring too.</p>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ==================== 04 · architecture ====================== -->
-    <section>
-      <div class="wrap">
-        <div class="section-label">
-          <span class="section-num">04</span>
-          <span class="section-name">Architecture</span>
-        </div>
-        <div class="arch">
-          <div class="arch-row">
-            <span class="arch-key">Runtime</span>
-            <span class="arch-val">FastAPI, deployed as a <strong>single</strong>
-              serverless function. The repo directory is read-only at runtime and
-              the process freezes the instant a response is sent, so all writable
-              state goes to the database.</span>
-          </div>
-          <div class="arch-row">
-            <span class="arch-key">Storage</span>
-            <span class="arch-val">Neon Postgres with <code>pgvector</code> as
-              both the application database and the vector store. Chroma is
-              swapped in for local development behind one dispatch module.</span>
-          </div>
-          <div class="arch-row">
-            <span class="arch-key">Long jobs</span>
-            <span class="arch-val">A background thread would be frozen the moment
-              the response is sent, so the benchmark is <em>sliced</em>: the client
-              drives a loop of bounded steps, each committing before it
-              returns. Progress survives the function being killed.</span>
-          </div>
-          <div class="arch-row">
-            <span class="arch-key">Embeddings</span>
-            <span class="arch-val">One fixed <code>vector(768)</code> column shared
-              by every model, so models can be swapped without a migration. The
-              config's fingerprint changes with them and invalidates stale
-              chunks.</span>
-          </div>
-          <div class="arch-row">
-            <span class="arch-key">Configuration</span>
-            <span class="arch-val">Chunking, retrieval and model choices are
-              re-read from the database on every request — tuning takes effect on
-              the next question, with no redeploy.</span>
-          </div>
-          <div class="arch-row">
-            <span class="arch-key">Frontend</span>
-            <span class="arch-val">Vanilla JavaScript. No framework, no runtime
-              dependencies, two entry points and one stylesheet.</span>
           </div>
         </div>
       </div>

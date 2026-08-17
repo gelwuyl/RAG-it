@@ -243,36 +243,115 @@ section { padding: 88px 0; }
   display: block;
 }
 
-/* ---------- pipeline diagram ---------- */
+/* ---------- pipeline: the diagram and its constraints, vertical ----------
+
+   The horizontal SVG and the separate Architecture table are gone; both are
+   this. Each stage box sits in a left rail with its architecture note pinned
+   in the gutter beside it, so the constraint that explains a stage is next to
+   the stage instead of four screens further down.
+
+   Everything is CSS, not SVG: the boxes are text that wraps and scales with
+   the type scale, and the flow reflows to one column on a phone. The old
+   980-wide viewBox could only scroll sideways. */
 
 .pipeline-intro {
-  max-width: 62ch; color: var(--muted); margin-bottom: 36px;
+  max-width: 62ch; color: var(--muted); margin-bottom: 40px;
   font-size: var(--text-content); line-height: var(--lh-content);
 }
-.pipeline-svg { width: 100%; height: auto; display: block; }
-/* The diagram is wide by nature; it scrolls in its own box rather than
-   forcing the page to scroll sideways. */
-.pipeline-scroll { overflow-x: auto; padding-bottom: 8px; }
-.pipeline-scroll > svg { min-width: 660px; }
 
-.stage-notes {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 22px;
-  margin-top: 34px;
+.trace { display: grid; grid-template-columns: 268px minmax(0, 1fr); gap: 0 48px; }
+
+.trace-rail { display: grid; }
+.trace-step { position: relative; padding-bottom: 30px; }
+.trace-step:last-child { padding-bottom: 0; }
+.trace-box {
+  background: var(--panel);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  padding: 13px 16px;
 }
-.stage-note-name {
-  font-family: var(--font-mono);
-  font-size: var(--text-micro);
-  letter-spacing: var(--tracking-telemetry);
-  text-transform: uppercase;
-  color: var(--primary-ink);
+/* One highlighted stage, matching the old SVG's highlighted GENERATE node:
+   the point of the whole pipeline is the cited answer. */
+.trace-step.is-live .trace-box { border-color: var(--primary); }
+/* Indexing is an INPUT to retrieval, not a stage a question passes through.
+   Dashed and indented, as the old diagram drew it, for the same reason. */
+.trace-step.is-aside .trace-box {
+  border-style: dashed;
+  background: transparent;
+  margin-left: 40px;
+}
+.trace-id {
   display: block;
-  padding-bottom: 8px;
-  margin-bottom: 10px;
-  border-bottom: 1px solid var(--border);
+  font-family: var(--font-mono); font-size: var(--text-nano); font-weight: 700;
+  letter-spacing: var(--tracking-telemetry); text-transform: uppercase;
+  color: var(--faint);
+  margin-bottom: 5px;
 }
-.stage-note-text { color: var(--muted); font-size: var(--text-sm); }
+.trace-step.is-live .trace-id { color: var(--primary-ink); }
+.trace-label {
+  font-family: var(--font-mono); font-size: var(--text-sm); font-weight: 700;
+  letter-spacing: 0.05em; text-transform: uppercase; color: var(--text);
+}
+.trace-sub {
+  display: block; margin-top: 4px;
+  font-family: var(--font-sans); font-size: var(--text-sm);
+  color: var(--muted);
+  letter-spacing: 0; text-transform: none; font-weight: 400;
+}
+
+/* Connector + arrowhead, in CSS. A 1px pseudo-element and a border-triangle
+   beat path data that has to be re-measured whenever a box changes height. */
+.trace-step:not(:last-child)::after {
+  content: "";
+  position: absolute; left: 26px; bottom: 8px; height: 22px;
+  width: 1px; background: var(--border-strong);
+}
+.trace-step:not(:last-child)::before {
+  content: "";
+  position: absolute; left: 22.5px; bottom: 3px;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 6px solid var(--border-strong);
+}
+/* The indented aside branch: dashed edge, offset by its own margin. */
+.trace-step.is-aside::after {
+  left: 66px; width: 0; background: none;
+  border-left: 1px dashed var(--border-strong);
+}
+.trace-step.is-aside::before { left: 62.5px; }
+
+.trace-notes { display: grid; }
+.trace-note { padding: 13px 0 30px; border-top: 1px solid var(--border); }
+.trace-note:first-child { border-top: 0; padding-top: 0; }
+.trace-note p { margin: 7px 0 0; color: var(--muted); font-size: var(--text-prose); max-width: 58ch; }
+
+.trace-key {
+  display: block;
+  font-family: var(--font-mono); font-size: var(--text-nano);
+  letter-spacing: var(--tracking-telemetry); text-transform: uppercase;
+  color: var(--faint);
+}
+.trace-note code, .platform code {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  color: var(--primary-ink);
+}
+
+/* Architecture facts that belong to no single stage. */
+.platform {
+  margin-top: 36px; padding-top: 24px;
+  border-top: 1px solid var(--border);
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 24px 40px;
+}
+.platform p { margin: 7px 0 0; color: var(--muted); font-size: var(--text-prose); }
+
+/* One column: the notes fall under the rail, so it reads diagram-then-notes.
+   Same content, same order, no sideways scroll. */
+@media (max-width: 860px) {
+  .trace { grid-template-columns: minmax(0, 1fr); gap: 34px; }
+  .trace-note p { max-width: none; }
+}
 
 /* ---------- feature cards ---------- */
 
@@ -294,7 +373,7 @@ section { padding: 88px 0; }
   font-size: 1.06rem; font-weight: 650; margin-bottom: 10px;
   letter-spacing: -0.01em;
 }
-.card-text { color: var(--muted); font-size: var(--text-sm); }
+.card-text { color: var(--muted); font-size: var(--text-prose); }
 .card-text code {
   font-family: var(--font-mono);
   font-size: 0.92em;
@@ -302,31 +381,6 @@ section { padding: 88px 0; }
   border: 1px solid var(--border);
   border-radius: 4px;
   padding: 1px 5px;
-}
-
-/* ---------- architecture list ---------- */
-
-.arch { display: grid; gap: 0; border-top: 1px solid var(--border); }
-.arch-row {
-  display: grid;
-  grid-template-columns: minmax(150px, 220px) 1fr;
-  gap: 20px;
-  padding: 20px 0;
-  border-bottom: 1px solid var(--border);
-}
-.arch-key {
-  font-family: var(--font-mono);
-  font-size: var(--text-micro);
-  letter-spacing: var(--tracking-telemetry);
-  text-transform: uppercase;
-  color: var(--muted);
-  padding-top: 3px;
-}
-.arch-val { color: var(--text); font-size: var(--text-sm); }
-.arch-val code {
-  font-family: var(--font-mono);
-  font-size: 0.92em;
-  color: var(--primary-ink);
 }
 
 /* ---------- footer ---------- */
@@ -359,7 +413,9 @@ section { padding: 88px 0; }
 @media (max-width: 640px) {
   section { padding: 60px 0; }
   .hero { padding: 76px 0 64px; }
-  .arch-row { grid-template-columns: 1fr; gap: 6px; }
+  .trace-step.is-aside .trace-box { margin-left: 24px; }
+  .trace-step.is-aside::after { left: 50px; }
+  .trace-step.is-aside::before { left: 46.5px; }
   .tile { border-right: 0; border-bottom: 1px solid var(--border); }
   .tile:last-child { border-bottom: 0; }
   .theme-toggle { top: 12px; right: 12px; }

@@ -62,6 +62,15 @@ for (const theme of THEMES) {
     const errors = [];
     page.on("pageerror", (e) => errors.push(String(e)));
 
+    // A CSS syntax error is served as a 500 by Vite and produces NO page
+    // error — the document renders, unstyled, and every other check here
+    // passes. That shipped an entirely unstyled landing page once: no
+    // overflow (nothing is laid out), correct data-theme (set by inline JS),
+    // "All clean". Failed responses are now failures.
+    page.on("response", (r) => {
+      if (r.status() >= 400) errors.push(`${r.status()} ${r.url()}`);
+    });
+
     try {
       await page.goto(BASE + page_.path, { waitUntil: "domcontentloaded" });
       await page.evaluate(
@@ -82,6 +91,19 @@ for (const theme of THEMES) {
         path: `shots/${page_.name}/${theme}/${bp.name}.png`,
         fullPage: bp.width < 768, // mobile stacks and scrolls; capture all of it
       });
+
+      // Belt and braces on the same failure: assert the stylesheet actually
+      // took effect. Vite injects CSS as a JS module in dev, so there is no
+      // <link> to inspect — but an unstyled body has a transparent background
+      // and the default 16px, and a styled one never does.
+      const styled = await page.evaluate(() => {
+        const s = getComputedStyle(document.body);
+        return s.backgroundColor !== "rgba(0, 0, 0, 0)" && s.backgroundColor !== "";
+      });
+      if (!styled) {
+        console.warn(`  ! ${page_.name} ${theme}/${bp.name}: body has no background — stylesheet did not apply`);
+        failures++;
+      }
 
       // No horizontal scroll at any breakpoint is a hard rule in the plan.
       const overflow = await page.evaluate(
