@@ -26,7 +26,7 @@
         }
       })();
     </script>
-    <link rel="stylesheet" href="/styles.css?v=10" />
+    <link rel="stylesheet" href="/styles.css?v=11" />
     <script>
       // Boot diagnostics: collect load/runtime errors so a broken app.js
       // shows a visible message instead of a silently dead UI.
@@ -180,28 +180,31 @@
             <div id="eval-questions" class="eval-questions"></div>
           </div>
         </aside>
+
+        <!-- Excerpt: under the chat column only, not the full width.
+             It is the payoff for clicking a citation and belongs beside the
+             conversation, not as a footer under the file list. -->
+        <section class="pane excerpt-pane" id="excerpt-pane">
+          <div class="pane-head">
+            <h2 class="pane-title">Excerpt</h2>
+            <span id="excerpt-title" class="excerpt-title"></span>
+            <span id="excerpt-ref" class="excerpt-ref muted small"></span>
+            <button id="excerpt-close" class="pane-toggle hidden" type="button"
+              title="Close the excerpt">✕</button>
+          </div>
+          <div class="pane-scroll">
+            <div class="excerpt-empty empty-state empty-state-row">
+              <span class="empty-icon" aria-hidden="true">❝</span>
+              <p class="empty-text">Click a citation <span class="cite-demo">[1]</span>
+                to read the exact passage an answer was grounded in.</p>
+            </div>
+            <div id="excerpt-content" class="hidden">
+              <pre id="excerpt-text"></pre>
+            </div>
+          </div>
+        </section>
       </div>
 
-      <!-- Bottom: excerpt (full width under sources + chat + evaluation) -->
-      <section class="pane excerpt-pane" id="excerpt-pane">
-        <div class="pane-head">
-          <h2 class="pane-title">Excerpt</h2>
-          <span id="excerpt-title" class="excerpt-title"></span>
-          <span id="excerpt-ref" class="excerpt-ref muted small"></span>
-          <button id="excerpt-close" class="pane-toggle hidden" type="button"
-            title="Close the excerpt">✕</button>
-        </div>
-        <div class="pane-scroll">
-          <div class="excerpt-empty empty-state empty-state-row">
-            <span class="empty-icon" aria-hidden="true">❝</span>
-            <p class="empty-text">Click a citation <span class="cite-demo">[1]</span>
-              to read the exact passage an answer was grounded in.</p>
-          </div>
-          <div id="excerpt-content" class="hidden">
-            <pre id="excerpt-text"></pre>
-          </div>
-        </div>
-      </section>
     </div>
 
     <div id="toast" class="toast hidden"></div>
@@ -326,6 +329,6 @@
       </div>
     </div>
 
-    <script type="module" src="/app.js?v=13"></script>
+    <script type="module" src="/app.js?v=14"></script>
   </body>
 </html>

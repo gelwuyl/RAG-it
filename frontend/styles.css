@@ -2,10 +2,16 @@
    RAG-it — vanilla CSS.
 
    Layout contract (the thing that was broken):
-   `.app-shell` is a single-column grid of three rows — topbar / panes /
-   excerpt. The three side-by-side panes live inside `.panes`, which is its
-   OWN grid. Grid areas only apply to direct children, so `sources|chat|eval`
-   must be declared on `.panes`, never on `.app-shell`.
+   `.app-shell` is a single-column grid of two rows — topbar / panes. ALL FOUR
+   panes live inside `.panes`, which is its OWN grid. Grid areas only apply to
+   direct children, so `sources|chat|eval|excerpt` must be declared on
+   `.panes`, never on `.app-shell`.
+
+   Excerpt was a third `.app-shell` row until it moved here. As a sibling of
+   the whole grid it could only ever be full-bleed, so it ran under Sources at
+   every width; inside `.panes` it can occupy the chat column. Anything that
+   needs to align to a pane boundary has to be in this grid — a separate grid
+   cannot align to another's tracks without subgrid.
 
    Colour, type and metric values live in tokens.css. Vite inlines this import
    at build time, so it stays one request in production; the landing page links
@@ -148,11 +154,10 @@ input::placeholder, textarea::placeholder { color: var(--faint); }
 .app-shell {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr);
   grid-template-areas:
     "top"
-    "panes"
-    "excerpt";
+    "panes";
   height: 100vh;
   height: 100dvh;
   overflow: hidden;
@@ -318,13 +323,29 @@ input::placeholder, textarea::placeholder { color: var(--faint); }
 }
 #hybrid-toggle.on:hover, #web-toggle.on:hover { background: var(--primary-hover); }
 
-/* ---------- panes grid (sources | chat | eval) ---------- */
+/* ---------- panes grid ----------
+
+   ALL FOUR panes live in this one grid, excerpt included. It used to be a
+   sibling row on .app-shell, which meant it stretched under Sources at every
+   width — a full-bleed footer under the file list, when what it actually is
+   is the payoff for clicking a citation in the conversation.
+
+   Being in the same grid is what lets it sit in the chat COLUMN: a separate
+   grid cannot align to another grid's tracks without subgrid.
+
+   To change the arrangement, edit `grid-template-areas` here and in the two
+   media queries below — that is the whole layout. Nothing positions itself by
+   margin or width, so no rule has to be hunted down to keep up. */
 
 .panes {
   grid-area: panes;
   display: grid;
   grid-template-columns: var(--sources-w) minmax(0, 1fr) var(--eval-w);
-  grid-template-areas: "sources chat eval";
+  /* Chat takes the free height; excerpt sizes to its content, capped below. */
+  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "sources chat    eval"
+    "sources excerpt eval";
   min-width: 0;
   min-height: 0;
   overflow: hidden;
@@ -345,6 +366,10 @@ input::placeholder, textarea::placeholder { color: var(--faint); }
   grid-area: excerpt;
   border-top: 1px solid var(--border);
   max-height: 34vh;
+  /* Matches .chat-pane so the conversation column reads as one continuous
+     edge rather than as two stacked boxes. Dropped at the widths where the
+     excerpt spans the full row instead. */
+  border-right: 1px solid var(--border);
 }
 
 /* shared pane chrome: sticky head + scrolling body + optional foot */
@@ -919,18 +944,21 @@ fieldset legend {
   :root { --sources-w: 260px; --eval-w: 312px; }
 }
 
-/* --- Tablet: Sources | Chat side by side, Evaluation collapses to a
-       full-width strip beneath them (expandable, scrolls internally). --- */
+/* --- Tablet: Sources | Chat side by side. Excerpt and Evaluation stack
+       beneath the CHAT column, not across the full width — Sources keeps its
+       own column all the way down. Evaluation was a full-bleed strip here,
+       which is what made it start at the left edge of the screen. --- */
 @media (min-width: 768px) and (max-width: 1099px) {
   :root { --sources-w: 236px; }
   .panes {
     grid-template-columns: var(--sources-w) minmax(0, 1fr);
-    grid-template-rows: minmax(0, 1fr) auto;
+    grid-template-rows: minmax(0, 1fr) auto auto;
     grid-template-areas:
       "sources chat"
-      "eval    eval";
+      "sources excerpt"
+      "sources eval";
   }
-  .chat-pane { border-right: none; }
+  .chat-pane, .excerpt-pane { border-right: none; }
   .eval-pane {
     border-top: 1px solid var(--border);
     max-height: 46vh;
@@ -968,18 +996,22 @@ fieldset legend {
   .user-chip { max-width: 190px; }
   .switch { flex: 1 1 auto; justify-content: space-between; }
 
+  /* One column, so "contained in the chat column" is meaningless here —
+     everything is full width by definition. Order only: the excerpt follows
+     the conversation it belongs to, and Evaluation trails as reference. */
   .panes {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto auto auto;
+    grid-template-rows: auto auto auto auto;
     grid-template-areas:
       "sources"
       "chat"
+      "excerpt"
       "eval";
     overflow: visible;
   }
 
   .pane { overflow: visible; }
-  .sources-pane, .chat-pane { border-right: none; }
+  .sources-pane, .chat-pane, .excerpt-pane { border-right: none; }
   .sources-pane, .eval-pane { border-bottom: 1px solid var(--border); }
   .pane-head { position: sticky; top: 0; z-index: 5; }
 
