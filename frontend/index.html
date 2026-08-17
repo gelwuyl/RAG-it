@@ -22,7 +22,7 @@
         }
       })();
     </script>
-    <link rel="stylesheet" href="/landing.css?v=2" />
+    <link rel="stylesheet" href="/landing.css?v=3" />
   </head>
   <body>
     <button id="theme-toggle" class="theme-toggle" type="button"
@@ -57,48 +57,11 @@
       </div>
     </header>
 
-    <!-- ===================== 01 · metric tiles ====================== -->
+    <!-- ====================== 01 · the pipeline ===================== -->
     <section>
       <div class="wrap">
         <div class="section-label">
           <span class="section-num">01</span>
-          <span class="section-name">By the numbers</span>
-        </div>
-        <!-- Structural facts, verifiable from the repo: eval/golden.jsonl has 46
-             lines, eval/corpus/ has 10 files, the Neon `chunks` table has one
-             fixed vector(768) column, and api/index.py is the only function.
-             Deliberately NOT benchmark scores — those need a published run
-             behind them and would go stale here without anything noticing. -->
-        <div class="tiles">
-          <div class="tile">
-            <span class="tile-id">A1</span>
-            <span class="tile-num">46</span>
-            <span class="tile-label">Golden questions</span>
-          </div>
-          <div class="tile">
-            <span class="tile-id">A2</span>
-            <span class="tile-num">10</span>
-            <span class="tile-label">Corpus documents</span>
-          </div>
-          <div class="tile">
-            <span class="tile-id">A3</span>
-            <span class="tile-num">768</span>
-            <span class="tile-label">Vector dimensions</span>
-          </div>
-          <div class="tile">
-            <span class="tile-id">A4</span>
-            <span class="tile-num">1</span>
-            <span class="tile-label">Serverless function</span>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ====================== 02 · the pipeline ===================== -->
-    <section>
-      <div class="wrap">
-        <div class="section-label">
-          <span class="section-num">02</span>
           <span class="section-name">The pipeline</span>
         </div>
 
@@ -239,6 +202,43 @@
             <p class="stage-note-text">A second model checks the answer against
               its own sources. When it cannot decide, that is reported as
               ungraded — never as a failure.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== 02 · metric tiles ====================== -->
+    <section>
+      <div class="wrap">
+        <div class="section-label">
+          <span class="section-num">02</span>
+          <span class="section-name">By the numbers</span>
+        </div>
+        <!-- Structural facts, verifiable from the repo: eval/golden.jsonl has 46
+             lines, eval/corpus/ has 10 files, the Neon `chunks` table has one
+             fixed vector(768) column, and api/index.py is the only function.
+             Deliberately NOT benchmark scores — those need a published run
+             behind them and would go stale here without anything noticing. -->
+        <div class="tiles">
+          <div class="tile">
+            <span class="tile-id">A1</span>
+            <span class="tile-num">46</span>
+            <span class="tile-label">Golden questions</span>
+          </div>
+          <div class="tile">
+            <span class="tile-id">A2</span>
+            <span class="tile-num">10</span>
+            <span class="tile-label">Corpus documents</span>
+          </div>
+          <div class="tile">
+            <span class="tile-id">A3</span>
+            <span class="tile-num">768</span>
+            <span class="tile-label">Vector dimensions</span>
+          </div>
+          <div class="tile">
+            <span class="tile-id">A4</span>
+            <span class="tile-num">1</span>
+            <span class="tile-label">Serverless function</span>
           </div>
         </div>
       </div>
