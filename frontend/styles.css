@@ -33,7 +33,36 @@ h1, h2, h3 { line-height: 1.3; }
 
 .hidden { display: none !important; }
 .muted { color: var(--muted); }
-.small { font-size: 12px; }
+.small { font-size: var(--text-xs); }
+
+/* ==========================================================================
+   THE TWO REGISTERS (PRODUCT_UX_PLAN.md §1) — the contract, not a rule.
+
+   There is no `.telemetry` utility class: this is plain CSS with no
+   preprocessor, so a shared class would have to be applied in markup that is
+   half hand-written HTML and half JS template strings. Instead each rule
+   states the register it belongs to. What keeps them consistent is that they
+   all draw from the same four tokens, so the register can be retuned in one
+   place.
+
+   TELEMETRY — scores, counts, status, model ids, pane titles, latency:
+       font-family: var(--font-mono);
+       font-size:   var(--text-micro)  (or --text-nano when subordinate)
+       letter-spacing: var(--tracking-telemetry);
+       text-transform: uppercase;
+       color: var(--muted)  (or --faint when subordinate)
+   Deliberately LOW contrast. These are readings, not headlines.
+
+   CONTENT — the answer, its citations, the excerpt:
+       font-size:   var(--text-content);
+       line-height: var(--lh-content);
+       font-family: var(--font-sans);
+
+   The dividing line is PROSE, not importance: anything meant to be read as a
+   sentence stays in the content register even when it sits inside a telemetry
+   block. That is why .eval-gloss and .src-error are sans while the labels
+   beside them are mono.
+   ========================================================================== */
 .warn { color: var(--warn); background: var(--warn-bg); border: 1px solid var(--warn-border); border-radius: var(--r-sm, 6px); padding: 6px 10px; margin: 0 0 12px; }
 .error-text { color: var(--error); font-size: 13px; }
 
@@ -329,8 +358,11 @@ input::placeholder, textarea::placeholder { color: var(--faint); }
   background: var(--panel);
   flex-shrink: 0;
 }
+/* Pane titles are chrome, not content — telemetry register. */
 .pane-title {
-  font-size: 13px; font-weight: 700; letter-spacing: 0.02em;
+  font-family: var(--font-mono);
+  font-size: var(--text-micro); font-weight: 500;
+  letter-spacing: var(--tracking-telemetry);
   text-transform: uppercase; color: var(--muted);
   white-space: nowrap;
 }
@@ -373,7 +405,9 @@ input::placeholder, textarea::placeholder { color: var(--faint); }
 .pane.collapsed .pane-toggle { transform: rotate(180deg); }
 
 .count-pill {
-  font-size: 11px; font-weight: 700;
+  font-family: var(--font-mono);
+  font-size: var(--text-nano); font-weight: 500;
+  letter-spacing: 0.06em; font-variant-numeric: tabular-nums;
   color: var(--muted); background: var(--panel-sunken);
   border: 1px solid var(--border);
   border-radius: var(--r-pill);
@@ -426,7 +460,7 @@ input::placeholder, textarea::placeholder { color: var(--faint); }
 .drop-icon {
   width: 26px; height: 26px; display: grid; place-items: center;
   border-radius: 50%; background: var(--primary-soft);
-  color: var(--primary); font-size: 14px; font-weight: 700;
+  color: var(--primary-ink); font-size: 14px; font-weight: 700;
 }
 .drop-title { font-size: 13px; font-weight: 600; color: var(--text); }
 .drop-hint { font-size: 11px; color: var(--faint); }
@@ -481,15 +515,24 @@ input::placeholder, textarea::placeholder { color: var(--faint); }
   grid-column: 2 / span 2;
   display: flex; align-items: center; flex-wrap: wrap; gap: 6px;
 }
-.src-meta { font-size: 11px; color: var(--faint); }
+/* Chunk counts and byte sizes are readings — telemetry register. */
+.src-meta {
+  font-family: var(--font-mono);
+  font-size: var(--text-nano); color: var(--faint);
+  letter-spacing: 0.06em; text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+}
+/* NOT telemetry: an error is a sentence the user has to read and act on. */
 .src-error {
   grid-column: 2 / span 2;
-  font-size: 11px; color: var(--error);
+  font-size: var(--text-micro); color: var(--error);
   overflow-wrap: anywhere;
 }
 
 .badge-status {
-  font-size: 10px; font-weight: 700; letter-spacing: 0.03em;
+  font-family: var(--font-mono);
+  font-size: var(--text-nano); font-weight: 500;
+  letter-spacing: var(--tracking-telemetry);
   text-transform: uppercase;
   border-radius: var(--r-pill);
   padding: 1px 8px;
@@ -527,7 +570,7 @@ input::placeholder, textarea::placeholder { color: var(--faint); }
   padding: 6px 9px; border-radius: var(--r-sm); cursor: pointer; font-size: 13px;
 }
 .chat-item:hover { background: var(--hover-strong); }
-.chat-item.active { background: var(--primary-soft); color: var(--primary); font-weight: 600; }
+.chat-item.active { background: var(--primary-soft); color: var(--primary-ink); font-weight: 600; }
 .chat-item .title {
   flex: 1; min-width: 0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -554,12 +597,16 @@ input::placeholder, textarea::placeholder { color: var(--faint); }
 }
 .messages > .empty-state { margin: auto; background: var(--panel); }
 
+/* CONTENT REGISTER. The answer is the product; everything else in this app is
+   instrumentation around it. Large sans, generous leading, roomy padding.
+   The max-width is a MEASURE, not a layout fraction — ~68 characters is the
+   comfortable reading line, and 78% of a wide monitor is far past it. */
 .msg {
-  max-width: min(78%, 720px);
-  padding: 11px 14px;
+  max-width: min(78%, 68ch);
+  padding: 14px 18px;
   border-radius: var(--r-lg);
-  line-height: 1.55;
-  font-size: 14px;
+  line-height: var(--lh-content);
+  font-size: var(--text-content);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -579,25 +626,94 @@ input::placeholder, textarea::placeholder { color: var(--faint); }
 .msg.assistant.not-found { background: var(--not-found-bg); border-color: var(--not-found-border); font-style: italic; }
 .msg.pending { color: var(--muted); font-style: italic; }
 
-/* readable evaluation block under each assistant message */
+/* Per-answer quality readout (PRODUCT_UX_PLAN.md §6).
+   One ~20px line by default; the four detail rows are one click away. */
 .eval-block {
-  margin-top: 10px;
-  border-top: 1px dashed var(--border-strong);
-  padding-top: 7px;
+  margin-top: 12px;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 6px;
   font-family: var(--font-mono);
 }
-.eval-row { display: flex; align-items: baseline; gap: 8px; font-size: 11px; flex-wrap: wrap; }
-.eval-label { color: var(--muted); min-width: 92px; font-weight: 600; }
-.eval-value { font-weight: 700; }
+
+.eval-chip {
+  font: inherit;
+  display: flex; align-items: center; gap: 9px;
+  width: 100%;
+  background: none; border: 0; padding: 2px 0;
+  cursor: pointer; text-align: left;
+  color: var(--muted);
+  font-size: var(--text-micro);
+  letter-spacing: var(--tracking-telemetry);
+  text-transform: uppercase;
+}
+.eval-chip:hover { color: var(--text); }
+.eval-dot {
+  width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
+  background: var(--muted);
+}
+/* Lime means ACTIVE/LIVE elsewhere in the app, so it cannot also mean "good"
+   here. Grounded is neutral-bright, weak is red, ungraded is hollow —
+   deliberately reading as "no reading taken" rather than as a bad one. */
+.eval-dot[data-state="grounded"] { background: var(--text); }
+.eval-dot[data-state="weak"]     { background: var(--fail); }
+.eval-dot[data-state="ungraded"] {
+  background: none; border: 1px solid var(--faint);
+}
+.eval-state { flex-shrink: 0; }
+.eval-meter {
+  position: relative;
+  flex: 1; min-width: 40px; max-width: 160px;
+  height: 3px; border-radius: var(--r-pill);
+  background: var(--track);
+  overflow: hidden;
+}
+.eval-meter-fill {
+  position: absolute; left: 0; top: 0; bottom: 0;
+  background: var(--muted); border-radius: var(--r-pill);
+}
+.eval-meter-tick {
+  position: absolute; top: -2px; bottom: -2px; width: 1px;
+  background: var(--text); opacity: 0.5;
+}
+.eval-meter-val { flex-shrink: 0; font-variant-numeric: tabular-nums; }
+.eval-caret {
+  margin-left: auto; flex-shrink: 0;
+  transition: transform 0.12s ease;
+}
+.eval-chip[aria-expanded="true"] .eval-caret { transform: rotate(90deg); }
+
+.eval-detail {
+  display: flex; flex-direction: column; gap: 3px;
+  padding-top: 2px;
+}
+.eval-row {
+  display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+  font-size: var(--text-micro);
+  letter-spacing: var(--tracking-telemetry);
+}
+.eval-label {
+  color: var(--muted); min-width: 104px; font-weight: 500;
+  text-transform: uppercase;
+}
+.eval-value { font-weight: 700; font-variant-numeric: tabular-nums; }
 .eval-value.pass { color: var(--pass); }
 .eval-value.fail { color: var(--fail); }
-.eval-gloss { color: var(--faint); font-size: 10px; }
+/* The gloss is prose explaining a reading, so it leaves the telemetry register
+   entirely — sans, no uppercase, normal tracking. Mono letterspaced sentences
+   are readable as labels and painful as explanations, and these exist to be
+   read. It is the LABEL that is the instrument, not its footnote. */
+.eval-gloss {
+  font-family: var(--font-sans);
+  color: var(--faint); font-size: var(--text-xs);
+  letter-spacing: normal; text-transform: none;
+  line-height: 1.5;
+}
 
 .cite-marker {
-  display: inline-block; background: var(--primary-soft); color: var(--primary);
+  display: inline-block; background: var(--primary-soft); color: var(--primary-ink);
   border-radius: 4px; padding: 0 5px; margin: 0 2px; font-size: 12px;
   font-weight: 600; cursor: pointer; user-select: none;
 }
@@ -609,13 +725,17 @@ input::placeholder, textarea::placeholder { color: var(--faint); }
   border-top: 1px solid var(--border);
 }
 .citations-label {
-  font-size: 10px; font-weight: 700; letter-spacing: 0.04em;
+  font-family: var(--font-mono);
+  font-size: var(--text-nano); font-weight: 500;
+  letter-spacing: var(--tracking-telemetry);
   text-transform: uppercase; color: var(--faint);
   margin-right: 2px;
 }
+/* Citation chips are content, not telemetry — they are the reader's route into
+   the source, and the plan calls them "obvious, tappable affordances" (§8). */
 .cite-chip {
   font: inherit;
-  font-size: 12px;
+  font-size: var(--text-sm);
   display: inline-flex; align-items: center; gap: 5px;
   max-width: 100%;
   border: 1px solid var(--border-strong); border-radius: var(--r-pill);
@@ -623,8 +743,8 @@ input::placeholder, textarea::placeholder { color: var(--faint); }
   background: var(--panel-sunken); color: var(--text);
   transition: background 0.12s ease, border-color 0.12s ease;
 }
-.cite-chip:hover { background: var(--primary-soft); border-color: var(--primary-soft-border); color: var(--primary); }
-.cite-chip .cite-num { font-weight: 700; color: var(--primary); }
+.cite-chip:hover { background: var(--primary-soft); border-color: var(--primary-soft-border); color: var(--primary-ink); }
+.cite-chip .cite-num { font-weight: 700; color: var(--primary-ink); }
 .cite-chip .cite-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 22ch; }
 
 .ask-form {
@@ -647,8 +767,16 @@ input::placeholder, textarea::placeholder { color: var(--faint); }
 .eval-scorecard:empty { display: none; }
 .score-row { display: flex; flex-direction: column; gap: 3px; }
 .score-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
-.score-name { font-size: 12.5px; font-weight: 600; }
-.score-val { font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.score-name {
+  font-family: var(--font-mono);
+  font-size: var(--text-micro); font-weight: 500;
+  letter-spacing: var(--tracking-telemetry); text-transform: uppercase;
+  color: var(--muted);
+}
+.score-val {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm); font-weight: 700; font-variant-numeric: tabular-nums;
+}
 .score-val.pass { color: var(--pass); }
 .score-val.fail { color: var(--fail); }
 .score-bar {
@@ -659,7 +787,10 @@ input::placeholder, textarea::placeholder { color: var(--faint); }
 .score-fill.pass { background: var(--pass); }
 .score-fill.fail { background: var(--fail); }
 .score-target { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--inverse-bg); opacity: 0.55; }
-.score-foot { font-size: 10px; color: var(--faint); }
+.score-foot {
+  font-family: var(--font-mono);
+  font-size: var(--text-nano); color: var(--faint); letter-spacing: 0.04em;
+}
 
 .eval-questions { display: flex; flex-direction: column; gap: 8px; }
 .eval-questions:empty { display: none; }
@@ -681,8 +812,10 @@ input::placeholder, textarea::placeholder { color: var(--faint); }
 .eval-q-io { display: flex; flex-direction: column; gap: 4px; }
 .io-col { display: flex; gap: 8px; font-size: 12px; align-items: baseline; }
 .io-label {
-  flex-shrink: 0; min-width: 60px; font-weight: 700; color: var(--faint);
-  font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em;
+  flex-shrink: 0; min-width: 64px; font-weight: 500; color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: var(--text-nano); text-transform: uppercase;
+  letter-spacing: var(--tracking-telemetry);
 }
 .io-text { color: var(--text); line-height: 1.45; min-width: 0; overflow-wrap: anywhere; }
 
@@ -696,16 +829,24 @@ input::placeholder, textarea::placeholder { color: var(--faint); }
 .excerpt-ref { margin-left: auto; white-space: nowrap; }
 .excerpt-pane .pane-toggle { display: inline-flex; margin-left: 8px; }
 .cite-demo {
-  background: var(--primary-soft); color: var(--primary);
+  background: var(--primary-soft); color: var(--primary-ink);
   border-radius: 4px; padding: 0 5px; font-size: 12px; font-weight: 600;
 }
+/* CONTENT REGISTER. This is the payoff for clicking a citation — the exact
+   passage an answer was grounded in — so it is read, not scanned. It was set
+   in 12.5px mono, which said "log output" about the one thing in the app most
+   worth reading. Sans and larger now; the sunken panel still marks it as
+   verbatim source rather than the app's own prose. */
 #excerpt-text {
   white-space: pre-wrap;
-  font-family: var(--font-mono);
-  font-size: 12.5px; line-height: 1.65;
+  /* Set explicitly, not inherited: this is a <pre>, whose UA stylesheet forces
+     monospace. Dropping the old font-family declaration was not enough — the
+     browser default silently took over and nothing looked changed. */
+  font-family: var(--font-sans);
+  font-size: var(--text-sm); line-height: var(--lh-content);
   background: var(--panel-sunken);
   border: 1px solid var(--border); border-radius: var(--r-md);
-  padding: 12px;
+  padding: 14px 16px;
   overflow-wrap: anywhere;
 }
 

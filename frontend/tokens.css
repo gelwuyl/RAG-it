@@ -11,10 +11,62 @@
    If a value could differ between themes, it belongs here.
    ========================================================================== */
 
+/* ---------- JetBrains Mono (OFL-1.1, see public/fonts/OFL.txt) ----------
+
+   Self-hosted rather than CDN-loaded: the frontend is dependency-free and this
+   keeps it CSP-clean with no third-party request on load.
+
+   Only two weights ship. Every additional cut is ~93KB for text that is mostly
+   11px labels, so Regular and Bold are the two the stylesheet actually uses at
+   size. Rules asking for 500 resolve to 400 by CSS font-matching, which is the
+   intended result — the request records the intent without costing a file.
+
+   `swap` so a slow font never blanks the labels; the system mono stack in
+   --font-mono below is the fallback and is metrically close enough that the
+   swap is not a visible jump. */
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/JetBrainsMono-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/JetBrainsMono-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   /* ---------- type ---------- */
   --font-sans: "Segoe UI", system-ui, -apple-system, "Inter", Roboto, Arial, sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* ---------- type scale: two registers (PRODUCT_UX_PLAN.md §1) ----------
+
+     The whole design rests on the contrast between these two. A mono
+     micro-label reads as instrumentation *because* it sits beside something
+     large and humane; if everything is HUD then nothing is, and the answer —
+     which is the actual product — drowns in its own dashboard.
+
+     CONTENT register: the answer, its citations, the excerpt. Reading-optimized
+     and dominant. TELEMETRY register: scores, latency, counts, model ids,
+     status. Mono, uppercase, letterspaced, small, deliberately LOW contrast.
+
+     Before this there were ~40 hardcoded sizes from 8px to 22px with no system,
+     which is why the eval readout carried as much visual weight as the answer. */
+  --text-content: 17px;   /* the answer — the one thing the reader came for */
+  --lh-content: 1.65;
+  --text-body: 14px;      /* general UI */
+  --text-sm: 13px;
+  --text-xs: 12px;
+  --text-micro: 11px;     /* telemetry register */
+  --text-nano: 10px;      /* telemetry, subordinate (glosses, footnotes) */
+  /* 0.12em is what makes uppercase mono read as an instrument label rather than
+     as shouting. Below ~0.08em it just looks like small caps text. */
+  --tracking-telemetry: 0.12em;
 
   /* ---------- surfaces ---------- */
   --bg: #f4f5f7;
@@ -29,21 +81,37 @@
   --faint: #9aa1ac;
   /* Text and icons sitting on a filled primary/accent/inverse surface. Named
      for the role, not the colour, because it stops being white in dark mode. */
-  --on-primary: #ffffff;
+  /* Lime is bright in both themes, so text on it is near-black in both. */
+  --on-primary: #101a00;
 
-  /* ---------- primary (blue) ---------- */
-  --primary: #2f5bd8;
-  --primary-hover: #2449b4;
-  --primary-soft: #eef3ff;
-  --primary-soft-border: #ccdcfb;
-  --primary-soft-hover: #d9e5fd;
+  /* ---------- primary = lime, in BOTH themes ----------
 
-  /* ---------- accent (purple) ---------- */
-  --accent: #7c3aed;
-  --accent-soft: #f4efff;
-  --accent-soft-border: #ddd0fb;
-  --accent-text: #5b21b6;
-  --accent-hover: #ece2ff;
+     Light used to be blue while dark was lime, so the two themes read as two
+     different products. They now share one identity (plan §12 step 13).
+
+     Light needs a deeper lime than dark: #c2f53f is tuned to glow against
+     near-black and turns washed-out and low-contrast on white. */
+  --primary: #a8e01f;
+  --primary-hover: #97cc17;
+  --primary-soft: #f4fbe0;
+  --primary-soft-border: #dcefb0;
+  --primary-soft-hover: #ecf7cc;
+
+  /* Lime as TEXT, which is a different problem from lime as a surface.
+     #a8e01f on white is roughly 1.5:1 — invisible. Any rule that paints lime
+     onto type uses this deep olive-lime instead; it still reads as the same
+     hue family while clearing contrast. In dark this collapses back to
+     --primary, because there lime-on-near-black is already high contrast. */
+  --primary-ink: #4a6b00;
+
+  /* ---------- accent folded into primary ----------
+     The purple existed only to separate the benchmark button. Under a
+     single-hot-accent system that separation is noise. */
+  --accent: #a8e01f;
+  --accent-soft: #f4fbe0;
+  --accent-soft-border: #dcefb0;
+  --accent-text: #4a6b00;
+  --accent-hover: #ecf7cc;
 
   /* ---------- interaction surfaces ---------- */
   --btn-hover: #f2f4f7;     /* default button, pane toggle */
@@ -54,17 +122,23 @@
   --overlay: rgba(16, 24, 40, 0.4);
 
   /* ---------- semantic status ---------- */
-  --user-bubble: #eaf1fe;
+  /* Neutral, not blue-tinted: the user's own turn should not carry the accent
+     hue, or it competes with the primary controls for the same meaning. */
+  --user-bubble: #eef1f4;
   --not-found-bg: #fff8ea;
   --not-found-border: #f0c987;
   --error: #d92d20;
   --warn: #b54708;
-  --pass: #15803d;
   --fail: #d92d20;
-  --pass-bg: #edfcf2;
   --fail-bg: #fef3f2;
   --warn-bg: #fffaeb;
-  --pass-border: #a6f4c5;
+  /* PASS is NEUTRAL in both themes (plan §6), not green. Lime beside green is
+     unreadable as two distinct meanings, so the verdict is carried by a
+     checkmark glyph and position instead of by colour — which leaves lime free
+     to mean "active" and red free to mean "failed", with nothing competing. */
+  --pass: #344054;
+  --pass-bg: #f2f4f7;
+  --pass-border: #d3d8e0;
   --fail-border: #fecdca;
   --warn-border: #fedf89;
   /* In-flight dot. Deliberately separate from --warn: one is "this is still
@@ -132,14 +206,15 @@
   /* Lime is bright; text on it must be near-black, not white. */
   --on-primary: #080d05;
 
-  /* ---------- primary = acid lime ----------
-     Light theme still uses blue here; the light palette is repaired last
-     (plan §12 step 13), at which point both themes share the lime identity. */
+  /* ---------- primary = acid lime ---------- */
   --primary: #c2f53f;
   --primary-hover: #d3ff63;
   --primary-soft: #18220c;
   --primary-soft-border: #2f4318;
   --primary-soft-hover: #212e10;
+  /* No split needed here: lime on near-black is already ~14:1, so text and
+     surface can be the same value. The light theme is where they diverge. */
+  --primary-ink: #c2f53f;
 
   /* ---------- accent folded into lime ----------
      The purple accent existed only to separate the benchmark button. Under a

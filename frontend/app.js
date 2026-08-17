@@ -12,6 +12,7 @@ const state = {
   currentCitations: [], // citations of the last assistant message, for the excerpt pane
   models: { chat: [], embedding: [] }, // proxy model catalog for the settings dropdowns
   evalRunning: false, // true while the chunked benchmark loop is driving
+  simThreshold: 0,    // live retrieval threshold, marked on the per-answer meter
 };
 
 // Human-friendly labels for known models. With live proxy discovery the
@@ -222,8 +223,10 @@ function applyGuestLocks() {
   const folderInput = $("folder-input");
   if (folderInput) {
     folderInput.disabled = state.isGuest;
+    // Short enough not to truncate in the narrow sources pane — the previous
+    // wording ended as "Folder sources need an accc".
     folderInput.placeholder = state.isGuest
-      ? "Folder sources need an account"
+      ? "Sign in to add folders"
       : "Add folder path (e.g. ~/documents)";
   }
 }
@@ -558,6 +561,10 @@ $("add-folder-btn").onclick = async () => {
 async function refreshHybridToggle() {
   try {
     const cfg = await api("/api/eval/config");
+    // Kept for the per-answer meter's threshold tick. Read from the live config
+    // rather than assumed: the config is hot-reloaded from the DB on every
+    // request, so a hardcoded value here would drift the moment anyone tunes it.
+    state.simThreshold = cfg.similarity_threshold ?? 0;
     const btn = $("hybrid-toggle");
     if (cfg.hybrid_search) {
       btn.textContent = "On";
@@ -993,9 +1000,28 @@ function renderAssistantContent(el, content, citations) {
   });
 }
 
-// Build a readable evaluation block from the full eval dict (preferred) or the
-// terse eval_line string (legacy). This is what makes "top sim" / "rel" / etc.
-// understandable instead of cryptic abbreviations.
+// One word for the whole quality verdict (PRODUCT_UX_PLAN.md §6).
+//
+// UNGRADED IS NOT FAILURE and must never render as one. A judge that 404s or
+// times out is a broken grader, not a bad answer — `faithful`/`relevant` are
+// nullable for exactly this reason, and showing "Weak" there would be a
+// confident false claim about the user's own documents. Null is checked BEFORE
+// falsity so a partial grading can never be read as a verdict.
+function evalVerdict(evalData) {
+  const { faithful, relevant } = evalData;
+  if (faithful == null && relevant == null) return { state: "ungraded", word: "Ungraded" };
+  if (faithful === false || relevant === false) return { state: "weak", word: "Weak" };
+  if (faithful == null || relevant == null) return { state: "ungraded", word: "Partly graded" };
+  return { state: "grounded", word: "Grounded" };
+}
+
+// Build the per-answer quality readout: one ~20px composite indicator that
+// expands to the full detail on click.
+//
+// It replaces four always-visible labelled rows with glosses, which carried
+// roughly as much visual weight as the answer itself — the exact inversion the
+// two-register rule exists to prevent (§1). The detail is not deleted, only
+// folded: it is genuinely useful, just not on every answer by default.
 function buildEvalBlock(evalData, evalLine) {
   const wrap = document.createElement("div");
   wrap.className = "eval-block";
@@ -1005,11 +1031,15 @@ function buildEvalBlock(evalData, evalLine) {
     if (evalData.top_sim != null) {
       rows.push(["Top similarity", evalData.top_sim.toFixed(2), "how closely the best retrieved chunk matched your question (1.00 = exact)"]);
     }
+    // PASS is a CHECKMARK in neutral foreground, not a green pill. Acid lime is
+    // the accent, and lime beside green is unreadable as two distinct meanings,
+    // so the verdict is carried by glyph and position. FAIL stays red — red is
+    // reserved exclusively for failure and destructive actions.
     if (evalData.faithful != null) {
-      rows.push(["Faithfulness", evalData.faithful ? "PASS" : "FAIL", evalData.faithful_reason || "every claim is supported by the sources"]);
+      rows.push(["Faithfulness", evalData.faithful ? "✓" : "FAIL", evalData.faithful_reason || "every claim is supported by the sources"]);
     }
     if (evalData.relevant != null) {
-      rows.push(["Relevancy", evalData.relevant ? "PASS" : "FAIL", evalData.relevant_reason || "the answer addresses your question"]);
+      rows.push(["Relevancy", evalData.relevant ? "✓" : "FAIL", evalData.relevant_reason || "the answer addresses your question"]);
     }
     // Grading unavailable is NOT a failure — say so explicitly rather than
     // leaving the row out (or, as before, rendering it as a confident FAIL).
@@ -1020,15 +1050,57 @@ function buildEvalBlock(evalData, evalLine) {
       rows.push(["Latency", `${(evalData.latency_ms / 1000).toFixed(1)} s`, "time to generate this answer"]);
     }
     if (rows.length) {
+      const { state, word } = evalVerdict(evalData);
+      const sim = evalData.top_sim;
+
+      const summary = document.createElement("button");
+      summary.type = "button";
+      summary.className = "eval-chip";
+      summary.setAttribute("aria-expanded", "false");
+
+      let meter = "";
+      if (sim != null) {
+        // The bar is top similarity on 0–1, which is a real per-answer value.
+        //
+        // Plan §6 asked for a tick at "the benchmark baseline", citing the
+        // published faithfulness ≥ 0.90 / relevancy ≥ 0.85 targets. Those are
+        // PASS RATES ACROSS A RUN, not similarities — drawing one as a tick on
+        // this axis would look precise and mean nothing. The retrieval
+        // threshold is the real reference on this axis, so it is marked when
+        // the config sets one above zero, and simply omitted otherwise rather
+        // than invented.
+        const pct = Math.max(0, Math.min(1, sim)) * 100;
+        const thr = state.simThreshold;
+        const tick = thr > 0 && thr < 1
+          ? `<span class="eval-meter-tick" style="left:${(thr * 100).toFixed(1)}%"
+               title="retrieval threshold ${thr.toFixed(2)}"></span>`
+          : "";
+        meter = `<span class="eval-meter" role="img"
+            aria-label="top similarity ${sim.toFixed(2)} out of 1">
+            <span class="eval-meter-fill" style="width:${pct.toFixed(1)}%"></span>${tick}
+          </span><span class="eval-meter-val">${sim.toFixed(2)}</span>`;
+      }
+      summary.innerHTML = `<span class="eval-dot" data-state="${state}" aria-hidden="true"></span>
+        <span class="eval-state">${escapeHtml(word)}</span>${meter}
+        <span class="eval-caret" aria-hidden="true">›</span>`;
+
+      const detail = document.createElement("div");
+      detail.className = "eval-detail hidden";
       for (const [label, value, gloss] of rows) {
         const row = document.createElement("div");
         row.className = "eval-row";
-        const vClass = value === "PASS" ? "pass" : value === "FAIL" ? "fail" : "";
+        const vClass = value === "✓" ? "pass" : value === "FAIL" ? "fail" : "";
         row.innerHTML = `<span class="eval-label">${label}</span>` +
           `<span class="eval-value ${vClass}">${escapeHtml(String(value))}</span>` +
           `<span class="eval-gloss">${escapeHtml(gloss)}</span>`;
-        wrap.appendChild(row);
+        detail.appendChild(row);
       }
+      summary.onclick = () => {
+        const open = detail.classList.toggle("hidden");
+        summary.setAttribute("aria-expanded", String(!open));
+      };
+      wrap.appendChild(summary);
+      wrap.appendChild(detail);
       return wrap;
     }
   }
