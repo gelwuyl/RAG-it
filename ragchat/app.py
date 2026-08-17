@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import time
 from pathlib import Path
@@ -43,6 +44,8 @@ from .db import (
 from .loaders import fetch_url, load_bytes, page_title, TEXT_EXTENSIONS, HTML_EXTENSIONS, PDF_EXTENSIONS
 from .pipeline import ingest_document_text, ingest_slice, plan_chunks, ask
 from .vectordb import delete_document_chunks, prune_chunks
+
+log = logging.getLogger(__name__)
 
 app = FastAPI(title="RAG-it")
 app.add_middleware(
@@ -482,7 +485,11 @@ def guest_login(request: Request, response: Response, db: Session = Depends(get_
     try:
         guests.seed_demo_corpus(db, guest)
     except Exception:
-        # An empty workspace is a worse demo but still a working one.
+        # An empty workspace is a worse demo but still a working one. Per-file
+        # failures are already handled inside seed_demo_corpus; reaching here
+        # means something broader broke, so log it — swallowing this silently
+        # is how the corpus went missing for weeks without a trace.
+        log.exception("guest %s: demo corpus seeding failed", guest.id)
         db.rollback()
     set_session_cookie(response, guest.id)
     return {"id": guest.id, "name": guest.name, "guest": True}
@@ -1468,6 +1475,16 @@ def health():
             "embedding_model": cfg.embedding_model,
             "embedding_provider": cfg.embedding_provider,
             "reranker_provider": cfg.reranker_provider,
+            # Retrieval shape, because config.yaml is NOT the source of truth: the
+            # config_overrides DB row merges on top of it, so a default changed in
+            # the file can be masked by whatever the Settings UI last saved. These
+            # are the values a "why is retrieval behaving like that" question needs,
+            # and there was no way to read them without an authenticated request.
+            "hybrid_search": cfg.hybrid_search,
+            "reranker": cfg.reranker,
+            "top_k": cfg.top_k,
+            "candidate_k": cfg.candidate_k,
+            "similarity_threshold": cfg.similarity_threshold,
             "fingerprint": cfg.fingerprint(),
             "env_llm_model_default": settings.default_llm_model,
             "env_embedding_provider_default": settings.default_embedding_provider,
