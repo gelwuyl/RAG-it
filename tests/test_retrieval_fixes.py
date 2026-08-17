@@ -246,3 +246,42 @@ def test_bm25_index_param_forces_fusion_path():
         embedding_model="text-embedding-005", bm25_index=True, query_text="Probat roaster Riverside",
     )
     assert any(c["doc_id"] == "m" for c in out), [c["doc_id"] for c in out]
+
+
+# --- 5. a failed rerank call must not crash on BM25-only chunks -----------
+#
+# Fusion is unconditional now, so a chunk found by keyword search alone is
+# routine — and it carries `similarity: None`, because vector search never
+# scored it. The cross-encoder's except-branch used to fall back to that None
+# and hand it straight to sort(), so ONE rate-limited rerank call raised
+# TypeError and 500'd the whole answer.
+
+
+def test_rerank_survives_none_similarity_when_scoring_fails():
+    def _boom(*_a, **_kw):
+        raise RuntimeError("429 rate limited")
+
+    orig = _pl._chat
+    _pl._chat = _boom
+    try:
+        chunks = [
+            {"text": "vector hit", "similarity": 0.5, "doc_id": "a", "title": "a", "ref": ""},
+            {"text": "bm25-only hit", "similarity": None, "doc_id": "b", "title": "b", "ref": ""},
+            {"text": "another vector hit", "similarity": 0.3, "doc_id": "c", "title": "c", "ref": ""},
+        ]
+        out = _pl._rerank(
+            "q", chunks, _make_cfg(reranker=True, reranker_provider="gemini", top_k=2)
+        )
+    finally:
+        _pl._chat = orig
+    assert len(out) == 2
+    # The unscored chunk sorts on a real number, above the 0.3 vector hit.
+    assert [c["doc_id"] for c in out] == ["a", "b"], [c["doc_id"] for c in out]
+
+
+def test_fallback_score_keeps_a_legitimate_zero():
+    # `similarity or 0.5` would rewrite 0.0 into 0.5 and promote the worst
+    # chunk in the pool above genuinely mid-ranked ones.
+    assert _pl._fallback_score({"similarity": 0.0}) == 0.0
+    assert _pl._fallback_score({"similarity": None}) == 0.5
+    assert _pl._fallback_score({}) == 0.5

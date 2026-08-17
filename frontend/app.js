@@ -1317,7 +1317,6 @@ async function loadSettingsIntoForm() {
     $("set-temperature").value = cfg.temperature;
     const savedProvider = (cfg.embedding_provider || "gemini").toLowerCase();
     $("set-embedding-provider").value = savedProvider;
-    $("set-reranker-provider").value = cfg.reranker_provider || "gemini";
     loadedEmbeddingModel = cfg.embedding_model;
     loadedEmbeddingProvider = savedProvider;
     openrouterConfigured = !!cfg.openrouter_configured;
@@ -1339,9 +1338,11 @@ async function loadSettingsIntoForm() {
         updateProviderWarnings(openrouterConfigured);
       };
     }
-    const rpSel = $("set-reranker-provider");
-    if (rpSel) {
-      rpSel.onchange = () => updateProviderWarnings(openrouterConfigured);
+    // The reranker switch now drives the OpenRouter-key warning, since reranking
+    // is what consumes that key when embeddings are on Gemini.
+    const rkSel = $("set-reranker");
+    if (rkSel) {
+      rkSel.onchange = () => updateProviderWarnings(openrouterConfigured);
     }
     // Presets are drawn AFTER the form is populated: each card's re-index badge
     // is computed against what is actually saved, so it needs the live config.
@@ -1353,19 +1354,26 @@ async function loadSettingsIntoForm() {
 }
 
 function defaultEmbedModelFor(provider) {
-  return provider === "openrouter" ? "openai/text-embedding-3-small" : "models/gemini-embedding-001";
+  return provider === "openrouter" ? "qwen/qwen3-embedding-8b" : "models/gemini-embedding-001";
 }
 
 function updateProviderWarnings(configured) {
   const warn = $("provider-warning");
   const ep = $("set-embedding-provider")?.value;
-  const rp = $("set-reranker-provider")?.value;
-  if (configured || (ep !== "openrouter" && rp !== "openrouter")) {
+  // Reranking is Cohere via OpenRouter unconditionally now, so the key is needed
+  // whenever the reranker is ON — not only when a provider dropdown says so. The
+  // dropdown this used to read is gone; leaving the old condition here would have
+  // stopped warning the one person who most needs it: reranker on, no key, every
+  // answer silently falling back to vector order.
+  const reranking = $("set-reranker")?.value === "true";
+  if (configured || (ep !== "openrouter" && !reranking)) {
     if (warn) warn.classList.add("hidden");
     return;
   }
   if (warn) {
-    warn.textContent = "OpenRouter selected but no OPENROUTER_API_KEY found in .env — add it and restart the backend.";
+    warn.textContent = reranking && ep !== "openrouter"
+      ? "Reranking needs OPENROUTER_API_KEY — without it, results keep their vector order."
+      : "OpenRouter selected but no OPENROUTER_API_KEY found in .env — add it and restart the backend.";
     warn.classList.remove("hidden");
   }
 }
@@ -1425,7 +1433,6 @@ $("settings-save").onclick = async () => {
       temperature: parseFloat($("set-temperature").value),
       embedding_model: $("set-embedding-model").value,
       embedding_provider: $("set-embedding-provider").value,
-      reranker_provider: $("set-reranker-provider").value,
     };
     const res = await api("/api/eval/config", {
       method: "PUT",

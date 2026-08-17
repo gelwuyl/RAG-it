@@ -103,7 +103,10 @@ class Settings:
         # limits. Switchable at runtime via the settings UI (persisted to the
         # DB override) — no restart needed.
         self.default_embedding_provider = os.environ.get("EMBEDDING_PROVIDER", "gemini").lower()
-        self.default_reranker_provider = os.environ.get("RERANKER_PROVIDER", "gemini").lower()
+        # Cohere rerank-v3.5 via OpenRouter. Boot default only — config.yaml's
+        # `reranker.provider` and the Settings dropdown both override it, and
+        # _rerank() reads the LIVE config, never this.
+        self.default_reranker_provider = os.environ.get("RERANKER_PROVIDER", "openrouter").lower()
 
 
 def normalize_embedding_model(name: str) -> str:
@@ -140,13 +143,13 @@ _FALLBACK_CHAT_MODELS = ["deepseek-v4-pro", "qwen3.8-max", "qwen3-coder"]
 # else in the dropdown comes from OpenRouter.
 _FALLBACK_EMBEDDING_MODELS: dict[str, list[str]] = {
     "gemini": ["models/gemini-embedding-001"],
+    # Must stay in step with embeddings.EMBEDDING_768_MODELS — this is the list
+    # served when live discovery fails, and a longer list here would offer models
+    # the allowlist rejects. Two by choice, not by capability; the reasoning lives
+    # with the allowlist.
     "openrouter": [
-        "openai/text-embedding-3-small",
-        "openai/text-embedding-3-large",
         "qwen/qwen3-embedding-8b",
-        "qwen/qwen3-embedding-4b",
         "perplexity/pplx-embed-v1-0.6b",
-        "google/gemini-embedding-001",
     ],
 }
 
@@ -452,13 +455,28 @@ def load_config() -> PipelineConfig:
         # tests still exercise both paths to prove fusion changes what it claims
         # to change (tests/test_retrieval_fixes.py).
         hybrid_search=True,
-        reranker=bool(r.get("reranker", False)),
+        # Whether to rerank IS a real choice — it trades a call for ordering — so
+        # this one is still read from config. Only the default changed to True.
+        reranker=bool(r.get("reranker", True)),
         query_rewrite=bool(q.get("query_rewrite", True)),
         llm_model=str(g.get("llm_model", settings.default_llm_model)),
         temperature=float(g.get("temperature", 0.0)),
         embedding_model=str(e.get("model", settings.default_embedding_model)),
         embedding_provider=str(e.get("provider", settings.default_embedding_provider)),
-        reranker_provider=str(data.get("reranker", {}).get("provider", settings.default_reranker_provider)),
+        # NOT read from config — the same reasoning as hybrid_search above.
+        #
+        # "Which vendor re-scores the candidate pool" is not a question a user can
+        # answer, and the two options are not a trade: Cohere rerank-v3.5 is ONE
+        # cheap purpose-built call for the whole pool, while the LLM cross-encoder
+        # is one chat call PER passage — slower and dearer for no measured gain.
+        # That is an implementation detail, not a setting.
+        #
+        # Hardcoded rather than defaulted for the reason fusion had to be: the
+        # config_overrides row merges on top of config.yaml, so every deployment
+        # that had ever saved Settings would have kept using the cross-encoder
+        # until someone re-saved. `reranker` (on/off) above stays honoured from
+        # the row, because that one really is the user's call.
+        reranker_provider="openrouter",
         web_augmentation=bool(g.get("web_augmentation", False)),
         eval_show=bool(data.get("evaluation", {}).get("show", True)),
     )
@@ -491,7 +509,9 @@ def save_config_override(cfg: "PipelineConfig") -> None:
             "web_augmentation": cfg.web_augmentation,
         },
         "embedding": {"model": cfg.embedding_model, "provider": cfg.embedding_provider},
-        "reranker": {"provider": cfg.reranker_provider},
+        # `reranker.provider` is deliberately NOT persisted, for the same reason
+        # hybrid_search is not: load_config() hardcodes it, so writing it would
+        # leave an authoritative-looking value in the row that changes nothing.
         "evaluation": {"show": cfg.eval_show},
     }
     set_config_override("pipeline", json.dumps(payload))

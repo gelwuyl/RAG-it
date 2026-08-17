@@ -1090,7 +1090,8 @@ class ConfigUpdateIn(BaseModel):
     temperature: float | None = Field(default=None, ge=0.0, le=1.0)
     embedding_model: str | None = None
     embedding_provider: str | None = None
-    reranker_provider: str | None = None
+    # reranker_provider is gone: load_config() hardcodes Cohere via OpenRouter,
+    # so accepting one here would 200 on a change that does not happen.
     web_augmentation: bool | None = None
     eval_show: bool | None = None
 
@@ -1120,8 +1121,7 @@ def update_config(body: ConfigUpdateIn, _: User = Depends(require_account)):
     # Validate provider switches; block OpenRouter if no key is configured
     # (a silent failure later is worse than a clear 422 here). Gemini always
     # allowed (uses GEMINI_API_KEY / proxy).
-    for key, env_var in (("embedding_provider", "OPENROUTER_API_KEY"),
-                         ("reranker_provider", "OPENROUTER_API_KEY")):
+    for key, env_var in (("embedding_provider", "OPENROUTER_API_KEY"),):
         if key in updates:
             val = str(updates[key]).lower()
             if val not in ("gemini", "openrouter"):

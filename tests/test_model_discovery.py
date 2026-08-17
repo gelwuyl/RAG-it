@@ -105,7 +105,7 @@ def test_cache_is_keyed_by_provider():
     _install_fake(
         {
             "gemini": ["models/gemini-embedding-001"],
-            "openrouter": ["openai/text-embedding-3-small", "qwen/qwen3-embedding-8b"],
+            "openrouter": ["perplexity/pplx-embed-v1-0.6b", "qwen/qwen3-embedding-8b"],
         }
     )
     # Warm OpenRouter FIRST — this is what used to poison the gemini result.
@@ -113,7 +113,7 @@ def test_cache_is_keyed_by_provider():
     gemini = _cfg.model_catalog("gemini")["embedding"]
 
     assert gemini == ["models/gemini-embedding-001"]
-    assert "openai/text-embedding-3-small" in openrouter
+    assert "qwen/qwen3-embedding-8b" in openrouter
     # No cross-contamination in either direction.
     assert not set(gemini) & set(openrouter)
 
@@ -129,7 +129,7 @@ def test_openrouter_first_does_not_pin_fallback_chat_list():
     _install_fake(
         {
             "gemini": ["qwen3.8-max", "deepseek-v4-pro", "models/gemini-embedding-001"],
-            "openrouter": ["openai/text-embedding-3-small"],
+            "openrouter": ["qwen/qwen3-embedding-8b"],
         }
     )
     # Warm OpenRouter FIRST, cold — the ordering that used to pin the fallback.
@@ -186,21 +186,29 @@ def test_gemini_exposes_exactly_one_embedding_model():
 
 
 def test_discovery_is_intersected_with_768_allowlist():
-    """A model the provider catalogs but that isn't 768-dim never reaches the UI.
+    """A model the provider catalogs but that we do not allowlist never reaches the UI.
 
     The Neon `chunks` table has a single fixed vector(768) column, so a
     different-dimension model would fail at insert time.
+
+    `openai/text-embedding-3-small` is the sharper case of the two: it really is
+    served, and it really does honour dimensions=768. It is excluded anyway,
+    because the allowlist is a product decision about how many near-identical
+    embedders to put in front of someone, not only a capability check. So a
+    model being genuinely usable is NOT sufficient to reach the dropdown.
     """
     _install_fake(
         {
             "openrouter": [
+                "qwen/qwen3-embedding-8b",
                 "openai/text-embedding-3-small",
                 "some/unvetted-embedding-model",
             ]
         }
     )
     emb = _cfg.model_catalog("openrouter")["embedding"]
-    assert "openai/text-embedding-3-small" in emb
+    assert "qwen/qwen3-embedding-8b" in emb
+    assert "openai/text-embedding-3-small" not in emb
     assert "some/unvetted-embedding-model" not in emb
 
 
@@ -213,9 +221,9 @@ def test_fallback_when_discovery_fails():
     assert _cfg.model_catalog("gemini")["embedding"] == ["models/gemini-embedding-001"]
     assert "qwen3.8-max" in _cfg.model_catalog("gemini")["chat"]
     openrouter = _cfg.model_catalog("openrouter")["embedding"]
-    assert "openai/text-embedding-3-small" in openrouter
+    assert "qwen/qwen3-embedding-8b" in openrouter
     # Even on a total discovery outage the lists stay provider-scoped.
-    assert "openai/text-embedding-3-small" not in _cfg.model_catalog("gemini")["embedding"]
+    assert "qwen/qwen3-embedding-8b" not in _cfg.model_catalog("gemini")["embedding"]
 
 
 def test_is_known_allows_live_and_default():

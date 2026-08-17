@@ -47,6 +47,18 @@ retrieval:
   # like part numbers and form codes rank as well as paraphrases, and it is what
   # the landing page has always advertised. Adding the key back here would have
   # no effect: nothing reads it.
-  reranker: false
+  # On by default, and served by Cohere rerank-v3.5 (see the `reranker` block
+  # below). Measured: rerank-on gave the best recall and MRR of the four
+  # presets. It is ONE cheap purpose-built call for the whole candidate pool,
+  # not one model call per chunk like the cross-encoder path, so "on" costs a
+  # fraction of what it used to and the Balanced preset can afford it.
+  reranker: true
   similarity_threshold: 0.0
   top_k: 4
+# NOTE: there is no top-level `reranker.provider` key here either, and for the
+# same reason as hybrid_search above — load_config() hardcodes it, so nothing
+# would read it. Reranking is served by Cohere rerank-v3.5 via OpenRouter: one
+# cheap purpose-built call for the whole candidate pool. The old LLM
+# cross-encoder scored one chat call PER passage, which was slower and dearer
+# for no measured gain. WHETHER to rerank is still a setting (retrieval.reranker
+# above); which vendor does it is not.

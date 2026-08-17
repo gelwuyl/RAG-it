@@ -512,19 +512,16 @@
                 <option value="false">Off</option>
                 <option value="true">On</option>
               </select>
-              <span class="field-hint">A second pass that scores every candidate chunk
-                against the question. Better ordering, one extra model call per
-                ask.</span>
+              <span class="field-hint">A second pass that re-scores the candidate
+                chunks against the question, so the best passage leads. One cheap
+                call per ask.</span>
             </div>
-            <div class="field">
-              <label for="set-reranker-provider">Reranker provider</label>
-              <select id="set-reranker-provider">
-                <option value="gemini">Gemini (LLM scores each chunk)</option>
-                <option value="openrouter">OpenRouter (Cohere rerank-v3.5)</option>
-              </select>
-              <span class="field-hint">Gemini scores chunks with the chat model;
-                OpenRouter uses Cohere’s dedicated rerank-v3.5.</span>
-            </div>
+            <!-- Reranker provider had a dropdown here. It is gone for the reason
+                 the keyword-fusion switch is gone: "Gemini or Cohere" is not a
+                 question a visitor can answer, and it was never a trade — the
+                 cross-encoder spent one chat call PER passage to do the same job
+                 worse. Reranking is Cohere rerank-v3.5 now, hardcoded in
+                 load_config(). WHETHER to rerank is still the field above. -->
           </fieldset>
           </div>
         </div>
@@ -535,6 +532,6 @@
       </div>
     </div>
 
-    <script type="module" src="/app.js?v=34"></script>
+    <script type="module" src="/app.js?v=35"></script>
   </body>
 </html>

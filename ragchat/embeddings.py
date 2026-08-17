@@ -67,13 +67,20 @@ EMBEDDING_768_MODELS: dict[str, list[str]] = {
     # text-embedding-004/005 are NOT served there at all (they 404). Every
     # other option below is OpenRouter's.
     "gemini": ["models/gemini-embedding-001"],
+    # Deliberately TWO, not every model that works. More models verified fine at
+    # dimensions=768 (text-embedding-3-small/-large, qwen3-embedding-4b,
+    # google/gemini-embedding-001) and were removed anyway: a dropdown of six
+    # near-identical embedders asks the user to make a choice they have no basis
+    # for, and changing it re-indexes their whole corpus. Two is a real choice —
+    # the throughput default, and a small cheap one.
+    #
+    # This allowlist gates what the UI OFFERS, not what the pipeline accepts:
+    # embedding_dim() returns 768 for anything, so a config already pointing at
+    # a removed model keeps working and simply cannot be re-selected. Removing a
+    # model therefore strands nobody.
     "openrouter": [
-        "openai/text-embedding-3-small",
-        "openai/text-embedding-3-large",
         "qwen/qwen3-embedding-8b",
-        "qwen/qwen3-embedding-4b",
         "perplexity/pplx-embed-v1-0.6b",
-        "google/gemini-embedding-001",
     ],
 }
 

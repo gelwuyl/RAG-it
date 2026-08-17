@@ -264,6 +264,30 @@ def retrieve(
     return chunks
 
 
+# Score given to a chunk the reranker could not score itself. Mid-scale, so an
+# unscored chunk neither wins nor is buried.
+_NEUTRAL_RERANK_SCORE = 0.5
+
+
+def _fallback_score(c: dict) -> float:
+    """A sortable score for a chunk with no rerank result of its own.
+
+    Two kinds of chunk arrive without a cosine: web results, which never had
+    one, and BM25-only chunks, which fusion marks `similarity: None` because
+    keyword search found them and vector search did not.
+
+    Both used to reach `scored.sort()` as None and raise
+    `TypeError: '<' not supported between NoneType and float`, turning a single
+    rate-limited rerank call into a 500 for the whole answer. Keyword fusion is
+    unconditional now, so BM25-only chunks are routine and this path is live.
+
+    Not `similarity or 0.5` — that rewrites a legitimate 0.0 into 0.5 and
+    promotes the worst chunk in the pool above genuinely mid-ranked ones.
+    """
+    sim = c.get("similarity")
+    return _NEUTRAL_RERANK_SCORE if sim is None else float(sim)
+
+
 def _rerank(
     query: str, chunks: list[dict], cfg: PipelineConfig
 ) -> list[dict]:
@@ -300,14 +324,14 @@ def _rerank(
     scored = []
     for c in chunks:
         if str(c.get("doc_id", "")).startswith("web:"):
-            scored.append((c.get("similarity") or 0.5, c))
+            scored.append((_fallback_score(c), c))
             continue
         prompt = RERANK_PROMPT.format(query=query, passage=c["text"][:1200])
         try:
             raw = _chat(cfg.llm_model, [{"role": "user", "content": prompt}], 0.0)
             score = float(raw.strip()) / 100.0
         except Exception:
-            score = c["similarity"]
+            score = _fallback_score(c)
         scored.append((score, c))
     scored.sort(key=lambda x: x[0], reverse=True)
     return [c for _, c in scored[: cfg.top_k]]

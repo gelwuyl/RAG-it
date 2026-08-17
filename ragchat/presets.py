@@ -57,7 +57,11 @@ PRESETS = [
     {
         "id": "balanced",
         "name": "Balanced",
-        "desc": "The shipped default. Follow-ups are rewritten so they still retrieve; everything else stays cheap.",
+        # Reranking used to be the thing that separated this from High accuracy,
+        # which made "the shipped default" a lie once the default config turned
+        # the reranker on. It is affordable here because the reranker is Cohere
+        # rerank-v3.5 now — ONE call for the whole pool, not one per chunk.
+        "desc": "The shipped default. Follow-ups are rewritten so they still retrieve, and one rerank pass sharpens the order.",
         "values": {
             "chunk_size": 512,
             "chunk_overlap": 75,
@@ -65,7 +69,7 @@ PRESETS = [
             "top_k": 4,
             "candidate_k": 20,
             "similarity_threshold": 0.0,
-            "reranker": False,
+            "reranker": True,
             "query_rewrite": True,
             "temperature": 0.0,
         },
@@ -73,7 +77,9 @@ PRESETS = [
     {
         "id": "accurate",
         "name": "High accuracy",
-        "desc": "Smaller chunks, a 40-wide candidate pool and an LLM rerank pass. One extra model call per question, and slower.",
+        # No longer "the one that reranks" — Balanced does too. What is left is
+        # the shape of the net: smaller chunks, twice the pool, more passages kept.
+        "desc": "Smaller chunks and a 40-wide pool, with six passages kept instead of four. Best measured recall, and the slowest to answer.",
         "values": {
             "chunk_size": 384,
             "chunk_overlap": 96,
