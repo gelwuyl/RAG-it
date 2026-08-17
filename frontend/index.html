@@ -4,8 +4,29 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>RAG-it</title>
-    <meta name="color-scheme" content="light" />
-    <link rel="stylesheet" href="/styles.css?v=6" />
+    <meta name="color-scheme" content="dark light" />
+    <script>
+      // Theme must be applied BEFORE the stylesheet paints, or a dark-theme
+      // user gets a white flash on every load. This is why it is an inline
+      // blocking script in <head> and not part of app.js.
+      //
+      // Dark is the default and wins over prefers-color-scheme: this is a
+      // showcase piece and dark is the designed experience. Light is opt-in
+      // and, once chosen, sticks.
+      (function () {
+        try {
+          var saved = localStorage.getItem("ragchat-theme");
+          document.documentElement.setAttribute(
+            "data-theme",
+            saved === "light" ? "light" : "dark",
+          );
+        } catch (e) {
+          // Private mode / storage disabled — fall back to the default.
+          document.documentElement.setAttribute("data-theme", "dark");
+        }
+      })();
+    </script>
+    <link rel="stylesheet" href="/styles.css?v=7" />
     <script>
       // Boot diagnostics: collect load/runtime errors so a broken app.js
       // shows a visible message instead of a silently dead UI.
@@ -61,6 +82,8 @@
           <button id="prune-btn" class="btn btn-small" type="button"
             title="Delete orphaned Neon vector chunks (no matching document)">Prune ghosts</button>
           <button id="settings-btn" class="btn btn-small" type="button" title="Tuning parameters">⚙ Settings</button>
+          <button id="theme-toggle" class="btn btn-small" type="button"
+            title="Switch between the dark and light theme" aria-pressed="false">☾</button>
         </div>
         <!-- Optional Google sign-in. Filled in by app.js from /api/auth/me;
              signing in is never required to use the app. -->

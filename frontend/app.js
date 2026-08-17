@@ -634,6 +634,34 @@ function closeSettings() {
 }
 
 $("settings-btn").onclick = openSettings;
+
+// ---------- theme ----------
+
+// The initial attribute is set by the inline <head> script in index.html, not
+// here — by the time app.js runs the page has already painted, so applying it
+// at this point would flash. This only handles the toggle afterwards.
+const THEME_KEY = "ragchat-theme";
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute("data-theme", theme);
+  const btn = $("theme-toggle");
+  const dark = theme === "dark";
+  btn.textContent = dark ? "☾" : "☀";
+  btn.setAttribute("aria-pressed", String(!dark));
+  btn.title = dark ? "Switch to the light theme" : "Switch to the dark theme";
+  try {
+    localStorage.setItem(THEME_KEY, theme);
+  } catch (e) {
+    // Storage disabled: the toggle still works for this session, it just
+    // won't be remembered. Not worth surfacing to the user.
+  }
+}
+
+applyTheme(document.documentElement.getAttribute("data-theme") || "dark");
+$("theme-toggle").onclick = () =>
+  applyTheme(
+    document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark",
+  );
 $("settings-close").onclick = closeSettings;
 $("settings-overlay").onclick = (e) => {
   if (e.target === $("settings-overlay")) closeSettings();

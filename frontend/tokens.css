@@ -1,0 +1,200 @@
+/* ==========================================================================
+   Design tokens — the single source of colour, type and metric values.
+
+   Split out of styles.css for two reasons:
+   1. The landing page needs the palette but not the app's 800 lines of rules.
+   2. A second theme should be one more block of variable declarations, not a
+      hunt through every rule for hardcoded hexes.
+
+   Nothing here selects anything — it only declares. The rule that makes the
+   split worth having: **no rule outside this file may hardcode a colour.**
+   If a value could differ between themes, it belongs here.
+   ========================================================================== */
+
+:root {
+  /* ---------- type ---------- */
+  --font-sans: "Segoe UI", system-ui, -apple-system, "Inter", Roboto, Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* ---------- surfaces ---------- */
+  --bg: #f4f5f7;
+  --panel: #ffffff;
+  --panel-sunken: #fafbfc;
+  --border: #e4e7ec;
+  --border-strong: #d3d8e0;
+
+  /* ---------- text ---------- */
+  --text: #1b1f24;
+  --muted: #6b7280;
+  --faint: #9aa1ac;
+  /* Text and icons sitting on a filled primary/accent/inverse surface. Named
+     for the role, not the colour, because it stops being white in dark mode. */
+  --on-primary: #ffffff;
+
+  /* ---------- primary (blue) ---------- */
+  --primary: #2f5bd8;
+  --primary-hover: #2449b4;
+  --primary-soft: #eef3ff;
+  --primary-soft-border: #ccdcfb;
+  --primary-soft-hover: #d9e5fd;
+
+  /* ---------- accent (purple) ---------- */
+  --accent: #7c3aed;
+  --accent-soft: #f4efff;
+  --accent-soft-border: #ddd0fb;
+  --accent-text: #5b21b6;
+  --accent-hover: #ece2ff;
+
+  /* ---------- interaction surfaces ---------- */
+  --btn-hover: #f2f4f7;     /* default button, pane toggle */
+  --hover-soft: #eef0f3;    /* icon buttons, switches, chips */
+  --hover-strong: #eceef2;  /* list rows */
+  --track: #eceef2;         /* score-bar groove */
+  --inverse-bg: #101828;    /* toast surface, score target marker */
+  --overlay: rgba(16, 24, 40, 0.4);
+
+  /* ---------- semantic status ---------- */
+  --user-bubble: #eaf1fe;
+  --not-found-bg: #fff8ea;
+  --not-found-border: #f0c987;
+  --error: #d92d20;
+  --warn: #b54708;
+  --pass: #15803d;
+  --fail: #d92d20;
+  --pass-bg: #edfcf2;
+  --fail-bg: #fef3f2;
+  --warn-bg: #fffaeb;
+  --pass-border: #a6f4c5;
+  --fail-border: #fecdca;
+  --warn-border: #fedf89;
+  /* In-flight dot. Deliberately separate from --warn: one is "this is still
+     working", the other is "this needs your attention". They diverge in dark. */
+  --pending: #d97706;
+
+  /* ---------- source-kind palette ----------
+     One bg/fg/border triple per file kind. Tokenised so a theme restates eight
+     colour sets in this file instead of rewriting eight rules in styles.css. */
+  --kind-generic-bg: #eef0f3; --kind-generic-fg: var(--muted); --kind-generic-bd: var(--border);
+  --kind-pdf-bg:    #fef3f2;  --kind-pdf-fg:    #b42318;  --kind-pdf-bd:    #fecdca;
+  --kind-doc-bg:    #eff4ff;  --kind-doc-fg:    #175cd3;  --kind-doc-bd:    #c7d7fe;
+  --kind-text-bg:   #f2f4f7;  --kind-text-fg:   #475467;  --kind-text-bd:   #e4e7ec;
+  --kind-data-bg:   #fffaeb;  --kind-data-fg:   #b54708;  --kind-data-bd:   #fedf89;
+  --kind-web-bg:    #ecfdf3;  --kind-web-fg:    #027a48;  --kind-web-bd:    #a6f4c5;
+  --kind-audio-bg:  #f4efff;  --kind-audio-fg:  #6941c6;  --kind-audio-bd:  #ddd0fb;
+  --kind-video-bg:  #fdf2fa;  --kind-video-fg:  #c11574;  --kind-video-bd:  #fcceee;
+  --kind-folder-bg: #f0f9ff;  --kind-folder-fg: #026aa2;  --kind-folder-bd: #b9e6fe;
+
+  /* ---------- radii ---------- */
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 14px;
+  --r-pill: 999px;
+
+  /* ---------- elevation ---------- */
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.05);
+  --shadow-md: 0 2px 8px rgba(16, 24, 40, 0.06);
+  --shadow-lg: 0 12px 40px rgba(16, 24, 40, 0.14);
+
+  /* ---------- layout metrics ---------- */
+  --sources-w: 288px;
+  --eval-w: 344px;
+  --head-h: 46px;
+}
+
+/* ==========================================================================
+   Dark theme — the default (see the no-flash script in index.html).
+
+   Applied via [data-theme="dark"] rather than prefers-color-scheme: this is a
+   showcase piece and dark is the designed experience, so it wins unless the
+   user explicitly picks light. :root above stays light so a no-JS visitor
+   still gets a coherent, readable page rather than unstyled tokens.
+
+   Design rules this block follows, from PRODUCT_UX_PLAN.md §1:
+   - Depth comes from VALUE STEPS (bg → panel → sunken), not shadows.
+   - Borders are hairlines, not lines.
+   - Acid lime is the single hot accent and means "active / primary / live".
+   - Red means failure only. PASS is NEUTRAL here, never green — lime beside
+     green is unreadable as two distinct meanings.
+   ========================================================================== */
+
+[data-theme="dark"] {
+  /* ---------- surfaces: four value steps, no shadows ---------- */
+  --bg: #06080b;
+  --panel: #0d1219;
+  --panel-sunken: #121821;
+  --border: #1d2530;
+  --border-strong: #2b3644;
+
+  /* ---------- text ---------- */
+  --text: #e7eef5;
+  --muted: #8a97a7;
+  --faint: #5d6875;
+  /* Lime is bright; text on it must be near-black, not white. */
+  --on-primary: #080d05;
+
+  /* ---------- primary = acid lime ----------
+     Light theme still uses blue here; the light palette is repaired last
+     (plan §12 step 13), at which point both themes share the lime identity. */
+  --primary: #c2f53f;
+  --primary-hover: #d3ff63;
+  --primary-soft: #18220c;
+  --primary-soft-border: #2f4318;
+  --primary-soft-hover: #212e10;
+
+  /* ---------- accent folded into lime ----------
+     The purple accent existed only to separate the benchmark button. Under a
+     single-hot-accent system that separation is noise, so accent === primary. */
+  --accent: #c2f53f;
+  --accent-soft: #18220c;
+  --accent-soft-border: #2f4318;
+  --accent-text: #c2f53f;
+  --accent-hover: #212e10;
+
+  /* ---------- interaction surfaces ---------- */
+  --btn-hover: #182029;
+  --hover-soft: #151c25;
+  --hover-strong: #1a222c;
+  --track: #1a222c;
+  /* Inverted in dark: the toast becomes a light surface on a dark app. */
+  --inverse-bg: #e7eef5;
+  --overlay: rgba(2, 4, 7, 0.72);
+
+  /* ---------- semantic status ---------- */
+  --user-bubble: #121b25;
+  --not-found-bg: #221b0c;
+  --not-found-border: #574618;
+  --error: #ff6f61;
+  --warn: #e0a83a;
+  --fail: #ff6f61;
+  --fail-bg: #27130f;
+  --fail-border: #5a2a24;
+  --warn-bg: #221b0c;
+  --warn-border: #574618;
+  --pending: #e0a83a;
+  /* PASS is deliberately neutral (plan §6). The verdict is carried by a
+     checkmark glyph and position, not by colour, leaving lime free to mean
+     "active" and red to mean "failed" without a third competing signal. */
+  --pass: #e7eef5;
+  --pass-bg: #151c25;
+  --pass-border: #2b3644;
+
+  /* ---------- source-kind palette ----------
+     Desaturated far below the light values: these are 30px chips in the
+     telemetry register and must not out-shout the answer text. */
+  --kind-generic-bg: #151c25; --kind-generic-fg: var(--muted); --kind-generic-bd: var(--border);
+  --kind-pdf-bg:    #241412;  --kind-pdf-fg:    #e88379;  --kind-pdf-bd:    #4a2420;
+  --kind-doc-bg:    #101c2e;  --kind-doc-fg:    #79aeea;  --kind-doc-bd:    #1f3b5c;
+  --kind-text-bg:   #171d25;  --kind-text-fg:   #9aa7b6;  --kind-text-bd:   #2b3644;
+  --kind-data-bg:   #241c0c;  --kind-data-fg:   #d9a83f;  --kind-data-bd:   #4a3a17;
+  --kind-web-bg:    #0d2119;  --kind-web-fg:    #5cc296;  --kind-web-bd:    #1c4335;
+  --kind-audio-bg:  #1c1630;  --kind-audio-fg:  #a58ae0;  --kind-audio-bd:  #382c5c;
+  --kind-video-bg:  #2a1122;  --kind-video-fg:  #e07bb8;  --kind-video-bd:  #522242;
+  --kind-folder-bg: #0b1f2b;  --kind-folder-fg: #5fb4d4;  --kind-folder-bd: #163d52;
+
+  /* ---------- elevation ----------
+     Flat by design. Only the modal keeps a shadow, because it genuinely
+     floats above the page and value steps alone cannot express that. */
+  --shadow-sm: none;
+  --shadow-md: none;
+  --shadow-lg: 0 24px 64px rgba(0, 0, 0, 0.68);
+}

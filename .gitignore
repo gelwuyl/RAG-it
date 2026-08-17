@@ -9,3 +9,11 @@ eval/runs/
 
 # Hermes temp lock files
 .hermes-tmp.*
+
+# Screenshot capture output (shot.mjs). Regenerated on demand; committing
+# binaries of every breakpoint x theme would bloat the history for no gain.
+shots/
+shot_*.png
+
+# Scratch files from agent sessions
+.claude_task*
