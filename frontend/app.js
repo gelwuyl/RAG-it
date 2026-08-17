@@ -570,7 +570,8 @@ function renderSignedOut(slot, configured) {
       title="${configured === false
         ? "Google sign-in is not configured on this deployment"
         : "Optional — the app works signed out too"}">
-      ${GOOGLE_G_SVG}<span class="google-btn-text">Sign in with Google</span>
+      ${GOOGLE_G_SVG}<span class="google-btn-text">Sign in<span
+        class="google-btn-long"> with Google</span></span>
     </button>`;
   slot.querySelector("#google-signin").onclick = () => {
     if (configured === false) {

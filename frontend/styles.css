@@ -1417,19 +1417,59 @@ fieldset legend {
     overflow: visible;
   }
 
-  /* The right cluster is several rows tall here, and centering the brand
-     against it floated the logo to the middle of the bar with nothing beside
-     it. Top-align so the brand and the identity readout share the first row. */
-  .topbar { padding: 10px 12px; gap: 8px 10px; align-items: flex-start; }
+  /* THREE rows, not six.
+     The bar used to stack brand / sign-in / one switch / the other switch /
+     prune+settings / theme — six bands of chrome above a screen whose whole job
+     is reading an answer. Nothing is removed; the controls just get the room
+     they actually need:
+
+        ◆ RAG-it       GUEST 0/3 FILES   [G Sign in]
+        [Keyword fusion OFF]   [Web fallback OFF]
+        [Prune ghosts ?]  [⚙ Settings]  [☾]
+
+     A GRID, not a wrapping flex row, and `display: contents` on .topbar-right is
+     what makes it work. That wrapper is `flex: 1 1 0` on desktop, so it only ever
+     measured the space LEFT OVER beside the brand — 254px of a 375px screen — and
+     its children wrapped inside that. Prune + Settings + theme need 254px exactly,
+     which is why the theme toggle kept falling to a row of its own. Dissolving the
+     wrapper promotes both clusters to grid items: identity stays up beside the
+     brand, and the action row spans the full width it needed all along. */
+  .topbar {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas:
+      "brand identity"
+      "actions actions";
+    align-items: center;
+    gap: 7px 10px;
+    padding: 8px 12px;
+  }
+  .brand { grid-area: brand; }
+  .topbar-right { display: contents; }
+  .topbar-identity { grid-area: identity; justify-self: end; }
+  .topbar-actions { grid-area: actions; gap: 6px; }
+  /* #user-name is empty in guest and OAuth modes; it would otherwise claim a
+     grid cell and shove identity out of the brand's row. */
+  .user-name:empty { display: none; }
   .brand-sub { display: none; }
+  .brand-mark { width: 24px; height: 24px; border-radius: 7px; font-size: 12px; }
+  .brand-name { font-size: 15px; }
   .user-name { font-size: 13px; }
-  /* Keep the sign-in control on the brand row; the toggles wrap below it.
-     Reorder the CLUSTER, not the button inside it — `order` only applies among
-     flex siblings, and .auth-slot is not one of .topbar-right's. */
-  .topbar-identity { order: 1; }
-  .topbar-actions { order: 2; width: 100%; }
   .user-chip { max-width: 190px; }
-  .switch { flex: 1 1 auto; justify-content: space-between; }
+  /* Two switches to a row rather than one each. They are the tallest things in
+     the bar, so this is where the vertical estate actually comes back. The
+     overflow guard is for 320px screens, where the pair genuinely cannot fit and
+     a nowrap label would otherwise spill across its neighbour. */
+  .switch {
+    flex: 1 1 calc(50% - 3px); min-width: 0; overflow: hidden;
+    justify-content: space-between;
+    padding: 2px 4px 2px 9px;
+  }
+  .switch-label, .switch-label.term {
+    font-size: 12px; min-width: 0;
+    overflow: hidden; text-overflow: ellipsis;
+  }
+  .switch-btn { padding: 4px 8px; min-width: 40px; }
 
   /* One column, so "contained in the chat column" is meaningless here —
      everything is full width by definition. Order only: the excerpt follows
@@ -1471,10 +1511,14 @@ fieldset legend {
   .excerpt-pane .pane-scroll { overflow: visible; }
   .excerpt-ref { margin-left: 0; white-space: normal; }
 
-  /* touch-friendly targets */
+  /* Touch-friendly targets — but sized by ROLE, not uniformly. Ask and Sign in
+     are the two things a thumb reaches for and stay large; the topbar's
+     secondary chrome (prune, settings, theme) is tuned down so all three fit one
+     row, which is worth more on a 375px screen than four more pixels of padding
+     on a button pressed once a session. */
   .btn { padding: 10px 14px; }
   .btn-small { padding: 8px 12px; font-size: 14px; }
-  .switch-btn { padding: 7px 12px; }
+  .topbar-actions .btn-small { padding: 6px 10px; font-size: 13px; }
   .icon-btn { padding: 8px 10px; font-size: 16px; }
   .pane-toggle { width: 38px; height: 38px; }
   /* The glossary is the one help affordance that MUST be tappable — it exists
@@ -1491,10 +1535,14 @@ fieldset legend {
 }
 
 @media (max-width: 400px) {
-  .topbar-actions .btn { flex: 1 1 auto; }
-  /* Too narrow to share the brand row — give the sign-in control its own. */
-  .topbar-identity, .auth-slot { width: 100%; margin-left: 0; }
-  .google-btn, .user-chip { width: 100%; max-width: none; justify-content: center; }
+  /* The buttons used to be told to grow (`flex: 1 1 auto`), which turned each of
+     prune / settings / theme into its own full-width band — three rows to say
+     what fits comfortably in one. They keep their natural width now.
+     Google permits the short "Sign in" label beside the G mark, and dropping
+     " with Google" is what lets identity stay on the brand's row here instead of
+     taking a full row of its own. */
+  .brand-name { font-size: 14px; }
+  .google-btn-long { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
