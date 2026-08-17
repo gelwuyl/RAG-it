@@ -217,13 +217,14 @@ def auth_status(request: Request, db: Session = Depends(get_session)):
         "google_oauth": authn.oauth_configured(),
         # Lets the UI show a "Guest — sign in to keep your files" state and the
         # remaining allowance, rather than presenting a throwaway workspace as
-        # if it were permanent.
+        # if it were permanent. `provider` is included so the frontend can
+        # branch on identity type without inferring it from the name.
+        "provider": user.provider if user else None,
         "is_guest": guests.is_guest(user),
-        "guest_limits": {
-            "max_documents": guests.GUEST_MAX_DOCUMENTS,
-            "max_upload_bytes": guests.GUEST_MAX_UPLOAD_BYTES,
-            "idle_ttl_seconds": guests.GUEST_IDLE_TTL_SECONDS,
-        } if guests.is_guest(user) else None,
+        # Usage, not just limits: without it the only way to discover the cap is
+        # to have an upload rejected. Demo documents are excluded, matching how
+        # the cap itself counts.
+        "guest_usage": guests.usage(db, user) if guests.is_guest(user) else None,
     }
 
 

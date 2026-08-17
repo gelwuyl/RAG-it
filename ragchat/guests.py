@@ -262,6 +262,29 @@ def seed_demo_corpus(db: Session, guest: User) -> int:
     return copied
 
 
+def usage(db: Session, user: User) -> dict:
+    """Current consumption against the guest allowance.
+
+    Exposed so the UI can show "2 of 3 documents" BEFORE the visitor hits the
+    wall. Limits alone are not enough: without usage the only way to discover
+    the cap is to have an upload rejected, which is a bad way to learn a rule.
+    Demo documents are excluded here for the same reason they are excluded from
+    the cap itself — they are the app's content, not the visitor's.
+    """
+    docs = [
+        d
+        for d in db.query(Document).filter(Document.user_id == user.id).all()
+        if not d.is_demo
+    ]
+    return {
+        "documents": len(docs),
+        "max_documents": GUEST_MAX_DOCUMENTS,
+        "bytes": sum(d.size_bytes or 0 for d in docs),
+        "max_bytes": GUEST_MAX_UPLOAD_BYTES,
+        "idle_ttl_seconds": GUEST_IDLE_TTL_SECONDS,
+    }
+
+
 def upload_allowance(db: Session, user: User, incoming_bytes: int) -> str | None:
     """Return an error message if this upload would exceed a guest's cap.
 
