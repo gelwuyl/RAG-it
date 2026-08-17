@@ -2,36 +2,53 @@
 
 **Written:** 2026-08-17 by the frontend session.
 **Updated:** 2026-08-17 by the backend session (§0, §3, §4 corrections).
+**Updated:** 2026-08-17 by the combined session — **§0 rewritten; read it first.**
 
-> ## §0. Status correction — read first
+> ## §0. Current status — read first
 >
-> The frontend session wrote "nothing is committed". That is **no longer true**,
-> and several of its §4 requests have since been fulfilled.
+> Everything is committed on `main`. Phases 0–2 of the combined session are
+> done; `git log --oneline` is the source of truth.
 >
-> **All backend work is committed and pushed to `main`** — nine commits, ending
-> at `3a52414`. `git log --oneline` is the source of truth.
->
-> **Still uncommitted:** only the frontend session's own files —
-> `frontend/app.js`, `frontend/index.html`, `frontend/styles.css`, plus untracked
-> `frontend/tokens.css`, `shot.mjs`, `PRODUCT_UX_PLAN.md`.
->
-> Resolved since that doc was written:
->
-> | Was | Now |
+> | Commit | What |
 > |---|---|
-> | §4C `/api/auth/status` cannot distinguish a guest | **Done** — returns `provider`, `is_guest` |
-> | §4D guest quotas invisible until they fail | **Done** — returns `guest_usage` with current counts |
-> | §4F "something else is editing frontend files" | That was the backend session: the auth-path repair and the **RAG Chat → RAG-it rename**. Cache-buster is at `v=10`. |
+> | `4cde1a7` | Phase 0 — the frontend session's uncommitted tokens/theme/`shot.mjs` baseline |
+> | `d4808d8` | Phase 1 — guest-first entry + the write-route guards it required |
+> | `d29ed86` | Phase 2 — two registers, JetBrains Mono, lime in both themes, per-answer readout |
 >
-> Still open and correctly identified: **§4A** (`local-login` → `guest-login`),
-> **§4B** (callback redirects to `/`), **§4E** (`vercel.json`), **§4G**
-> (`secure` cookie — deliberately deferred by the product owner until sign-in
-> was proven working end to end; it now is, so this is ready to do).
+> **§4A, C, D, F, G are resolved. §4B and §4E remain open, deliberately** —
+> both belong to the landing-page split and must ship together (see the ordering
+> trap below).
 >
-> **The single highest-priority item is §4A.** Guest mode is fully built and
-> tested on the backend but is **not live**, because `app.js:100` still calls the
-> old `POST /api/auth/local-login`. Until that call becomes
-> `POST /api/auth/guest-login`, no visitor gets a private guest workspace.
+> Two things this document previously got wrong:
+>
+> 1. **§4A was not a one-line change.** `app.js` fell back to a guest only when
+>    Google OAuth was *unconfigured*. Production has it configured, so every
+>    visitor met a sign-in wall and the guest subsystem was unreachable there.
+>    Swapping the endpoint alone would have changed nothing. The fix was the
+>    boot **policy**.
+> 2. **§9's ordering breaks Google sign-in.** It puts "callback redirect →
+>    `/app`" at position 3, before the landing page at position 8. `/app` does
+>    not exist until the Vite multi-entry + `vercel.json` rewrite land, so doing
+>    it in that order 404s every sign-in. **§4B and §4E must be one commit.**
+>
+> ### Found and fixed while turning guest mode on
+>
+> Turning guest-first on without these would have been a straight downgrade of
+> production integrity:
+>
+> - **Four eval routes had no authentication dependency at all** —
+>   `PUT /api/eval/config`, both toggles, and `POST /api/eval/run` / `/step`.
+>   `config_overrides` is a **single shared row** (`db.py:121`), so on the public
+>   deployment *any anonymous caller* could re-point the embedding model for
+>   every user and invalidate their chunks, or start a 46-question benchmark
+>   against the deployment's LLM quota. Now behind `require_account`.
+> - **The guest cap only covered `/documents/upload`**, so the 3-document limit
+>   was bypassable by pasting URLs.
+> - **`prune_chunks` existed only in `store_neon.py`**, so "Prune ghosts" raised
+>   `AttributeError` and 500'd on the Chroma backend.
+>
+> Tests: **62 passing** (was 43); `tests/test_guest_permissions.py` is new and
+> asserts both directions — what a guest is refused *and* what a guest keeps.
 
 This session did UI/UX planning and frontend steps 0–2 of
 [`PRODUCT_UX_PLAN.md`](PRODUCT_UX_PLAN.md). It stopped at the point where
@@ -368,20 +385,48 @@ curl -s https://rag-gel.vercel.app/api/health | python -m json.tool
 
 ---
 
-## 9. Recommended order for the combined session
+## 9. Remaining work, in order
 
-1. **§4A — switch `local-login` → `guest-login`.** One line; guest mode is built,
-   tested and inert until this lands. Decide whether `local-login` survives as a
-   dev convenience (it is still the fallback when Google OAuth is unconfigured).
-2. **§4C/D — render guest state** from `is_guest` / `guest_usage`. Use
-   `guest_usage.documents`, not the length of `/api/documents`.
-3. **§4B — callback redirect to `/app`** before the landing page ships, or
-   sign-in dumps users on the marketing page.
-4. **Correct `PRODUCT_UX_PLAN.md` §3–§4** per §5 of this document. The 2-file
-   demo corpus limit is deliberate: the other eight files in `eval/corpus/` are
-   real business content and must never reach anonymous visitors.
-5. **§4G — `secure`/`samesite` cookies.** Deferred until sign-in was proven; it
-   now is. Must be conditional or local HTTP dev breaks.
+Items 1–2, 4–5 of the previous list are **done** (see §0). What is left:
 
-Still queued, backend-only, not started: a **retrieval-only CI gate** running the
-46 golden questions on every push at zero LLM cost.
+### Phase 3 — landing page + routing, as ONE commit
+
+`index.html` → `app.html`, the Vite multi-entry input, the `vercel.json`
+rewrite, **and** the §4B callback redirect together. Splitting them 404s
+sign-in for however long the split lasts.
+
+Blocked on open decisions §7.2 and §7.3 (hero typeface, space image). §7.1 is
+**settled**: self-hosted JetBrains Mono, Regular + Bold, shipped in `d29ed86`.
+
+Landing copy must say **two** sample documents, not ten, and pitch
+"start now, sign in to keep it" rather than "try a read-only demo" (§5).
+
+### Phase 4 — product depth
+
+Settings presets (plan step 7) · inline help and sequenced empty states
+(step 10) · ⌘K command palette (step 11).
+
+> **Copy bug to fix in step 10:** the empty chat state says "Add sources on the
+> left" — but a guest arrives with two demo documents already loaded, so it is
+> wrong for every first-time visitor. It should offer the three suggested
+> questions the plan §4 calls for instead.
+
+### Phase 5 — mobile
+
+Deliberately last: it re-lays-out everything above it. Scope (full separate
+product shape vs. responsive-only) was left open pending Phase 2 and is now
+ready to decide.
+
+### Backend, unstarted
+
+A **retrieval-only CI gate** running the 46 golden questions on every push at
+zero LLM cost.
+
+### Noted, not chased
+
+Running locally against a scratch DB with **`config.yaml` defaults**, an answer
+came back echoing the rewritten query rather than answering it, and the judge
+returned a reasoning block with no verdict. Production runs a tuned
+`config_overrides` row, not these defaults, so this may be an artefact of the
+scratch environment rather than a live defect — but it is worth one deliberate
+look, because both symptoms would be invisible from `/api/health`.
