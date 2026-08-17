@@ -56,6 +56,55 @@ app.add_middleware(
 
 LOCAL_USERNAME = "local"
 
+# Cookies are marked `secure` only where the app is actually served over HTTPS.
+# It cannot be unconditional: a `secure` cookie is silently dropped on plain
+# http://localhost, which would break local development with no error message —
+# sign-in would appear to succeed and every following request would be anonymous.
+# VERCEL=1 is the same signal config.py already uses to mean "deployed".
+_HTTPS_DEPLOY = bool(os.environ.get("VERCEL"))
+
+
+def set_session_cookie(response: Response, user_id: str) -> None:
+    """Issue the session cookie with the same flags everywhere.
+
+    Previously each of the five sign-in paths called set_cookie itself with only
+    httponly=True, so hardening one meant remembering the other four. `lax`
+    rather than `strict` because the Google OAuth callback is a cross-site
+    top-level navigation back into the app — under `strict` the browser withholds
+    the cookie it was just handed and the user lands signed out.
+    """
+    response.set_cookie(
+        authn.SESSION_COOKIE,
+        authn.encode_session(user_id),
+        httponly=True,
+        secure=_HTTPS_DEPLOY,
+        samesite="lax",
+    )
+
+
+GUEST_WRITE_DENIED = (
+    "Sign in with Google to use this. Guest workspaces are read-only for "
+    "settings and benchmarks because those apply to the whole deployment."
+)
+
+
+def require_account(user: User = Depends(authn.get_current_user)) -> User:
+    """Authenticate, and reject guests.
+
+    For routes that write GLOBAL state or spend real budget. The distinction
+    matters because `config_overrides` is a SINGLE ROW shared by every user
+    (db.py:121) — a config write is not a personal preference, it re-points the
+    embedding model for everyone and invalidates their chunks. Same reasoning
+    for benchmark runs, which spend ~46 scored questions of LLM quota.
+
+    Per-user writes (upload, delete, chat, prune) deliberately do NOT use this:
+    a guest editing their own throwaway workspace harms nobody, and the whole
+    point of guest mode is that it is a real workspace rather than a diorama.
+    """
+    if guests.is_guest(user):
+        raise HTTPException(status_code=403, detail=GUEST_WRITE_DENIED)
+    return user
+
 
 @app.on_event("startup")
 def startup() -> None:
@@ -239,7 +288,7 @@ def register(body: RegisterIn, request: Request, response: Response, db: Session
         raise HTTPException(status_code=409, detail="Username already taken")
     user, _err = authn.find_or_create_password_user(db, body.username, body.password)
     _promote_prior_guest(request, db, user)
-    response.set_cookie(authn.SESSION_COOKIE, authn.encode_session(user.id), httponly=True)
+    set_session_cookie(response, user.id)
     return {"id": user.id, "name": user.name}
 
 
@@ -267,7 +316,7 @@ def login(body: LoginIn, request: Request, response: Response, db: Session = Dep
     except ValueError:
         raise HTTPException(status_code=401, detail="Invalid username or password")
     _promote_prior_guest(request, db, user)
-    response.set_cookie(authn.SESSION_COOKIE, authn.encode_session(user.id), httponly=True)
+    set_session_cookie(response, user.id)
     return {"id": user.id, "name": user.name}
 
 
@@ -291,7 +340,7 @@ def local_login(response: Response, db: Session = Depends(get_session)):
     )
     if not user:
         raise HTTPException(status_code=503, detail="Local user not initialized")
-    response.set_cookie(authn.SESSION_COOKIE, authn.encode_session(user.id), httponly=True)
+    set_session_cookie(response, user.id)
     return {"id": user.id, "name": user.name}
 
 
@@ -332,7 +381,7 @@ async def google_callback(request: Request, db: Session = Depends(get_session)):
     _promote_prior_guest(request, db, user)
 
     resp = RedirectResponse("/")
-    resp.set_cookie(authn.SESSION_COOKIE, authn.encode_session(user.id), httponly=True)
+    set_session_cookie(resp, user.id)
     resp.delete_cookie("oauth_state")
     return resp
 
@@ -359,7 +408,7 @@ def guest_login(request: Request, response: Response, db: Session = Depends(get_
     except Exception:
         # An empty workspace is a worse demo but still a working one.
         db.rollback()
-    response.set_cookie(authn.SESSION_COOKIE, authn.encode_session(guest.id), httponly=True)
+    set_session_cookie(response, guest.id)
     return {"id": guest.id, "name": guest.name, "guest": True}
 
 
@@ -470,10 +519,20 @@ def add_url_document(
     url = body.url.strip()
     if not url.startswith(("http://", "https://")):
         url = "https://" + url
+    # The guest cap applies to URLs as much as uploads — both end in an embedded
+    # document billed to the deployment. Guarding only /upload left the cap
+    # trivially bypassable by pasting links instead. Checked with 0 bytes first
+    # so a guest already at the document limit is refused BEFORE we spend a fetch.
+    denied = guests.upload_allowance(db, user, 0)
+    if denied:
+        raise HTTPException(status_code=422, detail=denied)
     try:
         final_url, content = fetch_url(url)
     except Exception as exc:
         raise HTTPException(status_code=422, detail=f"Fetch failed: {exc}")
+    denied = guests.upload_allowance(db, user, len(content))
+    if denied:
+        raise HTTPException(status_code=422, detail=denied)
     try:
         text = load_bytes("page.html", content, url=final_url)
     except ValueError as exc:
@@ -487,6 +546,10 @@ def add_url_document(
         title=page_title(final_url, content),
         path_or_url=final_url,
         content_hash=_content_hash(content),
+        # Recorded so the byte half of the guest budget counts URL sources too;
+        # without it a guest's usage would under-report and the cap would only
+        # ever bite on the document count.
+        size_bytes=len(content),
     )
     db.add(doc)
     db.commit()
@@ -531,7 +594,11 @@ def prune_orphan_chunks(
 
 @app.post("/api/documents/reindex")
 def reindex_all(
-    user: User = Depends(authn.get_current_user),
+    # Denied to guests: re-indexing re-embeds every document from scratch, and a
+    # guest's seeded demo corpus was vector-COPIED precisely so it would never
+    # cost an embedding call. One click per guest would undo that saving. They
+    # also cannot change the config, so they have no reason to re-index.
+    user: User = Depends(require_account),
     db: Session = Depends(get_session),
 ):
     """Re-chunk and re-embed every source under the current config (F17)."""
@@ -567,7 +634,12 @@ def _load_source_text(doc: Document) -> Optional[str]:
 @app.post("/api/folders")
 def add_folder(
     body: FolderIn,
-    user: User = Depends(authn.get_current_user),
+    # Guests are excluded from folder sources entirely: a folder path names the
+    # SERVER's filesystem, not the visitor's. Letting anonymous callers walk the
+    # deployment's own files under allowed_root is a disclosure risk with no
+    # upside — a guest has nothing on that disk. It would also bypass the
+    # 3-document cap, since one scan ingests a whole tree.
+    user: User = Depends(require_account),
     db: Session = Depends(get_session),
 ):
     root = Path(body.path).expanduser().resolve()
@@ -612,7 +684,7 @@ def list_folders(user: User = Depends(authn.get_current_user), db: Session = Dep
 @app.post("/api/folders/{folder_id}/rescan")
 def rescan_folder(
     folder_id: str,
-    user: User = Depends(authn.get_current_user),
+    user: User = Depends(require_account),
     db: Session = Depends(get_session),
 ):
     folder = db.get(FolderSource, folder_id)
@@ -819,7 +891,7 @@ def eval_config():
 
 
 @app.post("/api/eval/hybrid-search")
-def toggle_hybrid_search():
+def toggle_hybrid_search(_: User = Depends(require_account)):
     """Toggle hybrid_search (KEYWORD/BM25 fusion) on/off. The config is
     re-read every request, so the change takes effect on the next ask. This is
     real vector+keyword fusion, NOT web search. Persisted to the DB (writable)
@@ -833,7 +905,7 @@ def toggle_hybrid_search():
 
 
 @app.post("/api/eval/web-augmentation")
-def toggle_web_augmentation():
+def toggle_web_augmentation(_: User = Depends(require_account)):
     """Toggle web_augmentation (DuckDuckGo fallback) on/off.
 
     This is a fallback ONLY — when on, web results are appended as labeled
@@ -881,7 +953,7 @@ class ConfigUpdateIn(BaseModel):
 
 
 @app.put("/api/eval/config")
-def update_config(body: ConfigUpdateIn):
+def update_config(body: ConfigUpdateIn, _: User = Depends(require_account)):
     """Persist tuning knobs to the DB-backed config store (config.yaml is
     read-only on Vercel serverless). Returns the new config snapshot and
     whether a re-index is needed (index-affecting keys changed)."""
@@ -1067,7 +1139,11 @@ def get_eval(db: Session = Depends(get_session)):
 
 
 @app.post("/api/eval/run")
-def start_eval(body: EvalRunIn | None = None, db: Session = Depends(get_session)):
+def start_eval(
+    body: EvalRunIn | None = None,
+    _: User = Depends(require_account),
+    db: Session = Depends(get_session),
+):
     """Begin a benchmark run. Returns immediately; the client then calls
     POST /api/eval/step repeatedly until status != "running"."""
     from eval.run_eval import config_snapshot, load_golden, reset_eval_collection
@@ -1110,7 +1186,11 @@ def start_eval(body: EvalRunIn | None = None, db: Session = Depends(get_session)
 
 
 @app.post("/api/eval/step")
-def step_eval(body: EvalRunIn | None = None, db: Session = Depends(get_session)):
+def step_eval(
+    body: EvalRunIn | None = None,
+    _: User = Depends(require_account),
+    db: Session = Depends(get_session),
+):
     """Advance the active run by one bounded slice of work.
 
     Order of work: index the corpus one file at a time, then score questions in

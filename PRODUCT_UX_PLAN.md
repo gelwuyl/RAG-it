@@ -21,8 +21,8 @@ themes.
 | Landing style | **Near-literal Grok-UI homage** — full HUD, space backdrop, display numerals (§2) |
 | Display numerals in app | **Expanded benchmark view only** (§6) |
 | Extra HUD markers | **Command palette (⌘K)** only — no numbered nav, breadcrumb or grid motif |
-| First-run | Landing CTA = **"Try it with sample documents"** → read-only demo workspace |
-| Access model | **Read-only shared demo; sign in for a private workspace** (§3) |
+| First-run | **Guest-first** — no sign-in wall; a private workspace is provisioned on arrival (§3) |
+| Access model | **Private writable guest workspace; sign in to keep it** (§3, revision 4) |
 | Explanatory content | **Inline in the panes** — no About route |
 | Explanation depth | **Layered** — plain language by default, expandable detail |
 | Settings | **Presets first**, expert fields behind an "Advanced" toggle |
@@ -150,53 +150,75 @@ Today's `frontend/index.html` moves to `frontend/app.html` unchanged; the new
 
 ---
 
-## 3. Access model — the blocking issue
+## 3. Access model — **BUILT** (revision 4)
 
-**The app is single-user today, and the demo plan assumed otherwise.**
-`local_login` (`ragchat/app.py:249`) signs *everyone* in as one built-in account
-(`LOCAL_USERNAME = "local"`, `app.py:56`); every route resolves through
-`get_current_user`. So on a public deployment every visitor would share one
-corpus and one chat history — able to read, and delete, each other's work.
+> Revisions 1–3 specified a *shared, read-only* demo corpus. That is **not what
+> was built**, and the delivered design is better. This section now describes
+> the shipped behaviour; §13 records what changed and why.
 
-**Resolution: two tiers.**
+**Guest tier (no sign-in).** Every anonymous visitor is auto-provisioned their
+**own private, writable, throwaway workspace** (`ragchat/guests.py`). Not a
+shared account — the app scopes every query by user id, so one shared guest
+account would let strangers read and delete each other's uploads, the exact
+mixing per-user isolation exists to prevent.
 
-**Demo tier (no sign-in).** A dedicated demo user owns the sample corpus,
-seeded **once** from `eval/corpus/` — not per visitor, so there is no
-per-visitor embedding or storage cost.
-- Documents are **shared and read-only**: no upload, no delete, no re-index,
-  no folder scan, no settings writes. Write routes must reject demo callers
-  server-side, not merely hide the buttons.
-- **Chats are per-visitor and ephemeral.** Read-only documents fix the corpus
-  problem but *not* the conversation problem — without this, each visitor reads
-  whatever the previous one asked. Demo chats are keyed to an anonymous session
-  cookie and are not visible across visitors.
-- The UI states plainly that this is a shared read-only demo, with a persistent
-  path to sign in.
+- The demo corpus is embedded **once** under a template account and then
+  **vector-copied** per guest. No embedding calls, no quota spend, no latency
+  on arrival — and each visitor's copy is genuinely theirs.
+- Guests **can upload**, capped at **3 documents / 5 MB**. Usage is reported by
+  `GET /api/auth/status` → `guest_usage`, so the UI shows "1 of 3 files" rather
+  than teaching the rule through a rejected upload.
+- Chats are per-visitor by construction: each guest is already its own account,
+  so the "ephemeral chats" problem revision 2 identified never arises.
+- Guests are reaped after **2 hours idle**, opportunistically on guest creation
+  (Vercel Hobby has no cron, and a background thread would be frozen — CLAUDE.md).
 
-**Private tier (signed in).** Google OAuth grants a normal workspace with full
-upload / delete / re-index / settings powers. The multi-user plumbing is already
-intact and deliberately deferred; this turns it back on. See the existing
-`GOOGLE_OAUTH_SETUP.md`.
+**What a guest may NOT do** — enforced server-side by `require_account`
+(`ragchat/app.py`), not merely hidden in the UI:
 
-**Consequence for build order:** this is no longer polish. Steps 7–8 depend on
-it, so it moves up (§12).
+| Denied | Why |
+|---|---|
+| `PUT /api/eval/config` | `config_overrides` is a **single shared row** (`db.py:121`). A config write re-points the embedding model for *everyone* and invalidates their chunks. |
+| `POST /api/eval/hybrid-search`, `/web-augmentation` | Same shared row. |
+| `POST /api/eval/run`, `/step` | Spends ~46 scored questions of real LLM quota. |
+| `POST /api/folders`, `/rescan` | A folder path names the **server's** filesystem, not the visitor's. Also bypasses the document cap — one scan ingests a tree. |
+| `POST /api/documents/reindex` | Re-embeds from scratch, undoing the vector-copy saving. |
+
+Everything else — upload, delete, ask, new chat, prune, theme — a guest keeps.
+A guest workspace is a **trial, not a display case**.
+
+**Private tier (signed in).** Google OAuth grants an uncapped workspace. Signing
+in **promotes** the guest's work into the permanent account: documents, folders,
+conversations and chunks are re-pointed, nothing is re-embedded
+(`app.py:_promote_prior_guest`). This applies to every sign-in path, not just
+Google.
+
+**The messaging consequence.** The CTA is no longer "try a read-only demo". It
+is **"start using it now, sign in when you want to keep it"** — a materially
+better pitch, and it is why guest-first has no downside if the visitor never
+signs in.
 
 ---
 
-## 4. Demo corpus mechanics
+## 4. Demo corpus mechanics — **BUILT**
 
-`eval/corpus/` already holds ten ready documents (`helios_energy_handbook.md`,
-`meridian_coffee_ops.md`, `project_portfolio.txt`, …).
+`eval/corpus/` holds ten documents. **Exactly two are exposed to guests** —
+`helios_energy_handbook.md` and `meridian_coffee_ops.md`.
 
-- **Seeded once, administratively** — not on visitor arrival. This removes the
-  60s `maxDuration` problem from the visitor path entirely, along with the
-  half-ingested-corpus-if-they-close-the-tab failure mode.
-- `/app?demo=1` therefore just *opens* an already-populated workspace. Instant.
-- **Three suggested questions** answerable from that corpus render as clickable
-  chips in the empty chat state.
-- If seeding must happen through the API rather than a one-off script, it uses
-  the **sliced-job pattern** from `/api/eval/step` — one document per call —
-  because ten documents will not ingest inside 60s.
+> **The 2-file limit is deliberate and must not be "fixed".** `guests.py` states
+> the other eight are real business content that must never reach anonymous
+> visitors. **Any landing copy promising ten sample documents is wrong.**
+
+- Embedded **once** into a `__demo_template__` account, then vector-copied per
+  guest. This removes the 60s `maxDuration` problem from the visitor path
+  entirely, along with the half-ingested-corpus-if-they-close-the-tab failure.
+- Arriving at the app just *opens* an already-populated workspace. Instant.
+- Demo documents are **excluded from the guest cap** — they are the app's
+  content, not the visitor's. A fresh guest has all 3 upload slots.
+  Consequently the UI must read usage from `guest_usage.documents`, **never**
+  from `len(/api/documents)`, which reads two too high.
+- **Three suggested questions** answerable from those two files render as
+  clickable chips in the empty chat state. *(Still to do — step 10.)*
 
 ---
 
@@ -416,6 +438,30 @@ changes.
 ---
 
 ## 13. Change log
+
+### Revision 4 — §3/§4 rewritten to describe what was actually built
+
+Revisions 1–3 specified a **shared, read-only** demo corpus. The backend built
+something different and better — a private, writable, per-visitor workspace —
+so those sections described a product that does not exist. Corrected in place.
+
+Four other things resolved while turning guest mode on:
+
+1. **Guest-first was a boot-policy change, not a rename.** `app.js` fell back to
+   a guest only when Google OAuth was *unconfigured*. Production has it
+   configured, so every visitor met a sign-in wall and the entire guest
+   subsystem was unreachable there. Swapping the endpoint alone would have
+   changed nothing.
+2. **Four eval routes had no authentication at all** — `PUT /api/eval/config`,
+   both toggles, and `POST /api/eval/run`/`step`. On the public deployment any
+   anonymous caller could re-point the embedding model for every user or start a
+   46-question benchmark. Closed by `require_account` before guest-first shipped;
+   guest-first without it would have been a straight downgrade.
+3. **The guest cap only covered uploads.** `POST /api/documents/url` was
+   unguarded, so the 3-document limit was bypassable by pasting links.
+4. **`prune_chunks` existed only in the Neon store**, so "Prune ghosts" 500'd on
+   the Chroma backend. The two backends must expose the same surface —
+   `vectordb.py` dispatches by name and cannot paper over a missing one.
 
 ### Revision 3 — calibrating distance from the reference
 

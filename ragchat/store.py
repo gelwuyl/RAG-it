@@ -260,6 +260,53 @@ def _flat_lookup(flat, cid, idx):
     return None
 
 
+def prune_chunks(
+    user_id: str,
+    valid_doc_ids: set[str],
+    stale_fingerprints: set[str] | None = None,
+) -> int:
+    """Delete chunks with no backing Document row, and optionally stale ones.
+
+    The Neon twin of this function existed; this one did not, so "Prune ghosts"
+    raised AttributeError inside vectordb._impl() and 500'd on the Chroma
+    backend. The two stores must expose the same surface — vectordb.py dispatches
+    to whichever is configured and cannot paper over a missing name.
+
+    Returns the number of chunks removed.
+    """
+    client = get_client()
+    prefix = _user_collection_prefix(user_id)
+    removed = 0
+    for col in client.list_collections():
+        name = col.name if hasattr(col, "name") else str(col)
+        if not name.startswith(prefix):
+            continue
+        collection = client.get_collection(name)
+        got = collection.get(include=["metadatas"])
+        ids = got.get("ids") or []
+        metas = got.get("metadatas") or []
+        doomed = []
+        for cid, meta in zip(ids, metas):
+            meta = meta or {}
+            # Orphan check is skipped entirely on an empty valid set. Mirrors the
+            # Neon guard and the no-op documented in CLAUDE.md: a user who has
+            # not added any documents yet must not have their chunks wiped by a
+            # prune that legitimately found nothing to compare against.
+            if valid_doc_ids and meta.get("doc_id") not in valid_doc_ids:
+                doomed.append(cid)
+            elif stale_fingerprints and meta.get("fingerprint") in stale_fingerprints:
+                doomed.append(cid)
+        if doomed:
+            collection.delete(ids=doomed)
+            removed += len(doomed)
+    if removed:
+        # BM25 caches are keyed by collection name and now describe chunks that
+        # no longer exist; drop them so they rebuild lazily from what is left.
+        for cache in (_BM25_DOCS, _BM25_FLAT, _BM25_OBJ):
+            cache.clear()
+    return removed
+
+
 def reassign_user_chunks(old_user_id: str, new_user_id: str) -> int:
     """Move a user's vectors by RENAMING their collections.
 

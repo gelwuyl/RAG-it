@@ -161,7 +161,61 @@ input::placeholder, textarea::placeholder { color: var(--faint); }
   display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
   margin-left: auto;
 }
-.user-name:not(:empty) + .topbar-actions { margin-left: 0; }
+/* `~` rather than `+`: the guest badge now sits between these two, so the
+   original adjacent-sibling rule silently stopped matching and the top bar
+   grew a second margin-left:auto. Only one of the two ever occupies space —
+   a guest has no name, a signed-in account has no badge. */
+.user-name:not(:empty) ~ .topbar-actions,
+.guest-badge:not(.hidden) ~ .topbar-actions { margin-left: 0; }
+
+/* ---------- guest workspace badge ----------
+   Telemetry register (PRODUCT_UX_PLAN.md §1): mono, uppercase, letterspaced,
+   deliberately low contrast. It is a status readout, not a call to action —
+   the actual sign-in button lives in .auth-slot beside it. */
+.guest-badge {
+  margin-left: auto;
+  display: inline-flex; align-items: center; gap: 8px;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.guest-badge-tag {
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-pill);
+  padding: 2px 8px;
+  color: var(--text);
+  flex-shrink: 0;
+}
+.guest-badge-usage { font-variant-numeric: tabular-nums; flex-shrink: 0; }
+/* At the cap, and only then, the count turns to the warning colour. Not red:
+   hitting the guest limit is a prompt to sign in, not a failure. */
+.guest-badge-usage.is-full { color: var(--warn); }
+/* The clause that makes "sign in" read as save rather than paywall. First
+   thing dropped when the top bar runs out of room — the count and the sign-in
+   button both survive without it. */
+.guest-badge-note {
+  text-transform: none;
+  letter-spacing: 0.01em;
+  color: var(--faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+@media (max-width: 1100px) {
+  .guest-badge-note { display: none; }
+}
+
+/* Controls a guest may not use. Dimmed but still CLICKABLE on purpose: they
+   keep an onclick that explains the refusal (app.js:guestBlocked). A real
+   `disabled` attribute dispatches no click, so the visitor would get silence
+   instead of a reason — and `title` alone does not exist on touch. */
+.guest-locked {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
 
 /* Optional Google sign-in: last item in the top bar, never a layout owner. */
 .auth-slot { display: flex; align-items: center; margin-left: 8px; }

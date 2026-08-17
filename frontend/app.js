@@ -4,6 +4,9 @@ const $ = (id) => document.getElementById(id);
 
 const state = {
   user: null,
+  isGuest: false,    // anonymous visitor on a throwaway workspace (provider="guest")
+  guestUsage: null,  // {documents, max_documents, bytes, max_bytes, …} or null when signed in
+  googleOAuth: false, // whether this deployment has Google sign-in configured
   chats: [],
   currentChatId: null,
   currentCitations: [], // citations of the last assistant message, for the excerpt pane
@@ -89,27 +92,37 @@ function showApp() {
 async function initAuth() {
   try {
     let status = await api("/api/auth/status");
-    // Guest fallback ONLY when Google sign-in is unavailable on this
-    // deployment. Every route is already scoped to the signed-in user
-    // (documents, folders, chats and vector chunks all filter on user id), so
-    // the ONE thing that made everyone share a space was auto-signing every
-    // visitor into the built-in `local` account. Doing that while OAuth is
-    // configured would defeat per-user isolation: two people signing in with
-    // different Google accounts would still land in the same `local` documents.
-    if (!status.authenticated && !status.google_oauth) {
-      await api("/api/auth/local-login", { method: "POST" });
-      status = await api("/api/auth/status");
+
+    // GUEST-FIRST: an unauthenticated visitor is given their own private,
+    // throwaway workspace rather than a sign-in wall. This is the whole premise
+    // of guest mode — "start using it now, sign in when you want to keep it" —
+    // and it is safe to guess wrong, because signing in PROMOTES the guest's
+    // documents and chats into the permanent account instead of discarding them
+    // (app.py:_promote_prior_guest).
+    //
+    // The previous condition was `!status.authenticated && !status.google_oauth`,
+    // which only fell back when OAuth was UNCONFIGURED. Production has OAuth
+    // configured, so every visitor hit the gate and the entire guest subsystem
+    // was unreachable there. It also called /api/auth/local-login, which signs
+    // everyone into ONE shared account — the exact mixing per-user isolation
+    // exists to prevent. guest-login gives each visitor their own.
+    if (!status.authenticated) {
+      try {
+        await api("/api/auth/guest-login", { method: "POST" });
+        status = await api("/api/auth/status");
+      } catch (e) {
+        // No guest workspace could be provisioned (DB down, seeding failed).
+        // Fall through to the sign-in gate rather than booting into an app
+        // whose every fetch would 401.
+        console.error("guest login failed:", e);
+      }
     }
     if (!status.authenticated) {
-      // OAuth is available but nobody is signed in — show the gate instead of
-      // booting into an empty app whose every fetch would 401.
       renderAuthGate(status);
       showAuth();
       return;
     }
-    state.user = status.user;
-    const nameEl = $("user-name");
-    if (nameEl) nameEl.textContent = state.user?.name || "";
+    applyAuthStatus(status);
   } catch (e) {
     console.error("auth failed:", e);
   }
@@ -119,6 +132,21 @@ async function initAuth() {
   } catch (e) {
     console.error("boot fetch failed:", e);
   }
+}
+
+// Single place that reads the /api/auth/status payload into app state. Both the
+// boot path and the identity badge need it; fetching it twice raced and could
+// render a signed-in chip over a guest workspace.
+function applyAuthStatus(status) {
+  state.user = status.user;
+  state.isGuest = !!status.is_guest;
+  state.guestUsage = status.guest_usage || null;
+  state.googleOAuth = !!status.google_oauth;
+
+  const nameEl = $("user-name");
+  if (nameEl) nameEl.textContent = state.isGuest ? "" : state.user?.name || "";
+  renderGuestState();
+  applyGuestLocks();
 }
 
 // The #auth-view card exists in index.html but nothing ever wired it up: both
@@ -151,6 +179,98 @@ function renderAuthGate(status) {
   const registerBtn = $("register-btn");
   if (loginBtn) loginBtn.onclick = () => submit("/api/auth/login");
   if (registerBtn) registerBtn.onclick = () => submit("/api/auth/register");
+}
+
+// ---------- guest state ----------
+
+// Controls a guest may not use, each with the phrase that completes
+// "Sign in with Google to ___". These are denied SERVER-side too
+// (app.py:require_account); this only makes the refusal legible in advance
+// instead of arriving as a 403 after the click.
+//
+// The list is deliberately short. Everything absent from it — upload, delete,
+// ask, new chat, prune, theme — a guest can do, because a guest workspace is a
+// real workspace, not a display case.
+const GUEST_LOCKED = {
+  "eval-run-btn": "run the benchmark",
+  "reindex-btn": "re-index every source",
+  "add-folder-btn": "add a folder source",
+  "hybrid-toggle": "change keyword fusion",
+  "web-toggle": "change the web fallback",
+  "settings-save": "save tuning settings",
+};
+
+// Reason these are global, not personal: config_overrides is a single shared
+// row (db.py:121), so one visitor's "save" re-points the embedding model for
+// everyone and invalidates their chunks. Benchmarks spend real LLM quota.
+const GUEST_LOCK_WHY =
+  "Those settings apply to the whole deployment, so they need an account.";
+
+function applyGuestLocks() {
+  for (const [id, what] of Object.entries(GUEST_LOCKED)) {
+    const el = $(id);
+    if (!el) continue;
+    el.classList.toggle("guest-locked", state.isGuest);
+    // aria-disabled rather than `disabled`: a disabled button dispatches no
+    // click, so the visitor would get silence instead of a reason. Keeping it
+    // clickable is what lets guestBlocked() explain itself — and explaining
+    // beats hiding (PRODUCT_UX_PLAN.md §5).
+    if (state.isGuest) el.setAttribute("aria-disabled", "true");
+    else el.removeAttribute("aria-disabled");
+    el.title = state.isGuest ? `Sign in with Google to ${what}.` : el.dataset.title || el.title;
+  }
+  const folderInput = $("folder-input");
+  if (folderInput) {
+    folderInput.disabled = state.isGuest;
+    folderInput.placeholder = state.isGuest
+      ? "Folder sources need an account"
+      : "Add folder path (e.g. ~/documents)";
+  }
+}
+
+// Call at the top of a handler for a locked control. Returns true if the action
+// was refused, in which case the handler must return without doing anything.
+function guestBlocked(elementId) {
+  if (!state.isGuest) return false;
+  const what = GUEST_LOCKED[elementId] || "do that";
+  toast(`Sign in with Google to ${what}. ${GUEST_LOCK_WHY}`, true);
+  return true;
+}
+
+// The badge states three things at once: that this is a guest workspace, how
+// much of the allowance is spent, and that signing in KEEPS the work. That last
+// clause is the whole pitch — without it "sign in" reads as a paywall rather
+// than as a save button.
+function renderGuestState() {
+  const el = $("guest-badge");
+  if (!el) return;
+  el.classList.toggle("hidden", !state.isGuest);
+  if (!state.isGuest) return;
+
+  const u = state.guestUsage;
+  // Usage comes from guest_usage, NOT from the length of /api/documents: the
+  // seeded demo files are excluded from the cap, so counting documents reads
+  // two too high and would show a fresh visitor as already 2/3 full.
+  const used = u ? u.documents : 0;
+  const max = u ? u.max_documents : 3;
+  const full = u && used >= max;
+  el.innerHTML = `<span class="guest-badge-tag">Guest</span>
+    <span class="guest-badge-usage${full ? " is-full" : ""}">${used}/${max} files</span>
+    <span class="guest-badge-note">Sign in to keep your work</span>`;
+}
+
+// Usage changes on every add and delete, so the badge has to be refreshed from
+// the server rather than incremented locally — the server is the only thing
+// that knows which documents count against the cap.
+async function refreshGuestUsage() {
+  if (!state.isGuest) return;
+  try {
+    const status = await api("/api/auth/status");
+    state.guestUsage = status.guest_usage || null;
+    renderGuestState();
+  } catch (e) {
+    /* the badge going stale is not worth interrupting the user for */
+  }
 }
 
 // ---------- optional Google sign-in ----------
@@ -239,18 +359,15 @@ async function initGoogleAuth() {
     window.history.replaceState({}, "", window.location.pathname + (qs ? `?${qs}` : ""));
   }
 
-  // There is no /api/auth/me route — it 404'd on every load, so `me` was always
-  // null and the badge could never show a signed-in user. The real endpoint is
-  // /api/auth/status, whose shape is {authenticated, user, google_oauth}.
-  let me = null;
-  try {
-    const res = await fetch("/api/auth/status", { credentials: "same-origin" });
-    me = res.ok ? await res.json() : null;
-  } catch (e) {
-    console.warn("auth/status unavailable:", e);
-  }
-  if (me && me.authenticated && me.user) renderSignedIn(slot, me.user);
-  else renderSignedOut(slot, me ? me.google_oauth : undefined);
+  // Reads the status initAuth() already fetched (applyAuthStatus stored it)
+  // rather than fetching /api/auth/status a second time. The duplicate call
+  // raced the guest-login above it: whichever landed first decided the badge, so
+  // a freshly provisioned guest could render as signed-out.
+  //
+  // A guest IS authenticated as far as the API is concerned, but must still see
+  // the sign-in button — that button is the only path to keeping their work.
+  if (state.user && !state.isGuest) renderSignedIn(slot, state.user);
+  else renderSignedOut(slot, state.googleOAuth);
 }
 
 // ---------- sources ----------
@@ -358,6 +475,10 @@ async function refreshSources() {
   renderDocs(docs);
   $("source-count").textContent = String(docs.length + folders.length);
   $("sources-empty").classList.toggle("hidden", docs.length + folders.length > 0);
+  // Every add and delete moves a guest's allowance. Not awaited: the badge is
+  // secondary to the list it annotates, and blocking the render on a second
+  // round-trip would make uploads feel slower than they are.
+  refreshGuestUsage();
   return docs;
 }
 
@@ -415,6 +536,7 @@ $("add-url-btn").onclick = async () => {
 };
 
 $("add-folder-btn").onclick = async () => {
+  if (guestBlocked("add-folder-btn")) return;
   const path = $("folder-input").value.trim();
   if (!path) return;
   try {
@@ -453,6 +575,7 @@ async function refreshHybridToggle() {
 // It is NOT web search — document grounding is unaffected. Web augmentation
 // is a separate, default-off fallback exposed elsewhere.
 $("hybrid-toggle").onclick = async () => {
+  if (guestBlocked("hybrid-toggle")) return;
   try {
     const r = await api("/api/eval/hybrid-search", { method: "POST" });
     const btn = $("hybrid-toggle");
@@ -472,6 +595,7 @@ $("hybrid-toggle").onclick = async () => {
 
 // Web augmentation fallback (DuckDuckGo [web] chunks only when documents don't answer).
 $("web-toggle").onclick = async () => {
+  if (guestBlocked("web-toggle")) return;
   try {
     const r = await api("/api/eval/web-augmentation", { method: "POST" });
     const btn = $("web-toggle");
@@ -668,6 +792,7 @@ $("settings-overlay").onclick = (e) => {
 };
 
 $("settings-save").onclick = async () => {
+  if (guestBlocked("settings-save")) return;
   try {
     const body = {
       chunk_size: parseInt($("set-chunk-size").value),
@@ -720,6 +845,7 @@ $("settings-save").onclick = async () => {
 };
 
 async function reindexAll() {
+  if (guestBlocked("reindex-btn")) return;
   toast("Re-indexing all sources (this may take a while)…");
   $("reindex-btn").disabled = true;
   try {
@@ -1229,6 +1355,10 @@ async function driveEvalRun() {
 }
 
 $("eval-run-btn").onclick = async () => {
+  // Guests still SEE the last run's scorecard — it is the most portfolio-legible
+  // thing in the app — they just cannot spend 46 scored questions triggering a
+  // new one.
+  if (guestBlocked("eval-run-btn")) return;
   try {
     $("eval-run-btn").disabled = true;
     $("eval-status").textContent = "Starting benchmark…";
@@ -1286,11 +1416,17 @@ MOBILE.addEventListener("change", applyBreakpointDefaults);
 (function boot() {
   const prev = window.__ragchat_errors || [];
   if (prev.length) toast("Script error: " + prev.join("; "), true);
-  initAuth().catch((e) => {
-    console.error("boot failed:", e);
-    toast("Boot failed: " + e.message, true);
-  });
-  // Independent of the app boot on purpose: Google sign-in is optional, so a
-  // failure here must never hold up (or break) the rest of the UI.
-  initGoogleAuth().catch((e) => console.warn("google auth init failed:", e));
+  initAuth()
+    .catch((e) => {
+      console.error("boot failed:", e);
+      toast("Boot failed: " + e.message, true);
+    })
+    // AFTER initAuth, not alongside it: the identity badge now reads the auth
+    // state that initAuth resolved. Run in parallel it could render before
+    // guest-login had provisioned anything, showing a signed-out topbar over a
+    // working guest workspace. Chained off .catch() so it still runs when the
+    // boot itself failed — a failed boot is exactly when a sign-in button is
+    // most useful. Its own failure stays non-fatal: sign-in is optional.
+    .then(() => initGoogleAuth())
+    .catch((e) => console.warn("google auth init failed:", e));
 })();
