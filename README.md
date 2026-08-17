@@ -1,4 +1,4 @@
-# RAG Chat
+# RAG-it
 
 A multi-user **Retrieval-Augmented Generation (RAG)** web app: chat with an LLM that answers **only from your own documents** (PDFs, web pages, Markdown/text) with citations, a tunable pipeline, and built-in evaluation.
 
