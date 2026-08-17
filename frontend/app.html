@@ -26,7 +26,7 @@
         }
       })();
     </script>
-    <link rel="stylesheet" href="/styles.css?v=13" />
+    <link rel="stylesheet" href="/styles.css?v=14" />
     <script>
       // Boot diagnostics: collect load/runtime errors so a broken app.js
       // shows a visible message instead of a silently dead UI.
@@ -68,31 +68,39 @@
           </span>
         </div>
         <span id="user-name" class="user-name"></span>
-        <div class="topbar-actions">
-          <div class="switch" title="Vector + BM25 keyword fusion (real hybrid search, not web)">
-            <span class="switch-label">Keyword fusion</span>
-            <button id="hybrid-toggle" class="switch-btn" type="button"
-              title="Toggle BM25 keyword fusion on/off (improves exact-match retrieval; never adds web text)">Off</button>
+        <!-- Everything that is not the brand lives in ONE right-aligned
+             cluster. Identity used to be a direct child of .topbar, so when the
+             bar ran out of room it wrapped to a full-width row of its own and
+             landed on the far LEFT, under the logo — the opposite corner from
+             the controls it belongs with. Inside this cluster it wraps
+             right-aligned instead, staying beside Settings at every width. -->
+        <div class="topbar-right">
+          <div class="topbar-actions">
+            <div class="switch" title="Vector + BM25 keyword fusion (real hybrid search, not web)">
+              <span class="switch-label">Keyword fusion</span>
+              <button id="hybrid-toggle" class="switch-btn" type="button"
+                title="Toggle BM25 keyword fusion on/off (improves exact-match retrieval; never adds web text)">Off</button>
+            </div>
+            <div class="switch" title="When ON, web results are appended as labeled [web] chunks ONLY if your documents don't answer the question (fallback, not grounding)">
+              <span class="switch-label">Web fallback</span>
+              <button id="web-toggle" class="switch-btn" type="button"
+                title="Toggle web augmentation fallback on/off">Off</button>
+            </div>
+            <button id="prune-btn" class="btn btn-small" type="button"
+              title="Delete orphaned Neon vector chunks (no matching document)">Prune ghosts</button>
+            <button id="settings-btn" class="btn btn-small" type="button" title="Tuning parameters">⚙ Settings</button>
+            <button id="theme-toggle" class="btn btn-small" type="button"
+              title="Switch between the dark and light theme" aria-pressed="false">☾</button>
           </div>
-          <div class="switch" title="When ON, web results are appended as labeled [web] chunks ONLY if your documents don't answer the question (fallback, not grounding)">
-            <span class="switch-label">Web fallback</span>
-            <button id="web-toggle" class="switch-btn" type="button"
-              title="Toggle web augmentation fallback on/off">Off</button>
+          <!-- Identity: guest status and the sign-in control, kept in ONE
+               container so they stay adjacent and wrap together. "Sign in to keep
+               your work" is the reason to press the button beside it; separated,
+               the note read as a floating slogan and the button as unrelated
+               chrome. Filled by app.js from /api/auth/status. -->
+          <div class="topbar-identity">
+            <div id="guest-badge" class="guest-badge hidden"></div>
+            <div id="auth-slot" class="auth-slot"></div>
           </div>
-          <button id="prune-btn" class="btn btn-small" type="button"
-            title="Delete orphaned Neon vector chunks (no matching document)">Prune ghosts</button>
-          <button id="settings-btn" class="btn btn-small" type="button" title="Tuning parameters">⚙ Settings</button>
-          <button id="theme-toggle" class="btn btn-small" type="button"
-            title="Switch between the dark and light theme" aria-pressed="false">☾</button>
-        </div>
-        <!-- Identity: guest status and the sign-in control, kept in ONE
-             container so they stay adjacent and wrap together. "Sign in to keep
-             your work" is the reason to press the button beside it; separated,
-             the note read as a floating slogan and the button as unrelated
-             chrome. Filled by app.js from /api/auth/status. -->
-        <div class="topbar-identity">
-          <div id="guest-badge" class="guest-badge hidden"></div>
-          <div id="auth-slot" class="auth-slot"></div>
         </div>
       </header>
 

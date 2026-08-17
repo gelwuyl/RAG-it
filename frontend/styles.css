@@ -190,12 +190,32 @@ input::placeholder, textarea::placeholder { color: var(--faint); }
   font-size: 11px; color: var(--faint); white-space: nowrap;
   overflow: hidden; text-overflow: ellipsis;
 }
-.user-name { margin-left: auto; font-size: 13px; color: var(--muted); }
+.user-name { font-size: 13px; color: var(--muted); }
+
+/* ---------- right-hand cluster ----------
+   Owns the `margin-left: auto` for the whole right side, so nothing inside it
+   needs one. justify-content matters more than it looks: when the bar is too
+   narrow for one row, the overflow wraps to a second row that is still
+   RIGHT-aligned, keeping identity in the top-right corner instead of throwing
+   it to the far left under the logo. */
+.topbar-right {
+  display: flex; align-items: center; flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px 14px;
+  margin-left: auto;
+  /* `flex-basis: 0`, not `auto`, and the distinction is load-bearing. Flexbox
+     decides line breaks using an item's UNSHRUNK hypothetical size, so with
+     `auto` this whole cluster measured ~1100px, refused to share the brand's
+     row, and dropped to a line of its own — leaving the brand alone on a bar
+     with an empty right half. At 0 it always fits, then grows into whatever is
+     left and wraps INTERNALLY, so the toggles stay up beside the brand and
+     only the overflow moves down. */
+  flex: 1 1 0;
+  min-width: 0;
+}
 .topbar-actions {
   display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
-  margin-left: auto;
 }
-.user-name:not(:empty) ~ .topbar-actions { margin-left: 0; }
 
 /* ---------- identity cluster ----------
    The guest status and the sign-in control are ONE idea, so they live in one
@@ -1024,15 +1044,17 @@ fieldset legend {
     overflow: visible;
   }
 
-  .topbar { padding: 10px 12px; gap: 8px 10px; }
+  /* The right cluster is several rows tall here, and centering the brand
+     against it floated the logo to the middle of the bar with nothing beside
+     it. Top-align so the brand and the identity readout share the first row. */
+  .topbar { padding: 10px 12px; gap: 8px 10px; align-items: flex-start; }
   .brand-sub { display: none; }
   .user-name { font-size: 12px; }
-  /* Keep the sign-in control on the brand row; the toggles wrap below it. */
-  /* Reorder the CLUSTER, not the button inside it — `order` only applies
-     among flex siblings, and .auth-slot is no longer one of the top bar's. */
-  .topbar-identity { order: 2; margin-left: auto; }
-  .topbar-actions { order: 3; width: 100%; margin-left: 0; }
-  .user-name:not(:empty) + .topbar-actions { margin-left: 0; }
+  /* Keep the sign-in control on the brand row; the toggles wrap below it.
+     Reorder the CLUSTER, not the button inside it — `order` only applies among
+     flex siblings, and .auth-slot is not one of .topbar-right's. */
+  .topbar-identity { order: 1; }
+  .topbar-actions { order: 2; width: 100%; }
   .user-chip { max-width: 190px; }
   .switch { flex: 1 1 auto; justify-content: space-between; }
 
