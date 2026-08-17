@@ -101,6 +101,57 @@ def _chat(model: str, messages: list[dict], temperature: float) -> str:
     return (resp.choices[0].message.content or "").strip()
 
 
+# A rewritten query is one short line. Anything longer is not a query — it is
+# the model narrating — and must not reach the embedder.
+_MAX_REWRITE_CHARS = 300
+
+_THINK_CLOSED = re.compile(
+    r"<(thought|thinking|reasoning)[\s>].*?</\1>", re.IGNORECASE | re.DOTALL
+)
+# Same unterminated-wrapper case that defeated the judges (eval/judges.py): when
+# reasoning runs into max_tokens the closing tag never arrives, and a pattern
+# requiring one lets the whole trace through.
+_THINK_OPEN = re.compile(
+    r"<(thought|thinking|reasoning)[\s>].*\Z", re.IGNORECASE | re.DOTALL
+)
+
+
+def _clean_rewrite(raw: str, fallback: str) -> str:
+    """Extract the rewritten query from a possibly reasoning-wrapped reply.
+
+    The configured chat model is thinking-capable and really does answer this
+    prompt with ~1400 characters of ``<thought>`` followed by the one-line query,
+    despite being told to reply with the query and nothing else. Returning that
+    blob raw meant the ENTIRE reasoning trace became the effective query — so it
+    was embedded for retrieval, handed to generation as the question (which is
+    why answers echoed the rewritten query back), and shown to the judge as the
+    "Question" field.
+
+    Deliberately NOT _clean_answer(): that helper recovers the wrapper's inner
+    text when everything sits inside the wrapper, which is right for an answer
+    and exactly wrong here — that inner text is the reasoning, and using it as a
+    search query is the defect this function exists to prevent.
+
+    Falling back to the original query is always safe: rewriting is an
+    optimization for follow-ups, never a requirement for answering.
+    """
+    text = _THINK_CLOSED.sub("", raw or "")
+    text = _THINK_OPEN.sub("", text).strip()
+    if not text:
+        return fallback
+    # Preambles come first and the query last, so take the final non-empty line.
+    line = [ln.strip() for ln in text.splitlines() if ln.strip()][-1]
+    for label in ("rewritten query:", "search query:", "query:"):
+        if line.lower().startswith(label):
+            line = line[len(label):].strip()
+            break
+    line = line.strip("\"'`*").strip()
+    # A leftover "<" means a wrapper survived the strip; reject rather than embed it.
+    if not line or len(line) > _MAX_REWRITE_CHARS or "<" in line:
+        return fallback
+    return line
+
+
 def rewrite_query(
     query: str, history: list[dict], cfg: PipelineConfig
 ) -> str:
@@ -117,7 +168,7 @@ def rewrite_query(
     )
     try:
         rewritten = _chat(cfg.llm_model, [{"role": "user", "content": prompt}], 0.0)
-        return rewritten.strip() or query
+        return _clean_rewrite(rewritten, query)
     except Exception:
         return query
 
