@@ -14,10 +14,11 @@
 > | `4cde1a7` | Phase 0 — the frontend session's uncommitted tokens/theme/`shot.mjs` baseline |
 > | `d4808d8` | Phase 1 — guest-first entry + the write-route guards it required |
 > | `d29ed86` | Phase 2 — two registers, JetBrains Mono, lime in both themes, per-answer readout |
+> | `f09ffd8` | Excerpt + Evaluation contained in the conversation column |
+> | `30d950d` | Phase 3 — landing page at `/`, workspace at `/app`, callback redirect |
 >
-> **§4A, C, D, F, G are resolved. §4B and §4E remain open, deliberately** —
-> both belong to the landing-page split and must ship together (see the ordering
-> trap below).
+> **Every §4 item is now resolved.** §4B and §4E shipped together in `30d950d`,
+> as the ordering trap below requires.
 >
 > Two things this document previously got wrong:
 >
@@ -389,17 +390,21 @@ curl -s https://rag-gel.vercel.app/api/health | python -m json.tool
 
 Items 1–2, 4–5 of the previous list are **done** (see §0). What is left:
 
-### Phase 3 — landing page + routing, as ONE commit
+### Phase 3 — landing page + routing — **DONE** (`30d950d`)
 
-`index.html` → `app.html`, the Vite multi-entry input, the `vercel.json`
-rewrite, **and** the §4B callback redirect together. Splitting them 404s
-sign-in for however long the split lasts.
+All five pieces shipped in one commit, as required. Open decisions §7.1–§7.3
+are all settled: JetBrains Mono for both the app's telemetry register and the
+landing hero (no second webfont), and a pure-CSS starfield instead of an
+image, so there is no licence question and no network request.
 
-Blocked on open decisions §7.2 and §7.3 (hero typeface, space image). §7.1 is
-**settled**: self-hosted JetBrains Mono, Regular + Bold, shipped in `d29ed86`.
+The A1–A4 tiles carry **structural facts only** — 46 golden questions, 10
+corpus documents, 768 dimensions, 1 function — not benchmark scores. Scores
+would need a published run behind them and would go stale on a static page
+with nothing to notice. If that changes, `eval/run_eval.py:334` has the
+published targets.
 
-Landing copy must say **two** sample documents, not ten, and pitch
-"start now, sign in to keep it" rather than "try a read-only demo" (§5).
+**Dev note:** there is no `/app` rewrite on the Vite dev server — that lives
+in `vercel.json`. The app is at **`/app.html`** in development.
 
 ### Phase 4 — product depth
 
