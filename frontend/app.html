@@ -26,7 +26,7 @@
         }
       })();
     </script>
-    <link rel="stylesheet" href="/styles.css?v=17" />
+    <link rel="stylesheet" href="/styles.css?v=19" />
     <script>
       // Boot diagnostics: collect load/runtime errors so a broken app.js
       // shows a visible message instead of a silently dead UI.
@@ -75,19 +75,30 @@
              the controls it belongs with. Inside this cluster it wraps
              right-aligned instead, staying beside Settings at every width. -->
         <div class="topbar-right">
+          <!-- The two switch labels are glossary TERMS, not text. Their
+               explanations used to live in `title` attributes on the container,
+               which do not exist on touch — the definition of "Keyword fusion"
+               was unreachable for every phone visitor (PRODUCT_UX_PLAN.md §5).
+               The toggles keep an aria-label so the control is still named
+               without re-introducing a hover-only tooltip. -->
           <div class="topbar-actions">
-            <div class="switch" title="Vector + BM25 keyword fusion (real hybrid search, not web)">
-              <span class="switch-label">Keyword fusion</span>
+            <div class="switch">
+              <button class="switch-label term" type="button" data-term="keyword-fusion"
+                aria-expanded="false">Keyword fusion</button>
               <button id="hybrid-toggle" class="switch-btn" type="button"
-                title="Toggle BM25 keyword fusion on/off (improves exact-match retrieval; never adds web text)">Off</button>
+                aria-label="Toggle keyword fusion">Off</button>
             </div>
-            <div class="switch" title="When ON, web results are appended as labeled [web] chunks ONLY if your documents don't answer the question (fallback, not grounding)">
-              <span class="switch-label">Web fallback</span>
+            <div class="switch">
+              <button class="switch-label term" type="button" data-term="web-fallback"
+                aria-expanded="false">Web fallback</button>
               <button id="web-toggle" class="switch-btn" type="button"
-                title="Toggle web augmentation fallback on/off">Off</button>
+                aria-label="Toggle web fallback">Off</button>
             </div>
-            <button id="prune-btn" class="btn btn-small" type="button"
-              title="Delete orphaned Neon vector chunks (no matching document)">Prune ghosts</button>
+            <span class="term-pair">
+              <button id="prune-btn" class="btn btn-small" type="button">Prune ghosts</button>
+              <button class="term-mark" type="button" data-term="prune-ghosts"
+                aria-expanded="false" aria-label="What does Prune ghosts do?">?</button>
+            </span>
             <button id="settings-btn" class="btn btn-small" type="button" title="Tuning parameters">⚙ Settings</button>
             <button id="theme-toggle" class="btn btn-small" type="button"
               title="Switch between the dark and light theme" aria-pressed="false">☾</button>
@@ -140,6 +151,9 @@
               <p class="empty-title">Upload a source to begin</p>
               <p class="empty-text">Drop a file above, paste a URL, or point at a folder.
                 Everything you add is chunked, embedded and cited.</p>
+              <!-- Filled by app.js with the four-beat loop, but only while THIS
+                   is the beat you are on — see beatsHtml(). -->
+              <div id="sources-beats"></div>
             </div>
 
             <div id="folder-list" class="source-list"></div>
@@ -147,8 +161,16 @@
           </div>
 
           <div class="pane-foot">
-            <button id="reindex-btn" class="btn btn-small" type="button"
-              title="Re-chunk all sources under the current config">↻ Re-index all</button>
+            <!-- Long jobs report here and KEEP reporting (plan §5). Re-index all
+                 and folder rescans used to announce themselves through a toast
+                 that vanished after four seconds and then said nothing until
+                 they finished, which is indistinguishable from having failed. -->
+            <div id="job-status" class="job-status hidden" role="status" aria-live="polite"></div>
+            <span class="term-pair">
+              <button id="reindex-btn" class="btn btn-small" type="button">↻ Re-index all</button>
+              <button class="term-mark" type="button" data-term="re-index"
+                aria-expanded="false" aria-label="What does re-indexing do?">?</button>
+            </span>
           </div>
         </aside>
 
@@ -226,6 +248,8 @@
         <section class="pane excerpt-pane" id="excerpt-pane">
           <div class="pane-head">
             <h2 class="pane-title">Excerpt</h2>
+            <button class="term-mark" type="button" data-term="excerpt"
+              aria-expanded="false" aria-label="What is an excerpt?">?</button>
             <span id="excerpt-title" class="excerpt-title"></span>
             <span id="excerpt-ref" class="excerpt-ref muted small"></span>
             <button id="excerpt-close" class="pane-toggle hidden" type="button"
@@ -236,6 +260,7 @@
               <span class="empty-icon" aria-hidden="true">❝</span>
               <p class="empty-text">Click a citation <span class="cite-demo">[1]</span>
                 to read the exact passage an answer was grounded in.</p>
+              <div id="excerpt-beats"></div>
             </div>
             <div id="excerpt-content" class="hidden">
               <pre id="excerpt-text"></pre>
@@ -447,6 +472,6 @@
       </div>
     </div>
 
-    <script type="module" src="/app.js?v=20"></script>
+    <script type="module" src="/app.js?v=22"></script>
   </body>
 </html>

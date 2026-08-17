@@ -17,6 +17,13 @@ const state = {
   // it is what the empty conversation needs to say something true, and holding
   // the full lists here would be a second copy of the DOM's own state.
   sourceCount: 0,
+  // True when the whole seeded demo corpus is present (both files) — it decides
+  // the empty-state copy, not the chips.
+  demoDocs: false,
+  // Suggested questions for the seeded documents actually in the workspace.
+  demoQuestions: [],
+  // Which beats of the four-beat loop this browser has completed (§5).
+  loop: {},
   // Documents whose sliced-index loop is already being driven by this tab.
   // Guards against two loops racing the same document — they would both POST
   // /index-step, and the second would embed a slice the first had just done.
@@ -77,14 +84,251 @@ function escapeHtml(s) {
     .replaceAll('"', "&quot;");
 }
 
-// Shared markup for the "nothing here yet" panels.
-function emptyState(icon, title, text) {
+// Shared markup for the "nothing here yet" panels. `extra` is trusted markup
+// (beat lists, question chips) appended below the copy — callers pass literals,
+// never anything from the server.
+function emptyState(icon, title, text, extra = "") {
   return `<div class="empty-state">
       <span class="empty-icon" aria-hidden="true">${icon}</span>
       ${title ? `<p class="empty-title">${escapeHtml(title)}</p>` : ""}
       <p class="empty-text">${escapeHtml(text)}</p>
+      ${extra}
     </div>`;
 }
+
+// ---------- the four-beat loop (PRODUCT_UX_PLAN.md §5) ----------
+//
+// The app has a natural loop — add a source → ask → click a citation → read the
+// quality readout — and nothing used to tell the user it existed. Each empty
+// state describes its own beat; the numbered list is rendered ONLY in the empty
+// state for the beat you are actually on, so the guide sits next to the thing to
+// do next instead of appearing three times at once.
+//
+// Beat 1 is derived from the live source count rather than remembered, so
+// deleting every source honestly puts you back at the start. Beats 2–4 are
+// per-browser learning state, which is why they persist in localStorage and not
+// in the database: they say what this visitor has been shown, not what the
+// workspace contains.
+const LOOP_KEY = "ragchat-loop";
+const BEATS = [
+  "Add a source",
+  "Ask a question",
+  "Click a citation",
+  "Read the quality readout",
+];
+
+function readLoop() {
+  try { return JSON.parse(localStorage.getItem(LOOP_KEY)) || {}; }
+  catch { return {}; }          // private mode / corrupt value — start over
+}
+
+// Read at module scope, not in boot(): refreshSources paints the beats and runs
+// from initAuth, which starts before boot's own body finishes.
+state.loop = readLoop();
+
+function markBeat(name) {
+  if (state.loop[name]) return;  // already done; don't churn storage or repaint
+  state.loop[name] = true;
+  try { localStorage.setItem(LOOP_KEY, JSON.stringify(state.loop)); }
+  catch { /* storage disabled: the guide just restarts next visit */ }
+  paintBeats();
+}
+
+// Which beat the user is on, or 0 once the loop is complete.
+function currentBeat() {
+  if (!state.sourceCount) return 1;
+  if (!state.loop.asked) return 2;
+  if (!state.loop.cited) return 3;
+  if (!state.loop.readout) return 4;
+  return 0;
+}
+
+// Returns the numbered list for `beat`, or "" when that beat is not the current
+// one — which is what keeps a single strip on screen.
+function beatsHtml(beat) {
+  const now = currentBeat();
+  if (now !== beat) return "";
+  const rows = BEATS.map((label, i) => {
+    const n = i + 1;
+    const st = n < now ? "done" : n === now ? "current" : "todo";
+    const pip = st === "done" ? "✓" : String(n);
+    return `<li class="loop-beat" data-state="${st}">
+        <span class="loop-pip" aria-hidden="true">${pip}</span>
+        <span class="loop-label">${escapeHtml(label)}</span>
+      </li>`;
+  }).join("");
+  return `<ol class="loop-list" aria-label="Getting started: step ${now} of 4">${rows}</ol>`;
+}
+
+// The two static empty states own their own beat container; the chat's is built
+// with the rest of its markup. Called whenever a beat completes.
+function paintBeats() {
+  const s = $("sources-beats");
+  if (s) s.innerHTML = beatsHtml(1);
+  const x = $("excerpt-beats");
+  if (x) x.innerHTML = beatsHtml(3);
+  if ($("messages").querySelector(".empty-state")) {
+    $("messages").innerHTML = chatEmptyState();
+  }
+  paintReadoutNudge();
+}
+
+// Beat 4's nudge is the one that cannot be rendered once and left alone: the
+// beat becomes current when a citation is clicked, by which time the answer's
+// readout chip is already on screen. It attaches to the LAST answer only —
+// repeating it down a long conversation would be noise, not guidance.
+function paintReadoutNudge() {
+  const chips = [...$("messages").querySelectorAll(".eval-chip")];
+  const want = currentBeat() === 4;
+  chips.forEach((chip, i) => {
+    const existing = chip.querySelector(".eval-nudge");
+    const wanted = want && i === chips.length - 1;
+    if (wanted && !existing) {
+      const el = document.createElement("span");
+      el.className = "eval-nudge";
+      el.textContent = "what is this?";
+      chip.insertBefore(el, chip.querySelector(".eval-caret"));
+    } else if (existing && !wanted) {
+      existing.remove();
+    }
+  });
+}
+
+// ---------- glossary (PRODUCT_UX_PLAN.md §5) ----------
+//
+// Every one of these was previously either undefined or explained in a `title`
+// attribute, which does not exist on touch. A tap target with a real popover
+// works for everyone; the trade is one shared element and a click-away handler.
+const GLOSSARY = {
+  "keyword-fusion": [
+    "Keyword fusion",
+    "Blends BM25 keyword scores with vector similarity, so exact strings — part " +
+    "numbers, form codes, names — rank as well as paraphrases do. It searches " +
+    "your documents only. It never adds text from the web.",
+  ],
+  "web-fallback": [
+    "Web fallback",
+    "When on, web results are appended as labelled [web] chunks — but only when " +
+    "your own documents fail to clear the relevance threshold. It never " +
+    "overrides a grounded answer, and it is off by default.",
+  ],
+  "prune-ghosts": [
+    "Ghost chunks",
+    "Vectors left in the store with no document behind them, usually after a " +
+    "failed delete. Pruning removes those and nothing else — every chunk that " +
+    "still belongs to one of your sources is kept.",
+  ],
+  "re-index": [
+    "Re-index",
+    "Chunks and embeds your sources again under the current settings. Needed " +
+    "after changing chunk size, the splitter or the embedding model, because " +
+    "vectors made by different settings are not comparable.",
+  ],
+  excerpt: [
+    "Excerpt",
+    "The exact passage an answer was built from, shown verbatim. Clicking a " +
+    "citation marker in an answer opens the chunk that citation points at — " +
+    "this is where you check the answer against the source.",
+  ],
+  "golden-set": [
+    "Golden set",
+    "46 questions with known answers, including ones the corpus deliberately " +
+    "cannot answer. Replaying them through the live pipeline is what turns " +
+    "“seems fine” into a number you can compare between configurations.",
+  ],
+  faithfulness: [
+    "Faithfulness",
+    "Whether every claim in the answer is supported by the retrieved passages. " +
+    "A confident sentence with no passage behind it fails, however true it " +
+    "happens to be — that is the hallucination check.",
+  ],
+  relevancy: [
+    "Answer relevancy",
+    "Whether the answer addresses the question that was asked. An answer can be " +
+    "perfectly faithful to the sources and still not be a reply, which is why " +
+    "this is scored separately.",
+  ],
+};
+
+// Row labels in the per-answer readout that have a glossary entry behind them.
+const EVAL_LABEL_TERMS = {
+  Faithfulness: "faithfulness",
+  Relevancy: "relevancy",
+};
+
+// Markup for an inline term: dotted underline, tap to define.
+function termHtml(key, label) {
+  return `<button class="term" type="button" data-term="${key}" aria-expanded="false">${
+    escapeHtml(label ?? GLOSSARY[key][0])
+  }</button>`;
+}
+
+let glossaryOpenFor = null;
+
+function glossaryEl() {
+  let el = $("glossary-pop");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "glossary-pop";
+    el.className = "glossary-pop hidden";
+    el.setAttribute("role", "tooltip");
+    document.body.appendChild(el);
+  }
+  return el;
+}
+
+function closeGlossary() {
+  if (glossaryOpenFor) glossaryOpenFor.setAttribute("aria-expanded", "false");
+  glossaryOpenFor = null;
+  glossaryEl().classList.add("hidden");
+}
+
+function openGlossary(btn) {
+  const entry = GLOSSARY[btn.dataset.term];
+  if (!entry) return;
+  const el = glossaryEl();
+  el.innerHTML = `<p class="glossary-term">${escapeHtml(entry[0])}</p>
+    <p class="glossary-def">${escapeHtml(entry[1])}</p>`;
+  el.classList.remove("hidden");
+  btn.setAttribute("aria-expanded", "true");
+  glossaryOpenFor = btn;
+
+  // Fixed positioning, clamped to the viewport: these terms sit in a topbar at
+  // the right edge and in a pane at the bottom, so a popover anchored naively
+  // would open off-screen on the very controls that needed explaining.
+  const r = btn.getBoundingClientRect();
+  const w = el.offsetWidth;
+  const h = el.offsetHeight;
+  const pad = 8;
+  const left = Math.max(pad, Math.min(window.innerWidth - w - pad, r.left + r.width / 2 - w / 2));
+  const below = r.bottom + 8;
+  const top = below + h + pad > window.innerHeight ? Math.max(pad, r.top - h - 8) : below;
+  el.style.left = `${Math.round(left)}px`;
+  el.style.top = `${Math.round(top)}px`;
+}
+
+// Delegated: terms are rendered from three different places (static HTML, empty
+// states, the eval pane) and re-rendered often, so binding per button would mean
+// re-binding on every repaint.
+document.addEventListener("click", (e) => {
+  const btn = e.target.closest(".term, .term-mark");
+  if (btn) {
+    e.stopPropagation();
+    if (glossaryOpenFor === btn) closeGlossary();
+    else openGlossary(btn);
+    return;
+  }
+  if (glossaryOpenFor && !e.target.closest("#glossary-pop")) closeGlossary();
+});
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && glossaryOpenFor) closeGlossary();
+});
+
+// A popover positioned in fixed coordinates cannot follow its anchor, so close
+// rather than leave it stranded mid-page.
+window.addEventListener("resize", closeGlossary);
+window.addEventListener("scroll", closeGlossary, true);
 
 // ---------- auth ----------
 
@@ -454,11 +698,20 @@ function renderFolders(folders) {
       </span>`;
     item.querySelector('[data-act="rescan"]').onclick = async () => {
       try {
-        toast("Rescanning…");
+        // A folder scan walks the disk and can queue many documents, so it
+        // reports in the persistent job line rather than in a toast that is gone
+        // before the scan is.
+        setJobStatus(`Scanning ${f.path}…`, { busy: true });
         const r = await api(`/api/folders/${f.id}/rescan`, { method: "POST" });
-        toast(`Rescan: +${r.added} new, ${r.reindexed} updated, ${r.unchanged} unchanged${r.failed ? `, ${r.failed} failed` : ""}`);
+        setJobStatus(
+          `Rescan: +${r.added} new, ${r.reindexed} updated, ${r.unchanged} unchanged${r.failed ? `, ${r.failed} failed` : ""}`,
+          { sticky: true }
+        );
         await refreshSources();
-      } catch (e) { toast(e.message, true); }
+      } catch (e) {
+        setJobStatus(`Rescan failed: ${e.message}`, { sticky: true });
+        toast(e.message, true);
+      }
     };
     item.querySelector('[data-act="remove"]').onclick = async () => {
       try {
@@ -599,6 +852,21 @@ async function refreshSources() {
   state.sourceCount = docs.length + folders.length;
   $("source-count").textContent = String(state.sourceCount);
   $("sources-empty").classList.toggle("hidden", state.sourceCount > 0);
+  // Suggested questions are only honest while the document they are about is
+  // present, so they are collected per seeded file. Exactly two of the ten corpus
+  // files are exposed to guests and that limit is deliberate (guests.py) — the
+  // other eight are real business content that must not reach a visitor, which is
+  // also why no landing copy may promise ten sample documents.
+  // Matched on is_demo AND title: the flag alone doesn't say which questions
+  // apply, and the title alone would fire on a user's own upload of the same name.
+  const seeded = new Set(docs.filter((d) => d.is_demo).map((d) => d.title));
+  state.demoQuestions = Object.entries(DEMO_QUESTIONS)
+    .filter(([title]) => seeded.has(title))
+    .flatMap(([, qs]) => qs);
+  state.demoDocs = Object.keys(DEMO_QUESTIONS).every((t) => seeded.has(t));
+  // A long job reports until it is actually finished, not until a toast fades.
+  paintJobStatus(docs);
+  paintBeats();
   // Sources and chats load in parallel, so the empty conversation may have
   // been painted before the count was known. Repaint it — but only while it IS
   // the empty state, never over a real conversation.
@@ -1250,9 +1518,44 @@ $("settings-save").onclick = async () => {
   }
 };
 
+// ---------- persistent job status (PRODUCT_UX_PLAN.md §5) ----------
+//
+// Re-index all and folder rescans announced themselves in a toast that vanished
+// after four seconds and then reported nothing until they finished — which looks
+// exactly like having failed. This line stays until the work is actually done.
+//
+// `sticky` marks a result worth leaving on screen; a plain progress message is
+// replaced by the next refresh, and cleared when nothing is running.
+let jobSticky = "";
+
+function setJobStatus(text, { busy = false, sticky = false } = {}) {
+  const el = $("job-status");
+  if (!el) return;
+  jobSticky = sticky ? text : "";
+  el.textContent = text || "";
+  el.classList.toggle("is-busy", !!busy && !!text);
+  el.classList.toggle("hidden", !text);
+}
+
+// Derives the line from the documents themselves rather than from what we
+// started, so a job resumed after a reload still reports.
+function paintJobStatus(docs) {
+  const working = docs.filter((d) => d.status === "indexing" || d.status === "pending");
+  if (working.length) {
+    const chunks = working.reduce((n, d) => n + (d.indexed_chunks || 0), 0);
+    const total = working.reduce((n, d) => n + (d.n_chunks || 0), 0);
+    const of = total ? ` · ${chunks}/${total} chunks` : "";
+    setJobStatus(`Indexing ${working.length} source${working.length === 1 ? "" : "s"}${of}`, { busy: true });
+    return;
+  }
+  // Nothing running: keep a result the user has not seen the end of yet, and
+  // otherwise clear rather than leave a stale "indexing…" behind.
+  setJobStatus(jobSticky, { sticky: !!jobSticky });
+}
+
 async function reindexAll() {
   if (guestBlocked("reindex-btn")) return;
-  toast("Re-indexing all sources (this may take a while)…");
+  setJobStatus("Queueing a re-index of every source…", { busy: true });
   $("reindex-btn").disabled = true;
   try {
     // Queues rather than re-embeds: reindex returns at once and refreshSources
@@ -1260,9 +1563,12 @@ async function reindexAll() {
     // overrun the function budget and shows per-document progress.
     const r = await api("/api/documents/reindex", { method: "POST" });
     const bad = r.unreadable ? `, ${r.unreadable} unreadable` : "";
-    toast(`Re-indexing ${r.queued ?? r.reindexed} sources${bad}…`);
+    setJobStatus(`Re-indexing ${r.queued ?? r.reindexed} sources${bad}`, { busy: true });
+    // refreshSources takes it from here: it drives each document's slices and
+    // repaints this line from their real progress until they are all ready.
     await refreshSources();
   } catch (e) {
+    setJobStatus(`Re-index failed: ${e.message}`, { sticky: true });
     toast(e.message, true);
   } finally {
     $("reindex-btn").disabled = false;
@@ -1277,23 +1583,59 @@ $("reindex-btn").onclick = reindexAll;
 // the source of truth after each refresh.
 const chatStatusOverride = new Map(); // chatId -> "pending" | "done"
 
+// Three questions the seeded demo corpus can actually answer (plan §4). They
+// exist because "ask anything about them" is useless advice about two documents
+// the visitor has never read: the fastest way to show grounding is to hand them
+// a question whose answer is a specific line in a specific file.
+//
+// Only ever shown when those documents are the ones present — see state.demoDocs.
+// One per document, plus one that needs several facts from a single passage.
+// Keyed by the document each question is answerable FROM, using the titles the
+// backend stores (guests.DEMO_CORPUS_FILES). Per-document rather than one flat
+// list because the two files are seeded independently: a visitor whose first
+// paint has landed only one of them should still get the questions that file can
+// answer, not a chipless empty state.
+const DEMO_QUESTIONS = {
+  "helios_energy_handbook.md": [
+    "What warranty comes with the SunPak 5 battery?",
+  ],
+  "meridian_coffee_ops.md": [
+    "What time do Meridian's stores open at the weekend?",
+    "What does the espresso machine opening checklist require?",
+  ],
+};
+
+function demoChipsHtml() {
+  const chips = state.demoQuestions
+    .map((q) => `<button class="ask-chip" type="button" data-q="${escapeHtml(q)}">${escapeHtml(q)}</button>`)
+    .join("");
+  return chips ? `<div class="ask-chips">${chips}</div>` : "";
+}
+
 // The empty conversation used to hard-code "Add sources on the left" — advice
 // that is wrong for the visitor who most needs it, since a guest arrives with
 // the demo corpus already loaded and nothing to add. Ask about what is there.
 function chatEmptyState() {
   const n = state.sourceCount;
+  // The "two sample documents" line is only true when they are the ONLY sources;
+  // once the visitor adds their own, the count is what tells the truth. The chips
+  // survive either way, because the files they ask about are still there.
   return n
     ? emptyState(
         "◈",
         "Ask a question to see results",
-        `You have ${n} source${n === 1 ? "" : "s"} ready. Ask anything about ${
-          n === 1 ? "it" : "them"
-        } — every answer cites the exact passage it came from.`
+        state.demoDocs && n === Object.keys(DEMO_QUESTIONS).length
+          ? "Two sample documents are already loaded. Try one of these — every answer cites the exact passage it came from."
+          : `You have ${n} source${n === 1 ? "" : "s"} ready. Ask anything about ${
+              n === 1 ? "it" : "them"
+            } — every answer cites the exact passage it came from.`,
+        demoChipsHtml() + beatsHtml(2)
       )
     : emptyState(
         "◈",
         "Add a source to begin",
-        "Drop a file into Sources on the left, or paste a URL. Answers are grounded in your documents and cite them."
+        "Drop a file into Sources on the left, or paste a URL. Answers are grounded in your documents and cite them.",
+        beatsHtml(2)
       );
 }
 
@@ -1374,13 +1716,15 @@ async function openChat(chatId) {
   const box = $("messages");
   box.innerHTML = "";
   if (chat.messages.length === 0) {
-    box.innerHTML = emptyState(
-      "◈",
-      "Ask a question to see results",
-      "This conversation is empty. Ask something about your documents to get a cited, grounded answer."
-    );
+    // The same empty state as a fresh workspace, rather than a second variant of
+    // it: an empty conversation is exactly where the suggested questions and the
+    // loop guide are wanted, and this branch is what a new chat lands on.
+    box.innerHTML = chatEmptyState();
     return;
   }
+  // A conversation with messages in it is proof that beat 2 happened, including
+  // on a later visit where the loop state was lost with the browser storage.
+  markBeat("asked");
   for (const m of chat.messages) {
     appendMessage(m.role, m.content, m.citations || [], false, m.eval_line || "", m.eval_data || null);
   }
@@ -1503,8 +1847,15 @@ function buildEvalBlock(evalData, evalLine) {
             <span class="eval-meter-fill" style="width:${pct.toFixed(1)}%"></span>${tick}
           </span><span class="eval-meter-val">${sim.toFixed(2)}</span>`;
       }
+      // Beat 4 of the loop lives here rather than in an empty state, because by
+      // the time it is reachable there is no empty state left on screen: the
+      // readout only exists under an answer. The nudge disappears for good the
+      // first time the detail is opened.
+      const nudge = currentBeat() === 4
+        ? `<span class="eval-nudge">what is this?</span>`
+        : "";
       summary.innerHTML = `<span class="eval-dot" data-state="${state}" aria-hidden="true"></span>
-        <span class="eval-state">${escapeHtml(word)}</span>${meter}
+        <span class="eval-state">${escapeHtml(word)}</span>${meter}${nudge}
         <span class="eval-caret" aria-hidden="true">›</span>`;
 
       const detail = document.createElement("div");
@@ -1513,7 +1864,11 @@ function buildEvalBlock(evalData, evalLine) {
         const row = document.createElement("div");
         row.className = "eval-row";
         const vClass = value === "✓" ? "pass" : value === "FAIL" ? "fail" : "";
-        row.innerHTML = `<span class="eval-label">${label}</span>` +
+        // Two of these labels are the app's central jargon. Definitions reach a
+        // touch user here; a `title` attribute would not.
+        const term = EVAL_LABEL_TERMS[label];
+        const labelHtml = term ? termHtml(term, label) : label;
+        row.innerHTML = `<span class="eval-label">${labelHtml}</span>` +
           `<span class="eval-value ${vClass}">${escapeHtml(String(value))}</span>` +
           `<span class="eval-gloss">${escapeHtml(gloss)}</span>`;
         detail.appendChild(row);
@@ -1521,6 +1876,8 @@ function buildEvalBlock(evalData, evalLine) {
       summary.onclick = () => {
         const open = detail.classList.toggle("hidden");
         summary.setAttribute("aria-expanded", String(!open));
+        markBeat("readout");                       // beat 4 — the loop is complete
+        summary.querySelector(".eval-nudge")?.remove();
       };
       wrap.appendChild(summary);
       wrap.appendChild(detail);
@@ -1590,6 +1947,7 @@ $("ask-form").onsubmit = async (e) => {
     });
     pending.remove();
     appendMessage("assistant", result.answer, result.citations, false, result.eval_line || "", result.eval || null);
+    markBeat("asked");                             // beat 2 — an answer exists
     chatStatusOverride.delete(state.currentChatId); // answered -> green dot
     // keep the chat list titles/statuses in sync
     const c = state.chats.find((x) => x.id === state.currentChatId);
@@ -1614,9 +1972,19 @@ $("question-input").addEventListener("keydown", (e) => {
   }
 });
 
+// Suggested questions. Delegated because the empty state is re-rendered whenever
+// the source list changes, which would strip per-button handlers.
+$("messages").addEventListener("click", (e) => {
+  const chip = e.target.closest(".ask-chip");
+  if (!chip) return;
+  $("question-input").value = chip.dataset.q;
+  $("ask-form").requestSubmit();
+});
+
 // ---------- excerpt pane (bottom) ----------
 
 function showExcerpt(citation) {
+  markBeat("cited");   // beat 3 of the loop — checking an answer against its source
   $("excerpt-content").classList.remove("hidden");
   $("excerpt-close").classList.remove("hidden");
   document.querySelector(".excerpt-empty").classList.add("hidden");
@@ -1745,7 +2113,8 @@ function renderEval(data) {
     $("eval-scorecard").innerHTML = emptyState(
       "◎",
       "Benchmark needs an account",
-      "Sign in with Google to score retrieval and generation against the 46-question golden set. Every answer you ask below is still graded for faithfulness and relevance."
+      "Sign in with Google to score retrieval and generation against the 46-question golden set. Every answer you ask below is still graded for faithfulness and relevance.",
+      `<p class="glossary-strip">${termHtml("golden-set")} · ${termHtml("faithfulness")} · ${termHtml("relevancy")}</p>`
     );
     $("eval-questions").innerHTML = "";
     runBtn.disabled = true;
@@ -1754,10 +2123,17 @@ function renderEval(data) {
   }
   if (!data || data.status === "none") {
     statusEl.textContent = "";
+    // The pane used to say only "no run yet", which explained neither what a
+    // benchmark is, how long it takes, nor that it spends real model calls —
+    // a button with unstated cost behind it (plan §5).
     $("eval-scorecard").innerHTML = emptyState(
       "◎",
       "No benchmark run yet",
-      "Run the RAGAS-style benchmark to score retrieval and generation against the golden set."
+      "A benchmark replays the golden set through the live pipeline and scores it " +
+      "against published targets — retrieval quality first, then whether each " +
+      "answer is faithful and on-topic. It runs in slices from this tab, takes " +
+      "several minutes, and spends a handful of model calls per question.",
+      `<p class="glossary-strip">${termHtml("golden-set")} · ${termHtml("faithfulness")} · ${termHtml("relevancy")}</p>`
     );
     $("eval-questions").innerHTML = "";
     runBtn.disabled = false;

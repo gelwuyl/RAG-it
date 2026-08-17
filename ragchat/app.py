@@ -532,6 +532,11 @@ def _doc_view(d: Document) -> dict:
         # Progress for the sliced-ingest bar. Sent on every document so a page
         # reload mid-index resumes the bar instead of showing a stalled card.
         "indexed_chunks": d.indexed_chunks or 0,
+        # Seeded demo corpus, not the visitor's own upload. The UI needs to tell
+        # them apart to offer suggested questions it knows are answerable —
+        # matching on the filename alone would fire on a user's own upload that
+        # happened to share the name.
+        "is_demo": bool(d.is_demo),
         "created_at": d.created_at,
     }
 

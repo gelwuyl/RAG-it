@@ -501,6 +501,52 @@ input:disabled, textarea:disabled, select:disabled {
 /* Prose register: an empty state is the one place the app explains itself, and
    at 13px it was smaller than the buttons it was explaining. */
 .empty-text { font-size: var(--text-prose); line-height: 1.55; max-width: 44ch; }
+/* ---------- the four-beat loop (PRODUCT_UX_PLAN.md §5) ----------
+
+   Numbered, and lit up as each beat completes. Telemetry register: this is
+   instrumentation about your progress, not content — the copy above it is what
+   the eye should land on first. Only ever one of these on screen at a time; see
+   beatsHtml(). */
+
+.loop-list {
+  list-style: none; margin: 4px 0 0; padding: 0;
+  display: flex; flex-direction: column; gap: 6px;
+  text-align: left; width: 100%; max-width: 44ch;
+}
+.loop-beat { display: flex; align-items: center; gap: 8px; }
+.loop-pip {
+  flex-shrink: 0; width: 18px; height: 18px; border-radius: var(--r-pill);
+  display: inline-flex; align-items: center; justify-content: center;
+  font-family: var(--font-mono); font-size: var(--text-nano); line-height: 1;
+  border: 1px solid var(--border-strong); color: var(--faint);
+}
+.loop-label {
+  font-family: var(--font-mono); font-size: var(--text-nano);
+  text-transform: uppercase; letter-spacing: var(--tracking-telemetry);
+  color: var(--faint);
+}
+/* Lime means "this is where you are", the same thing it means everywhere else. */
+.loop-beat[data-state="current"] .loop-pip {
+  background: var(--primary); border-color: var(--primary); color: var(--on-primary);
+}
+.loop-beat[data-state="current"] .loop-label { color: var(--text); }
+.loop-beat[data-state="done"] .loop-pip { border-color: var(--border); color: var(--muted); }
+.loop-beat[data-state="done"] .loop-label { color: var(--muted); }
+
+/* ---------- suggested questions (plan §4) ---------- */
+
+.ask-chips {
+  display: flex; flex-direction: column; gap: 6px; align-items: stretch;
+  width: 100%; max-width: 44ch; margin-top: 4px;
+}
+.ask-chip {
+  text-align: left; font: inherit; font-size: var(--text-sm); line-height: 1.4;
+  padding: 8px 12px; cursor: pointer;
+  color: var(--text); background: var(--panel-sunken);
+  border: 1px solid var(--border); border-radius: var(--r-md);
+}
+.ask-chip:hover { background: var(--primary-soft); border-color: var(--primary); }
+
 .empty-state-row {
   flex-direction: row;
   align-items: center;
@@ -863,6 +909,10 @@ input:disabled, textarea:disabled, select:disabled {
   background: var(--text); opacity: 0.5;
 }
 .eval-meter-val { flex-shrink: 0; font-variant-numeric: tabular-nums; }
+/* Beat 4 of the loop (§5). The readout is the last beat and the only one with no
+   empty state left to explain it, so the nudge rides on the chip itself — once,
+   until the detail is opened for the first time. */
+.eval-nudge { flex-shrink: 0; color: var(--primary-ink); }
 .eval-caret {
   margin-left: auto; flex-shrink: 0;
   transition: transform 0.12s ease;
@@ -1033,6 +1083,74 @@ input:disabled, textarea:disabled, select:disabled {
   padding: 14px 16px;
   overflow-wrap: anywhere;
 }
+
+/* ---------- glossary (PRODUCT_UX_PLAN.md §5) ----------
+
+   `.term` inherits everything from whatever it sits in — a topbar switch label, a
+   mono row label in the readout, a line of prose — and adds only the dotted
+   underline that marks it as definable. That is what lets the same control work
+   in three registers without three sets of rules.
+
+   These replace `title` attributes, which do not exist on touch: the definition
+   of "Keyword fusion" was unreachable for every phone visitor. */
+
+.term {
+  font: inherit; color: inherit; letter-spacing: inherit; text-transform: inherit;
+  background: none; border: 0; padding: 0; cursor: help;
+  border-bottom: 1px dotted currentColor;
+}
+.term:hover { color: var(--text); }
+/* `font: inherit` above would otherwise pull these up to body size, because here
+   the term IS the label rather than sitting inside one. */
+.switch-label.term { font-size: var(--text-xs); color: var(--muted); }
+/* The affordance where the label itself cannot be a button — beside another
+   button, or beside a pane heading. */
+.term-mark {
+  flex-shrink: 0; width: 18px; height: 18px; padding: 0; cursor: help;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-family: var(--font-mono); font-size: var(--text-nano); line-height: 1;
+  color: var(--faint); background: none;
+  border: 1px solid var(--border-strong); border-radius: var(--r-pill);
+}
+.term-mark:hover { color: var(--text); border-color: var(--border-strong); background: var(--hover-soft); }
+.term-pair { display: inline-flex; align-items: center; gap: 5px; }
+
+.glossary-pop {
+  position: fixed; z-index: 120; width: min(300px, calc(100vw - 24px));
+  padding: 12px 14px;
+  background: var(--panel); border: 1px solid var(--border-strong);
+  border-radius: var(--r-md); box-shadow: var(--shadow-lg);
+}
+.glossary-term {
+  font-family: var(--font-mono); font-size: var(--text-nano);
+  text-transform: uppercase; letter-spacing: var(--tracking-telemetry);
+  color: var(--muted); margin-bottom: 6px;
+}
+/* A definition is prose and belongs in the content register, however small the
+   label above it is (see the two-registers note at the top of this file). */
+.glossary-def { font-size: var(--text-sm); line-height: 1.55; color: var(--text); }
+/* A row of terms under an empty state — the jargon that panel is about. */
+.glossary-strip {
+  display: flex; flex-wrap: wrap; gap: 6px; justify-content: center;
+  margin-top: 6px; font-size: var(--text-xs); color: var(--muted);
+}
+
+/* ---------- persistent job status (plan §5) ---------- */
+
+.job-status {
+  flex: 1 1 100%; min-width: 0;
+  font-family: var(--font-mono); font-size: var(--text-nano);
+  letter-spacing: var(--tracking-telemetry); text-transform: uppercase;
+  color: var(--muted); line-height: 1.5; overflow-wrap: anywhere;
+}
+/* Lime for work in flight — the same meaning it carries on a primary button or
+   an indexing bar. It is a dot rather than a spinner because the pane already
+   has per-document progress bars and a second animation would compete. */
+.job-status.is-busy::before {
+  content: "●"; color: var(--primary); margin-right: 6px;
+  animation: job-pulse 1.4s ease-in-out infinite;
+}
+@keyframes job-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 
 /* ---------- toast ---------- */
 
@@ -1281,6 +1399,9 @@ fieldset legend {
   .switch-btn { padding: 7px 12px; }
   .icon-btn { padding: 8px 10px; font-size: 16px; }
   .pane-toggle { width: 38px; height: 38px; }
+  /* The glossary is the one help affordance that MUST be tappable — it exists
+     because the old `title` tooltips were unreachable on touch. */
+  .term-mark { width: 28px; height: 28px; font-size: var(--text-micro); }
   .chat-item { padding: 9px 10px; }
   .chat-item .chat-delete { opacity: 1; }
   .cite-chip { padding: 6px 12px; }
