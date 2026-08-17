@@ -26,7 +26,7 @@
         }
       })();
     </script>
-    <link rel="stylesheet" href="/styles.css?v=25" />
+    <link rel="stylesheet" href="/styles.css?v=26" />
     <script>
       // Boot diagnostics: collect load/runtime errors so a broken app.js
       // shows a visible message instead of a silently dead UI.
@@ -326,7 +326,10 @@
         <button class="tab" type="button" role="tab" data-tab="chats"
           aria-selected="false" aria-controls="chats-pane">
           <span class="tab-icon" aria-hidden="true">☰</span>
-          <span class="tab-label">Chats</span>
+          <!-- "Conversations", the same word the pane title and the desktop
+               column use. A tab that renames the thing it opens makes the user
+               translate; the label is sized to fit instead of shortened. -->
+          <span class="tab-label">Conversations</span>
           <span id="tab-count-chats" class="tab-count hidden">0</span>
         </button>
         <button class="tab" type="button" role="tab" data-tab="eval"
@@ -536,6 +539,6 @@
       </div>
     </div>
 
-    <script type="module" src="/app.js?v=31"></script>
+    <script type="module" src="/app.js?v=32"></script>
   </body>
 </html>

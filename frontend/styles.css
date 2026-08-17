@@ -1459,7 +1459,11 @@ fieldset legend {
   .tabbar {
     grid-area: tabs;
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    /* Not four equal columns: "Conversations" is thirteen characters and the
+       other three are seven or less. Widening its column is what lets the tab
+       carry the same word as the pane it opens, rather than an abbreviation the
+       reader has to translate. */
+    grid-template-columns: 1fr 1fr 1.5fr 1fr;
     background: var(--panel);
     border-top: 1px solid var(--border);
     /* Home-indicator gap on iOS: without it the last few pixels of the tab row
@@ -1475,8 +1479,9 @@ fieldset legend {
   }
   .tab-icon { font-size: 16px; line-height: 1; }
   .tab-label {
-    font-family: var(--font-mono); font-size: var(--text-nano);
-    letter-spacing: 0.06em; text-transform: uppercase;
+    font-family: var(--font-mono); font-size: 10px;
+    letter-spacing: 0.03em; text-transform: uppercase;
+    max-width: 100%; overflow: hidden; text-overflow: ellipsis;
   }
   /* Lime for the selected tab, the same meaning it carries on a pane title: this
      is where you are. The 2px rule along the top edge is what makes it readable
