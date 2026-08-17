@@ -16,6 +16,9 @@
 > | `d29ed86` | Phase 2 — two registers, JetBrains Mono, lime in both themes, per-answer readout |
 > | `f09ffd8` | Excerpt + Evaluation contained in the conversation column |
 > | `30d950d` | Phase 3 — landing page at `/`, workspace at `/app`, callback redirect |
+> | `2fd3ed1` | Phase 4a — settings presets, Advanced disclosure, per-field hints |
+> | `d50322a` | Phase 4b — sequenced empty states, suggested questions, glossary, persistent job status |
+> | `4099e90` | Phase 4c — ⌘K command palette (desktop only) |
 >
 > **Every §4 item is now resolved.** §4B and §4E shipped together in `30d950d`,
 > as the ordering trap below requires.
@@ -379,10 +382,15 @@ account. Handles both vector backends.
 ### Known-good verification commands
 
 ```bash
-.venv/Scripts/python -m pytest tests/ -q          # 43 passing
+.venv/Scripts/python -m pytest tests/ -q          # 105 passing
 .venv/Scripts/python -m scripts.migrate_user_data --list
 curl -s https://rag-gel.vercel.app/api/health | python -m json.tool
+node shot.mjs http://localhost:5173               # both pages x 5 bp x 2 themes
+node layout_check.mjs http://localhost:5173       # drag/collapse/persistence
 ```
+
+`.claude/launch.json` now defines **both** dev servers (`frontend`, `backend`), so
+the two node scripts above have an API to talk to.
 
 ---
 
@@ -406,15 +414,50 @@ published targets.
 **Dev note:** there is no `/app` rewrite on the Vite dev server — that lives
 in `vercel.json`. The app is at **`/app.html`** in development.
 
-### Phase 4 — product depth
+### Phase 4 — product depth — **DONE** (`2fd3ed1`, `d50322a`, `4099e90`)
 
-Settings presets (plan step 7) · inline help and sequenced empty states
-(step 10) · ⌘K command palette (step 11).
+Three commits, one per plan step: presets (step 7), inline help and sequenced
+empty states (step 10), the ⌘K palette (step 11). The step-10 copy bug is gone —
+the empty conversation now offers per-document suggested questions instead of
+telling a guest to add sources they already have.
 
-> **Copy bug to fix in step 10:** the empty chat state says "Add sources on the
-> left" — but a guest arrives with two demo documents already loaded, so it is
-> wrong for every first-time visitor. It should offer the three suggested
-> questions the plan §4 calls for instead.
+Decisions worth keeping:
+
+- **Presets set the ten pipeline keys only.** Never the model or provider fields:
+  switching embedding provider re-points every vector in the store and 422s
+  outright without a key, so a card called "Fast" must not decide it. Each card
+  computes its own "needs re-index" badge against the **saved** config, not
+  against another preset.
+- **The re-index warning used to fire on every save.** The server derives
+  `needs_reindex` from which keys were *sent* and this form always sends all of
+  them, so the one save that mattered looked like the fourteen that did not. The
+  frontend now compares against the config it loaded.
+- **Demo tier is read-only in fact, not just at the Save button** — the fields are
+  `disabled` (and styled to look it). A form that silently ignores you is worse
+  than one that says no.
+- **Only one beat strip is on screen at a time.** `beatsHtml(n)` returns nothing
+  unless `n` is the current beat, so the guide sits beside the next action instead
+  of appearing in three empty states at once. Beat 4 has no empty state left by
+  the time it is reachable, so its nudge rides on the readout chip.
+- **The glossary replaced `title` attributes, which do not exist on touch.** That
+  was the plan's specific complaint about the topbar toggles, and it applied to
+  the definition of the app's own switches.
+- **Palette commands click the real controls.** Guest locks, disabled states and
+  confirmations live on those handlers; a palette with its own copies would be a
+  second, laxer way in.
+
+### Found while building phase 4 — not fixed
+
+**Demo corpus seeding drops a document intermittently.** Roughly one local guest
+in three lands with one of the two seeded files instead of both, while the
+`__demo_template__` account has both `ready`. `seed_demo_corpus`
+(`ragchat/guests.py`) commits each clone **before** `copy_user_chunks`, so a
+throw in the copy leaves the loop half-done with a committed document behind it.
+Worth a look: the visitor path is exactly where this shows.
+
+The frontend no longer depends on it — suggested questions are keyed per document
+and gated on `is_demo`, so a visitor holding one seeded file still gets the
+questions that file answers.
 
 ### Phase 5 — mobile
 
