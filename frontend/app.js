@@ -2296,6 +2296,77 @@ applyBreakpointDefaults();
 NARROW.addEventListener("change", applyBreakpointDefaults);
 MOBILE.addEventListener("change", applyBreakpointDefaults);
 
+// ---------- active pane ----------
+//
+// The pane you are working in wears the accent on its title. Two different
+// signals drive it, because "which pane am I in" means two different things:
+//
+//   Desktop — the columns are all visible at once, so it is the one you last
+//   touched or focused. That is a real statement about where you are working.
+//
+//   Mobile — the panes are stacked and you move through them by SCROLLING, not
+//   by tapping. Marking on interaction there would leave the accent on whatever
+//   you last pressed while you read something else entirely, so the reading
+//   follows the scroll position instead: whichever section owns the top of the
+//   viewport is the one you are in.
+//
+// When the mobile pass lands a one-pane-at-a-time switcher, the visible pane IS
+// the active one and the scroll driver becomes unnecessary.
+let activePane = null;
+
+function panes() {
+  return [...document.querySelectorAll(".panes .pane")];
+}
+
+function setActivePane(pane) {
+  if (!pane || pane === activePane) return;
+  activePane = pane;
+  for (const p of panes()) p.classList.toggle("is-active", p === pane);
+}
+
+const panesEl = document.querySelector(".panes");
+
+for (const type of ["pointerdown", "focusin"]) {
+  panesEl.addEventListener(type, (e) => {
+    if (MOBILE.matches) return;          // mobile is driven by scroll, below
+    setActivePane(e.target.closest(".pane"));
+  });
+}
+
+function markPaneByScroll() {
+  if (!MOBILE.matches) return;
+  // A line 30% down the VIEWPORT, not an offset from the topbar: on mobile the
+  // topbar scrolls away with the page, so its rect goes negative and a probe
+  // derived from it lands above every pane — which pinned the accent to the first
+  // section forever. 30% is below the sticky pane head and inside the content, so
+  // the accent moves when the section you are reading does, not when its heading
+  // first peeks in.
+  const probe = window.innerHeight * 0.3;
+  const hit = panes().find((p) => {
+    const r = p.getBoundingClientRect();
+    return r.top <= probe && r.bottom > probe;
+  });
+  if (hit) setActivePane(hit);
+}
+
+let scrollQueued = false;
+window.addEventListener("scroll", () => {
+  // rAF-coalesced: scroll fires far more often than the accent can meaningfully
+  // move, and this runs getBoundingClientRect over four panes.
+  if (scrollQueued) return;
+  scrollQueued = true;
+  requestAnimationFrame(() => { scrollQueued = false; markPaneByScroll(); });
+}, { passive: true });
+
+// Chat is the default on desktop: it is where the cursor goes and where the
+// answer lands, so a title is lit from first paint rather than after a click.
+function applyActivePaneDefault() {
+  if (MOBILE.matches) markPaneByScroll();
+  else setActivePane(document.querySelector(".chat-pane"));
+}
+applyActivePaneDefault();
+MOBILE.addEventListener("change", applyActivePaneDefault);
+
 // ---------- resizable columns ----------
 //
 // The grid tracks are sized by three custom properties (tokens.css). Dragging

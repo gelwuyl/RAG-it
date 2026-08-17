@@ -426,13 +426,30 @@ input:disabled, textarea:disabled, select:disabled {
   background: var(--panel);
   flex-shrink: 0;
 }
-/* Pane titles are chrome, not content — telemetry register. */
+/* Pane titles are chrome, not content — telemetry register, with one deliberate
+   promotion: they sit at full contrast rather than the register's usual --muted.
+   They are the map of the app, and at 12px mono uppercase they still read as
+   instrument labels rather than as headings. The register's low-contrast rule
+   holds for READINGS — scores, counts, latency — which is where a loud value
+   would out-shout the answer.
+
+   The pane you are working in wears the accent, which is the same thing lime
+   means everywhere else in the app: active. Nothing here is decorative, so lime
+   keeps its single meaning (see the two-registers note at the top of this file).
+   Driven from app.js by TWO signals — the pane you last touched on desktop, the
+   section you have scrolled to on mobile. */
 .pane-title {
   font-family: var(--font-mono);
   font-size: var(--text-micro); font-weight: 500;
   letter-spacing: var(--tracking-telemetry);
-  text-transform: uppercase; color: var(--muted);
+  text-transform: uppercase; color: var(--text);
   white-space: nowrap;
+}
+.pane.is-active > .pane-head > .pane-title { color: var(--primary-ink); }
+/* The count beside an active title follows it, or the pill reads as belonging to
+   a different pane than the word it annotates. */
+.pane.is-active > .pane-head > .count-pill {
+  color: var(--primary-ink); border-color: var(--primary-soft-border);
 }
 .pane-head > .btn { margin-left: auto; }
 .pane-head > .btn ~ .btn, .pane-head > .btn ~ .pane-toggle { margin-left: 0; }
