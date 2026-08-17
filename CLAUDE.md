@@ -15,7 +15,10 @@ ragchat/embeddings.py  Provider-aware embedding/rerank clients (gemini | openrou
 ragchat/vectordb.py Dispatch to store.py (Chroma, local) or store_neon.py (pgvector)
 ragchat/db.py       SQLAlchemy models + self-healing schema init
 eval/               Golden set (46 Q), corpus (10 files), LLM judges, harness
-frontend/           Vite SPA — app.js, index.html, styles.css
+frontend/           Vite, TWO entry points:
+                      index.html  + landing.css  → the landing page at "/"
+                      app.html    + styles.css + app.js → the workspace at "/app"
+                      tokens.css  shared by both (palette, type scale, metrics)
 ```
 
 ## Commands
@@ -25,7 +28,13 @@ frontend/           Vite SPA — app.js, index.html, styles.css
 .venv\Scripts\python -m uvicorn ragchat.app:app --reload --port 8000
 
 # Frontend (proxies /api → localhost:8000)
+# "/" is the landing page. The APP is at /app.html in dev — the "/app" rewrite
+# lives in vercel.json and does not exist on the Vite dev server.
 cd frontend && npm run dev
+
+# Screenshots: both pages x 5 breakpoints x 2 themes, into shots/<page>/<theme>/
+# Fails the run on horizontal overflow or any page error.
+node shot.mjs http://localhost:5173
 
 # Tests
 .venv\Scripts\python -m pytest tests/ -v
@@ -149,7 +158,8 @@ problem.
 - Comments explain **why**, especially where the code looks odd because of a
   serverless constraint or a past bug. Keep them when refactoring.
 - Frontend is dependency-free vanilla JS. No framework, no build step beyond Vite.
-  Bump the `?v=` cache-buster in `index.html` when changing `app.js`.
+  Bump the `?v=` cache-buster in **`app.html`** when changing `app.js` or
+  `styles.css` (and in `index.html` when changing `landing.css`).
 - Errors that reach the user should be actionable strings, not 500s — the chat
   path deliberately catches embedding/generation failures and returns a readable
   answer instead.

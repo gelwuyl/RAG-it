@@ -94,6 +94,29 @@ async function initAuth() {
   try {
     let status = await api("/api/auth/status");
 
+    // The landing page's secondary CTA is "Sign in with Google", and it links
+    // to /app?signin=1 rather than straight to /api/auth/google/login. Going
+    // direct would 400 on a deployment without OAuth configured, showing raw
+    // JSON as the first thing a visitor sees. Bouncing through here means the
+    // app can check first and fall back to its own sign-in card.
+    // The guest check is NOT redundant with !authenticated: a guest IS
+    // authenticated as far as the API is concerned, and under guest-first every
+    // returning visitor already has a guest session. Testing only
+    // !status.authenticated would make the landing page's "Sign in with Google"
+    // button silently do nothing for everyone who had visited before.
+    // Signing in from a guest session is also the good case — it promotes the
+    // work they already did rather than discarding it.
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("signin") && (!status.authenticated || status.is_guest)) {
+      if (status.google_oauth) {
+        window.location.href = "/api/auth/google/login";
+        return;
+      }
+      renderAuthGate(status);
+      showAuth();
+      return;
+    }
+
     // GUEST-FIRST: an unauthenticated visitor is given their own private,
     // throwaway workspace rather than a sign-in wall. This is the whole premise
     // of guest mode — "start using it now, sign in when you want to keep it" —

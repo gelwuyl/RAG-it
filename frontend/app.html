@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RAG-it</title>
+    <meta name="color-scheme" content="dark light" />
+    <script>
+      // Theme must be applied BEFORE the stylesheet paints, or a dark-theme
+      // user gets a white flash on every load. This is why it is an inline
+      // blocking script in <head> and not part of app.js.
+      //
+      // Dark is the default and wins over prefers-color-scheme: this is a
+      // showcase piece and dark is the designed experience. Light is opt-in
+      // and, once chosen, sticks.
+      (function () {
+        try {
+          var saved = localStorage.getItem("ragchat-theme");
+          document.documentElement.setAttribute(
+            "data-theme",
+            saved === "light" ? "light" : "dark",
+          );
+        } catch (e) {
+          // Private mode / storage disabled — fall back to the default.
+          document.documentElement.setAttribute("data-theme", "dark");
+        }
+      })();
+    </script>
+    <link rel="stylesheet" href="/styles.css?v=11" />
+    <script>
+      // Boot diagnostics: collect load/runtime errors so a broken app.js
+      // shows a visible message instead of a silently dead UI.
+      window.__ragchat_errors = [];
+      window.addEventListener("error", (e) => {
+        window.__ragchat_errors.push(e.message || "script load error");
+      });
+    </script>
+  </head>
+  <body>
+    <!-- Sign-in view -->
+    <div id="auth-view" class="auth-view hidden">
+      <div class="auth-card">
+        <h1>● RAG-it</h1>
+        <p class="muted">Ask questions grounded in your own documents.</p>
+        <a id="google-btn" class="btn btn-primary hidden" href="/api/auth/google/login">Sign in with Google</a>
+        <div id="password-auth" class="hidden">
+          <input id="auth-username" type="text" placeholder="Username" autocomplete="username" />
+          <input id="auth-password" type="password" placeholder="Password" autocomplete="current-password" />
+          <div class="auth-row">
+            <button id="login-btn" class="btn">Log in</button>
+            <button id="register-btn" class="btn btn-secondary">Create account</button>
+          </div>
+          <p id="auth-error" class="error-text"></p>
+          <p class="muted small">No Google OAuth configured — using local accounts.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- App shell is visible immediately (no in-app auth gate in single-user
+         mode). The auth panel is shown only on 401. -->
+    <div id="app-view" class="app-shell">
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true">◆</span>
+          <span class="brand-text">
+            <span class="brand-name">RAG-it</span>
+            <span class="brand-sub">Grounded answers from your own sources</span>
+          </span>
+        </div>
+        <span id="user-name" class="user-name"></span>
+        <!-- Guest workspace state. Filled by app.js from /api/auth/status:
+             is_guest plus guest_usage. Hidden entirely for signed-in accounts,
+             which are never capped. -->
+        <div id="guest-badge" class="guest-badge hidden"></div>
+        <div class="topbar-actions">
+          <div class="switch" title="Vector + BM25 keyword fusion (real hybrid search, not web)">
+            <span class="switch-label">Keyword fusion</span>
+            <button id="hybrid-toggle" class="switch-btn" type="button"
+              title="Toggle BM25 keyword fusion on/off (improves exact-match retrieval; never adds web text)">Off</button>
+          </div>
+          <div class="switch" title="When ON, web results are appended as labeled [web] chunks ONLY if your documents don't answer the question (fallback, not grounding)">
+            <span class="switch-label">Web fallback</span>
+            <button id="web-toggle" class="switch-btn" type="button"
+              title="Toggle web augmentation fallback on/off">Off</button>
+          </div>
+          <button id="prune-btn" class="btn btn-small" type="button"
+            title="Delete orphaned Neon vector chunks (no matching document)">Prune ghosts</button>
+          <button id="settings-btn" class="btn btn-small" type="button" title="Tuning parameters">⚙ Settings</button>
+          <button id="theme-toggle" class="btn btn-small" type="button"
+            title="Switch between the dark and light theme" aria-pressed="false">☾</button>
+        </div>
+        <!-- Optional Google sign-in. Filled in by app.js from /api/auth/me;
+             signing in is never required to use the app. -->
+        <div id="auth-slot" class="auth-slot"></div>
+      </header>
+
+      <div class="panes">
+        <!-- Left: sources -->
+        <aside class="pane sources-pane" id="sources-pane">
+          <div class="pane-head">
+            <h2 class="pane-title">Sources</h2>
+            <span id="source-count" class="count-pill">0</span>
+            <button id="sources-toggle" class="pane-toggle" type="button"
+              aria-expanded="true" title="Show or hide sources">⌃</button>
+          </div>
+
+          <div class="pane-scroll">
+            <div
+              id="drop-zone"
+              class="drop-zone"
+              title="Drag files here or click to upload"
+            >
+              <span class="drop-icon" aria-hidden="true">↑</span>
+              <span class="drop-title">Upload files</span>
+              <span class="drop-hint">PDF, Markdown, text, CSV, JSON…</span>
+              <input id="file-input" type="file" multiple hidden
+                accept=".pdf,.md,.txt,.markdown,.rst,.html,.htm,.csv,.json,.yaml,.yml,.log" />
+            </div>
+            <div class="add-row">
+              <input id="url-input" type="text" placeholder="Add a web page URL" />
+              <button id="add-url-btn" class="btn btn-small" type="button">Add</button>
+            </div>
+            <div class="add-row">
+              <input id="folder-input" type="text" placeholder="Add folder path (e.g. ~/documents)" />
+              <button id="add-folder-btn" class="btn btn-small" type="button">Add</button>
+            </div>
+
+            <div id="sources-empty" class="empty-state hidden">
+              <span class="empty-icon" aria-hidden="true">◇</span>
+              <p class="empty-title">Upload a source to begin</p>
+              <p class="empty-text">Drop a file above, paste a URL, or point at a folder.
+                Everything you add is chunked, embedded and cited.</p>
+            </div>
+
+            <div id="folder-list" class="source-list"></div>
+            <div id="doc-list" class="source-list"></div>
+          </div>
+
+          <div class="pane-foot">
+            <button id="reindex-btn" class="btn btn-small" type="button"
+              title="Re-chunk all sources under the current config">↻ Re-index all</button>
+          </div>
+        </aside>
+
+        <!-- Center: chat -->
+        <main class="pane chat-pane">
+          <div class="pane-head">
+            <h2 class="pane-title">Chat</h2>
+            <span class="chats-label">Conversations</span>
+            <button id="new-chat-btn" class="btn btn-small" type="button">+ New chat</button>
+          </div>
+          <div id="chat-list" class="chat-list"></div>
+          <div id="messages" class="messages">
+            <div class="empty-state" id="empty-hint">
+              <span class="empty-icon" aria-hidden="true">◈</span>
+              <p class="empty-title">Ask a question to see results</p>
+              <p class="empty-text">Add sources on the left, then ask anything about them.
+                Answers are grounded in your documents and cite their sources.</p>
+            </div>
+          </div>
+          <form id="ask-form" class="ask-form">
+            <textarea id="question-input" rows="1" placeholder="Ask about your documents…"
+              autocomplete="off"></textarea>
+            <button id="ask-btn" class="btn btn-primary" type="submit">Ask</button>
+          </form>
+        </main>
+
+        <!-- Right: evaluation -->
+        <aside class="pane eval-pane" id="eval-pane">
+          <div class="pane-head">
+            <h2 class="pane-title">Evaluation</h2>
+            <button id="eval-run-btn" class="btn btn-small btn-accent" type="button"
+              title="Run the RAGAS-style benchmark on the golden set">Run benchmark</button>
+            <button id="eval-toggle" class="pane-toggle" type="button"
+              aria-expanded="true" title="Show or hide the evaluation scorecard">⌃</button>
+          </div>
+          <div class="pane-scroll">
+            <div id="eval-status" class="eval-status muted small"></div>
+            <div id="eval-scorecard" class="eval-scorecard"></div>
+            <div id="eval-questions" class="eval-questions"></div>
+          </div>
+        </aside>
+
+        <!-- Excerpt: under the chat column only, not the full width.
+             It is the payoff for clicking a citation and belongs beside the
+             conversation, not as a footer under the file list. -->
+        <section class="pane excerpt-pane" id="excerpt-pane">
+          <div class="pane-head">
+            <h2 class="pane-title">Excerpt</h2>
+            <span id="excerpt-title" class="excerpt-title"></span>
+            <span id="excerpt-ref" class="excerpt-ref muted small"></span>
+            <button id="excerpt-close" class="pane-toggle hidden" type="button"
+              title="Close the excerpt">✕</button>
+          </div>
+          <div class="pane-scroll">
+            <div class="excerpt-empty empty-state empty-state-row">
+              <span class="empty-icon" aria-hidden="true">❝</span>
+              <p class="empty-text">Click a citation <span class="cite-demo">[1]</span>
+                to read the exact passage an answer was grounded in.</p>
+            </div>
+            <div id="excerpt-content" class="hidden">
+              <pre id="excerpt-text"></pre>
+            </div>
+          </div>
+        </section>
+      </div>
+
+    </div>
+
+    <div id="toast" class="toast hidden"></div>
+
+    <!-- Settings modal -->
+    <div id="settings-overlay" class="modal-overlay hidden">
+      <div class="modal">
+        <div class="modal-header">
+          <h2>Pipeline Settings</h2>
+          <button id="settings-close" class="btn btn-small">✕</button>
+        </div>
+        <div class="modal-body">
+          <p id="provider-warning" class="muted small warn hidden"></p>
+          <fieldset>
+            <legend>Chunking <span class="index-badge">needs re-index</span></legend>
+            <div class="field">
+              <label for="set-chunk-size">Chunk size (tokens)</label>
+              <input id="set-chunk-size" type="number" min="128" max="1024" step="8" />
+            </div>
+            <div class="field">
+              <label for="set-chunk-overlap">Chunk overlap (tokens)</label>
+              <input id="set-chunk-overlap" type="number" min="0" max="256" step="8" />
+            </div>
+            <div class="field">
+              <label for="set-splitter">Splitter</label>
+              <select id="set-splitter">
+                <option value="recursive">Recursive (structure-aware)</option>
+                <option value="markdown_header">Markdown header</option>
+                <option value="semantic">Semantic (v1: recursive)</option>
+              </select>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>Retrieval</legend>
+            <div class="field">
+              <label for="set-top-k">Top‑K (chunks to LLM)</label>
+              <input id="set-top-k" type="number" min="1" max="20" />
+            </div>
+            <div class="field">
+              <label for="set-candidate-k">Candidate‑K (pool before rerank)</label>
+              <input id="set-candidate-k" type="number" min="1" max="100" />
+            </div>
+            <div class="field">
+              <label for="set-sim-threshold">Similarity threshold</label>
+              <input id="set-sim-threshold" type="number" min="0.0" max="1.0" step="0.05" />
+            </div>
+            <!-- The reranker on/off toggle lives in the dedicated "Reranker"
+                 fieldset below, next to its provider. It used to be duplicated
+                 here with the SAME id="set-reranker", which is invalid HTML:
+                 getElementById returns only the first match, so the lower
+                 control was dead and changing it did nothing. -->
+            <div class="field">
+              <label for="set-hybrid-search">Keyword fusion (BM25)</label>
+              <select id="set-hybrid-search">
+                <option value="false">Off</option>
+                <option value="true">On</option>
+              </select>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>Query</legend>
+            <div class="field">
+              <label for="set-query-rewrite">Query rewrite (follow-ups)</label>
+              <select id="set-query-rewrite">
+                <option value="true">On</option>
+                <option value="false">Off</option>
+              </select>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>Generation</legend>
+            <div class="field">
+              <label for="set-llm-model">LLM model</label>
+              <select id="set-llm-model"></select>
+            </div>
+            <div class="field">
+              <label for="set-temperature">Temperature</label>
+              <input id="set-temperature" type="number" min="0.0" max="1.0" step="0.05" />
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>Embedding <span class="index-badge">needs re-index</span></legend>
+            <div class="field">
+              <label for="set-embedding-provider">Provider</label>
+              <select id="set-embedding-provider">
+                <option value="gemini">Gemini (free tier — limited)</option>
+                <option value="openrouter">OpenRouter (higher limits)</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="set-embedding-model">Embedding model</label>
+              <select id="set-embedding-model"></select>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>Reranker</legend>
+            <div class="field">
+              <label for="set-reranker">LLM cross-encoder (rerank on)</label>
+              <select id="set-reranker">
+                <option value="false">Off</option>
+                <option value="true">On</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="set-reranker-provider">Reranker provider</label>
+              <select id="set-reranker-provider">
+                <option value="gemini">Gemini (LLM scores each chunk)</option>
+                <option value="openrouter">OpenRouter (Cohere rerank-v3.5)</option>
+              </select>
+            </div>
+          </fieldset>
+        </div>
+        <div class="modal-footer">
+          <p id="settings-note" class="muted small hidden"></p>
+          <button id="settings-save" class="btn btn-primary">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="/app.js?v=15"></script>
+  </body>
+</html>

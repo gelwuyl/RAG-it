@@ -56,6 +56,11 @@ app.add_middleware(
 
 LOCAL_USERNAME = "local"
 
+# Where the workspace lives. "/" is the landing page; the app is a second
+# document served at "/app" (vercel.json rewrites it to /app.html). Named once
+# so the OAuth callback and any future redirect cannot drift apart.
+APP_PATH = "/app"
+
 # Cookies are marked `secure` only where the app is actually served over HTTPS.
 # It cannot be unconditional: a `secure` cookie is silently dropped on plain
 # http://localhost, which would break local development with no error message —
@@ -380,7 +385,12 @@ async def google_callback(request: Request, db: Session = Depends(get_session)):
     # abandoned — trying the app then signing in should not cost you your files.
     _promote_prior_guest(request, db, user)
 
-    resp = RedirectResponse("/")
+    # "/app", not "/" — "/" is the landing page now, so returning there would
+    # dump a user who just signed in back onto the marketing pitch, looking
+    # like the sign-in silently failed. This line and the routing split
+    # (vercel.json + vite.config.js) MUST ship together: alone it 404s, because
+    # /app does not exist until the split builds app.html.
+    resp = RedirectResponse(APP_PATH)
     set_session_cookie(resp, user.id)
     resp.delete_cookie("oauth_state")
     return resp
@@ -1363,5 +1373,18 @@ def health():
 
 # Serve the built frontend in production; in dev Vite serves it instead.
 STATIC_DIR = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+
 if STATIC_DIR.exists():
+    # Registered BEFORE the mount so it wins: routes are matched in
+    # registration order and the mount at "/" swallows everything after it.
+    #
+    # On Vercel the /app -> /app.html rewrite in vercel.json handles this. This
+    # route is what makes serving dist/ directly through FastAPI behave the
+    # same, because StaticFiles(html=True) only maps DIRECTORIES to index.html
+    # — it will not resolve an extensionless /app to app.html, so without this
+    # the OAuth callback lands on a 404 in any non-Vercel deployment.
+    @app.get(APP_PATH, include_in_schema=False)
+    def serve_app():
+        return HTMLResponse((STATIC_DIR / "app.html").read_text(encoding="utf-8"))
+
     app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")

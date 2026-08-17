@@ -3,16 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>RAG-it</title>
+    <title>RAG-it — grounded answers from your own documents</title>
+    <meta name="description" content="A document-grounded RAG chat app: hybrid retrieval, LLM reranking and RAGAS-style evaluation, deployed as a single serverless function." />
     <meta name="color-scheme" content="dark light" />
     <script>
-      // Theme must be applied BEFORE the stylesheet paints, or a dark-theme
-      // user gets a white flash on every load. This is why it is an inline
-      // blocking script in <head> and not part of app.js.
-      //
-      // Dark is the default and wins over prefers-color-scheme: this is a
-      // showcase piece and dark is the designed experience. Light is opt-in
-      // and, once chosen, sticks.
+      // Same key and same rule as the app (app.html), so a light-theme visitor
+      // does not get a dark pitch page followed by a light workspace.
+      // Must stay inline and blocking, or dark-theme users flash white.
       (function () {
         try {
           var saved = localStorage.getItem("ragchat-theme");
@@ -21,314 +18,350 @@
             saved === "light" ? "light" : "dark",
           );
         } catch (e) {
-          // Private mode / storage disabled — fall back to the default.
           document.documentElement.setAttribute("data-theme", "dark");
         }
       })();
     </script>
-    <link rel="stylesheet" href="/styles.css?v=11" />
-    <script>
-      // Boot diagnostics: collect load/runtime errors so a broken app.js
-      // shows a visible message instead of a silently dead UI.
-      window.__ragchat_errors = [];
-      window.addEventListener("error", (e) => {
-        window.__ragchat_errors.push(e.message || "script load error");
-      });
-    </script>
+    <link rel="stylesheet" href="/landing.css?v=1" />
   </head>
   <body>
-    <!-- Sign-in view -->
-    <div id="auth-view" class="auth-view hidden">
-      <div class="auth-card">
-        <h1>● RAG-it</h1>
-        <p class="muted">Ask questions grounded in your own documents.</p>
-        <a id="google-btn" class="btn btn-primary hidden" href="/api/auth/google/login">Sign in with Google</a>
-        <div id="password-auth" class="hidden">
-          <input id="auth-username" type="text" placeholder="Username" autocomplete="username" />
-          <input id="auth-password" type="password" placeholder="Password" autocomplete="current-password" />
-          <div class="auth-row">
-            <button id="login-btn" class="btn">Log in</button>
-            <button id="register-btn" class="btn btn-secondary">Create account</button>
+    <button id="theme-toggle" class="theme-toggle" type="button"
+      title="Switch between the dark and light theme" aria-pressed="false">☾</button>
+
+    <!-- ============================ hero ============================ -->
+    <header class="hero">
+      <div class="starfield" aria-hidden="true"></div>
+      <div class="hero-grid" aria-hidden="true"></div>
+      <div class="wrap">
+        <div class="hero-mark">
+          <span class="hero-mark-glyph" aria-hidden="true">◆</span>
+          <span class="hero-mark-name">RAG-it</span>
+        </div>
+
+        <h1 class="hero-title">Answers your documents can <em>prove</em>.</h1>
+
+        <p class="hero-lede">
+          Upload what you have. Ask in plain language. Every answer cites the exact
+          passage it came from — and grades itself, so you can see when it is on
+          firm ground and when it is not.
+        </p>
+
+        <div class="hero-cta">
+          <a class="btn btn-primary" href="/app">Start with sample documents →</a>
+          <a class="btn" href="/app?signin=1">Sign in with Google</a>
+        </div>
+        <p class="hero-note">
+          No sign-up. You get a private workspace immediately — sign in later and
+          your work comes with you.
+        </p>
+      </div>
+    </header>
+
+    <!-- ===================== 01 · metric tiles ====================== -->
+    <section>
+      <div class="wrap">
+        <div class="section-label">
+          <span class="section-num">01</span>
+          <span class="section-name">By the numbers</span>
+        </div>
+        <!-- Structural facts, verifiable from the repo: eval/golden.jsonl has 46
+             lines, eval/corpus/ has 10 files, the Neon `chunks` table has one
+             fixed vector(768) column, and api/index.py is the only function.
+             Deliberately NOT benchmark scores — those need a published run
+             behind them and would go stale here without anything noticing. -->
+        <div class="tiles">
+          <div class="tile">
+            <span class="tile-id">A1</span>
+            <span class="tile-num">46</span>
+            <span class="tile-label">Golden questions</span>
           </div>
-          <p id="auth-error" class="error-text"></p>
-          <p class="muted small">No Google OAuth configured — using local accounts.</p>
+          <div class="tile">
+            <span class="tile-id">A2</span>
+            <span class="tile-num">10</span>
+            <span class="tile-label">Corpus documents</span>
+          </div>
+          <div class="tile">
+            <span class="tile-id">A3</span>
+            <span class="tile-num">768</span>
+            <span class="tile-label">Vector dimensions</span>
+          </div>
+          <div class="tile">
+            <span class="tile-id">A4</span>
+            <span class="tile-num">1</span>
+            <span class="tile-label">Serverless function</span>
+          </div>
         </div>
       </div>
-    </div>
+    </section>
 
-    <!-- App shell is visible immediately (no in-app auth gate in single-user
-         mode). The auth panel is shown only on 401. -->
-    <div id="app-view" class="app-shell">
-      <header class="topbar">
-        <div class="brand">
-          <span class="brand-mark" aria-hidden="true">◆</span>
-          <span class="brand-text">
-            <span class="brand-name">RAG-it</span>
-            <span class="brand-sub">Grounded answers from your own sources</span>
-          </span>
+    <!-- ====================== 02 · the pipeline ===================== -->
+    <section>
+      <div class="wrap">
+        <div class="section-label">
+          <span class="section-num">02</span>
+          <span class="section-name">The pipeline</span>
         </div>
-        <span id="user-name" class="user-name"></span>
-        <!-- Guest workspace state. Filled by app.js from /api/auth/status:
-             is_guest plus guest_usage. Hidden entirely for signed-in accounts,
-             which are never capped. -->
-        <div id="guest-badge" class="guest-badge hidden"></div>
-        <div class="topbar-actions">
-          <div class="switch" title="Vector + BM25 keyword fusion (real hybrid search, not web)">
-            <span class="switch-label">Keyword fusion</span>
-            <button id="hybrid-toggle" class="switch-btn" type="button"
-              title="Toggle BM25 keyword fusion on/off (improves exact-match retrieval; never adds web text)">Off</button>
-          </div>
-          <div class="switch" title="When ON, web results are appended as labeled [web] chunks ONLY if your documents don't answer the question (fallback, not grounding)">
-            <span class="switch-label">Web fallback</span>
-            <button id="web-toggle" class="switch-btn" type="button"
-              title="Toggle web augmentation fallback on/off">Off</button>
-          </div>
-          <button id="prune-btn" class="btn btn-small" type="button"
-            title="Delete orphaned Neon vector chunks (no matching document)">Prune ghosts</button>
-          <button id="settings-btn" class="btn btn-small" type="button" title="Tuning parameters">⚙ Settings</button>
-          <button id="theme-toggle" class="btn btn-small" type="button"
-            title="Switch between the dark and light theme" aria-pressed="false">☾</button>
+
+        <p class="pipeline-intro">
+          A question does not go straight to a language model. It passes through
+          five stages, and each one is inspectable in the app.
+        </p>
+
+        <div class="pipeline-scroll">
+          <svg class="pipeline-svg" viewBox="0 0 980 210" role="img"
+            aria-labelledby="pipe-title pipe-desc">
+            <title id="pipe-title">The retrieval pipeline</title>
+            <desc id="pipe-desc">A question is rewritten, then retrieved against
+              the indexed corpus by vector and keyword search, reranked, used to
+              generate a cited answer, and finally judged for faithfulness and
+              relevancy.</desc>
+
+            <defs>
+              <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5"
+                markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--border-strong)" />
+              </marker>
+            </defs>
+
+            <!-- Two things enter the pipeline from above, at different stages:
+                 the question at stage 01, and the pre-built index at stage 02.
+                 Drawing ingest as feeding REWRITE would be wrong — documents
+                 are chunked and embedded once, ahead of time, and retrieval
+                 reads that index. The dashed stroke marks it as the one edge
+                 that is not part of answering this question. -->
+            <g>
+              <rect x="1" y="10" width="150" height="46" rx="8"
+                fill="var(--panel-sunken)" stroke="var(--border)" />
+              <text x="76" y="30" text-anchor="middle" fill="var(--muted)"
+                font-family="var(--font-mono)" font-size="10"
+                letter-spacing="1.3">QUESTION</text>
+              <text x="76" y="46" text-anchor="middle" fill="var(--faint)"
+                font-family="var(--font-sans)" font-size="11">what you ask</text>
+              <path d="M 76 58 L 76 88" stroke="var(--border-strong)"
+                stroke-width="1" marker-end="url(#arrow)" fill="none" />
+
+              <rect x="201" y="10" width="150" height="46" rx="8"
+                fill="var(--panel-sunken)" stroke="var(--border)" />
+              <text x="276" y="30" text-anchor="middle" fill="var(--muted)"
+                font-family="var(--font-mono)" font-size="10"
+                letter-spacing="1.3">INDEX</text>
+              <text x="276" y="46" text-anchor="middle" fill="var(--faint)"
+                font-family="var(--font-sans)" font-size="11">chunked + embedded</text>
+            </g>
+
+            <!-- The five query-time stages. -->
+            <g>
+              <!-- 1 rewrite -->
+              <rect x="1" y="92" width="150" height="58" rx="8"
+                fill="var(--panel)" stroke="var(--border-strong)" />
+              <text x="76" y="115" text-anchor="middle" fill="var(--primary-ink)"
+                font-family="var(--font-mono)" font-size="10"
+                letter-spacing="1.3">01 REWRITE</text>
+              <text x="76" y="133" text-anchor="middle" fill="var(--muted)"
+                font-family="var(--font-sans)" font-size="11">sharpen the query</text>
+              <path d="M 155 121 L 197 121" stroke="var(--border-strong)"
+                stroke-width="1" marker-end="url(#arrow)" fill="none" />
+
+              <!-- 2 retrieve -->
+              <rect x="201" y="92" width="150" height="58" rx="8"
+                fill="var(--panel)" stroke="var(--border-strong)" />
+              <text x="276" y="115" text-anchor="middle" fill="var(--primary-ink)"
+                font-family="var(--font-mono)" font-size="10"
+                letter-spacing="1.3">02 RETRIEVE</text>
+              <text x="276" y="133" text-anchor="middle" fill="var(--muted)"
+                font-family="var(--font-sans)" font-size="11">vector + BM25</text>
+              <path d="M 355 121 L 397 121" stroke="var(--border-strong)"
+                stroke-width="1" marker-end="url(#arrow)" fill="none" />
+
+              <!-- 3 rerank -->
+              <rect x="401" y="92" width="150" height="58" rx="8"
+                fill="var(--panel)" stroke="var(--border-strong)" />
+              <text x="476" y="115" text-anchor="middle" fill="var(--primary-ink)"
+                font-family="var(--font-mono)" font-size="10"
+                letter-spacing="1.3">03 RERANK</text>
+              <text x="476" y="133" text-anchor="middle" fill="var(--muted)"
+                font-family="var(--font-sans)" font-size="11">LLM cross-encoder</text>
+              <path d="M 555 121 L 597 121" stroke="var(--border-strong)"
+                stroke-width="1" marker-end="url(#arrow)" fill="none" />
+
+              <!-- 4 generate -->
+              <rect x="601" y="92" width="150" height="58" rx="8"
+                fill="var(--panel)" stroke="var(--primary)" />
+              <text x="676" y="115" text-anchor="middle" fill="var(--primary-ink)"
+                font-family="var(--font-mono)" font-size="10"
+                letter-spacing="1.3">04 GENERATE</text>
+              <text x="676" y="133" text-anchor="middle" fill="var(--muted)"
+                font-family="var(--font-sans)" font-size="11">answer + citations</text>
+              <path d="M 755 121 L 797 121" stroke="var(--border-strong)"
+                stroke-width="1" marker-end="url(#arrow)" fill="none" />
+
+              <!-- 5 judge -->
+              <rect x="801" y="92" width="150" height="58" rx="8"
+                fill="var(--panel)" stroke="var(--border-strong)" />
+              <text x="876" y="115" text-anchor="middle" fill="var(--primary-ink)"
+                font-family="var(--font-mono)" font-size="10"
+                letter-spacing="1.3">05 JUDGE</text>
+              <text x="876" y="133" text-anchor="middle" fill="var(--muted)"
+                font-family="var(--font-sans)" font-size="11">grade the answer</text>
+            </g>
+
+            <!-- Retrieval reads the index. Dashed: built ahead of time, not
+                 part of answering this particular question. -->
+            <path d="M 276 58 L 276 88" stroke="var(--border-strong)"
+              stroke-width="1" stroke-dasharray="3 3"
+              marker-end="url(#arrow)" fill="none" />
+
+            <text x="476" y="182" text-anchor="middle" fill="var(--faint)"
+              font-family="var(--font-mono)" font-size="10" letter-spacing="1.1">
+              EVERY STAGE IS CONFIGURABLE AND INSPECTABLE
+            </text>
+          </svg>
         </div>
-        <!-- Optional Google sign-in. Filled in by app.js from /api/auth/me;
-             signing in is never required to use the app. -->
-        <div id="auth-slot" class="auth-slot"></div>
-      </header>
 
-      <div class="panes">
-        <!-- Left: sources -->
-        <aside class="pane sources-pane" id="sources-pane">
-          <div class="pane-head">
-            <h2 class="pane-title">Sources</h2>
-            <span id="source-count" class="count-pill">0</span>
-            <button id="sources-toggle" class="pane-toggle" type="button"
-              aria-expanded="true" title="Show or hide sources">⌃</button>
+        <div class="stage-notes">
+          <div>
+            <span class="stage-note-name">Rewrite</span>
+            <p class="stage-note-text">Questions are rarely phrased the way a
+              document is. The query is restated before it is searched.</p>
           </div>
-
-          <div class="pane-scroll">
-            <div
-              id="drop-zone"
-              class="drop-zone"
-              title="Drag files here or click to upload"
-            >
-              <span class="drop-icon" aria-hidden="true">↑</span>
-              <span class="drop-title">Upload files</span>
-              <span class="drop-hint">PDF, Markdown, text, CSV, JSON…</span>
-              <input id="file-input" type="file" multiple hidden
-                accept=".pdf,.md,.txt,.markdown,.rst,.html,.htm,.csv,.json,.yaml,.yml,.log" />
-            </div>
-            <div class="add-row">
-              <input id="url-input" type="text" placeholder="Add a web page URL" />
-              <button id="add-url-btn" class="btn btn-small" type="button">Add</button>
-            </div>
-            <div class="add-row">
-              <input id="folder-input" type="text" placeholder="Add folder path (e.g. ~/documents)" />
-              <button id="add-folder-btn" class="btn btn-small" type="button">Add</button>
-            </div>
-
-            <div id="sources-empty" class="empty-state hidden">
-              <span class="empty-icon" aria-hidden="true">◇</span>
-              <p class="empty-title">Upload a source to begin</p>
-              <p class="empty-text">Drop a file above, paste a URL, or point at a folder.
-                Everything you add is chunked, embedded and cited.</p>
-            </div>
-
-            <div id="folder-list" class="source-list"></div>
-            <div id="doc-list" class="source-list"></div>
+          <div>
+            <span class="stage-note-name">Retrieve</span>
+            <p class="stage-note-text">Meaning-based vector search fused with
+              exact keyword matching, so names and IDs are not lost to paraphrase.</p>
           </div>
-
-          <div class="pane-foot">
-            <button id="reindex-btn" class="btn btn-small" type="button"
-              title="Re-chunk all sources under the current config">↻ Re-index all</button>
+          <div>
+            <span class="stage-note-name">Rerank</span>
+            <p class="stage-note-text">A language model re-scores the candidates
+              against the question, which catches what similarity alone misses.</p>
           </div>
-        </aside>
-
-        <!-- Center: chat -->
-        <main class="pane chat-pane">
-          <div class="pane-head">
-            <h2 class="pane-title">Chat</h2>
-            <span class="chats-label">Conversations</span>
-            <button id="new-chat-btn" class="btn btn-small" type="button">+ New chat</button>
+          <div>
+            <span class="stage-note-name">Judge</span>
+            <p class="stage-note-text">A second model checks the answer against
+              its own sources. When it cannot decide, that is reported as
+              ungraded — never as a failure.</p>
           </div>
-          <div id="chat-list" class="chat-list"></div>
-          <div id="messages" class="messages">
-            <div class="empty-state" id="empty-hint">
-              <span class="empty-icon" aria-hidden="true">◈</span>
-              <p class="empty-title">Ask a question to see results</p>
-              <p class="empty-text">Add sources on the left, then ask anything about them.
-                Answers are grounded in your documents and cite their sources.</p>
-            </div>
-          </div>
-          <form id="ask-form" class="ask-form">
-            <textarea id="question-input" rows="1" placeholder="Ask about your documents…"
-              autocomplete="off"></textarea>
-            <button id="ask-btn" class="btn btn-primary" type="submit">Ask</button>
-          </form>
-        </main>
-
-        <!-- Right: evaluation -->
-        <aside class="pane eval-pane" id="eval-pane">
-          <div class="pane-head">
-            <h2 class="pane-title">Evaluation</h2>
-            <button id="eval-run-btn" class="btn btn-small btn-accent" type="button"
-              title="Run the RAGAS-style benchmark on the golden set">Run benchmark</button>
-            <button id="eval-toggle" class="pane-toggle" type="button"
-              aria-expanded="true" title="Show or hide the evaluation scorecard">⌃</button>
-          </div>
-          <div class="pane-scroll">
-            <div id="eval-status" class="eval-status muted small"></div>
-            <div id="eval-scorecard" class="eval-scorecard"></div>
-            <div id="eval-questions" class="eval-questions"></div>
-          </div>
-        </aside>
-
-        <!-- Excerpt: under the chat column only, not the full width.
-             It is the payoff for clicking a citation and belongs beside the
-             conversation, not as a footer under the file list. -->
-        <section class="pane excerpt-pane" id="excerpt-pane">
-          <div class="pane-head">
-            <h2 class="pane-title">Excerpt</h2>
-            <span id="excerpt-title" class="excerpt-title"></span>
-            <span id="excerpt-ref" class="excerpt-ref muted small"></span>
-            <button id="excerpt-close" class="pane-toggle hidden" type="button"
-              title="Close the excerpt">✕</button>
-          </div>
-          <div class="pane-scroll">
-            <div class="excerpt-empty empty-state empty-state-row">
-              <span class="empty-icon" aria-hidden="true">❝</span>
-              <p class="empty-text">Click a citation <span class="cite-demo">[1]</span>
-                to read the exact passage an answer was grounded in.</p>
-            </div>
-            <div id="excerpt-content" class="hidden">
-              <pre id="excerpt-text"></pre>
-            </div>
-          </div>
-        </section>
-      </div>
-
-    </div>
-
-    <div id="toast" class="toast hidden"></div>
-
-    <!-- Settings modal -->
-    <div id="settings-overlay" class="modal-overlay hidden">
-      <div class="modal">
-        <div class="modal-header">
-          <h2>Pipeline Settings</h2>
-          <button id="settings-close" class="btn btn-small">✕</button>
-        </div>
-        <div class="modal-body">
-          <p id="provider-warning" class="muted small warn hidden"></p>
-          <fieldset>
-            <legend>Chunking <span class="index-badge">needs re-index</span></legend>
-            <div class="field">
-              <label for="set-chunk-size">Chunk size (tokens)</label>
-              <input id="set-chunk-size" type="number" min="128" max="1024" step="8" />
-            </div>
-            <div class="field">
-              <label for="set-chunk-overlap">Chunk overlap (tokens)</label>
-              <input id="set-chunk-overlap" type="number" min="0" max="256" step="8" />
-            </div>
-            <div class="field">
-              <label for="set-splitter">Splitter</label>
-              <select id="set-splitter">
-                <option value="recursive">Recursive (structure-aware)</option>
-                <option value="markdown_header">Markdown header</option>
-                <option value="semantic">Semantic (v1: recursive)</option>
-              </select>
-            </div>
-          </fieldset>
-
-          <fieldset>
-            <legend>Retrieval</legend>
-            <div class="field">
-              <label for="set-top-k">Top‑K (chunks to LLM)</label>
-              <input id="set-top-k" type="number" min="1" max="20" />
-            </div>
-            <div class="field">
-              <label for="set-candidate-k">Candidate‑K (pool before rerank)</label>
-              <input id="set-candidate-k" type="number" min="1" max="100" />
-            </div>
-            <div class="field">
-              <label for="set-sim-threshold">Similarity threshold</label>
-              <input id="set-sim-threshold" type="number" min="0.0" max="1.0" step="0.05" />
-            </div>
-            <!-- The reranker on/off toggle lives in the dedicated "Reranker"
-                 fieldset below, next to its provider. It used to be duplicated
-                 here with the SAME id="set-reranker", which is invalid HTML:
-                 getElementById returns only the first match, so the lower
-                 control was dead and changing it did nothing. -->
-            <div class="field">
-              <label for="set-hybrid-search">Keyword fusion (BM25)</label>
-              <select id="set-hybrid-search">
-                <option value="false">Off</option>
-                <option value="true">On</option>
-              </select>
-            </div>
-          </fieldset>
-
-          <fieldset>
-            <legend>Query</legend>
-            <div class="field">
-              <label for="set-query-rewrite">Query rewrite (follow-ups)</label>
-              <select id="set-query-rewrite">
-                <option value="true">On</option>
-                <option value="false">Off</option>
-              </select>
-            </div>
-          </fieldset>
-
-          <fieldset>
-            <legend>Generation</legend>
-            <div class="field">
-              <label for="set-llm-model">LLM model</label>
-              <select id="set-llm-model"></select>
-            </div>
-            <div class="field">
-              <label for="set-temperature">Temperature</label>
-              <input id="set-temperature" type="number" min="0.0" max="1.0" step="0.05" />
-            </div>
-          </fieldset>
-
-          <fieldset>
-            <legend>Embedding <span class="index-badge">needs re-index</span></legend>
-            <div class="field">
-              <label for="set-embedding-provider">Provider</label>
-              <select id="set-embedding-provider">
-                <option value="gemini">Gemini (free tier — limited)</option>
-                <option value="openrouter">OpenRouter (higher limits)</option>
-              </select>
-            </div>
-            <div class="field">
-              <label for="set-embedding-model">Embedding model</label>
-              <select id="set-embedding-model"></select>
-            </div>
-          </fieldset>
-
-          <fieldset>
-            <legend>Reranker</legend>
-            <div class="field">
-              <label for="set-reranker">LLM cross-encoder (rerank on)</label>
-              <select id="set-reranker">
-                <option value="false">Off</option>
-                <option value="true">On</option>
-              </select>
-            </div>
-            <div class="field">
-              <label for="set-reranker-provider">Reranker provider</label>
-              <select id="set-reranker-provider">
-                <option value="gemini">Gemini (LLM scores each chunk)</option>
-                <option value="openrouter">OpenRouter (Cohere rerank-v3.5)</option>
-              </select>
-            </div>
-          </fieldset>
-        </div>
-        <div class="modal-footer">
-          <p id="settings-note" class="muted small hidden"></p>
-          <button id="settings-save" class="btn btn-primary">Save</button>
         </div>
       </div>
-    </div>
+    </section>
 
-    <script type="module" src="/app.js?v=14"></script>
+    <!-- ================= 03 · what makes it non-trivial ============= -->
+    <section>
+      <div class="wrap">
+        <div class="section-label">
+          <span class="section-num">03</span>
+          <span class="section-name">What makes it non-trivial</span>
+        </div>
+        <div class="cards">
+          <div class="card">
+            <h3 class="card-title">Hybrid retrieval, fused</h3>
+            <p class="card-text">Vector search finds meaning; BM25 finds exact
+              strings. Their rankings are combined by reciprocal rank fusion, so
+              an invoice number and a paraphrased policy are both findable.</p>
+          </div>
+          <div class="card">
+            <h3 class="card-title">Reranking that reads</h3>
+            <p class="card-text">Retrieval casts a wide net, then a language
+              model re-scores each candidate against the actual question.
+              Embedding distance is a proxy for relevance; this is a judgement.</p>
+          </div>
+          <div class="card">
+            <h3 class="card-title">Evaluation that fails open</h3>
+            <p class="card-text">Answers are scored for faithfulness and
+              relevancy. A judge that times out is a broken grader, not a bad
+              answer, so it reports <code>ungraded</code> — rendering that as a
+              failure would be a confident false claim about your documents.</p>
+          </div>
+          <div class="card">
+            <h3 class="card-title">A benchmark you can run</h3>
+            <p class="card-text">46 golden questions over a 10-document corpus,
+              including unanswerable ones — because refusing to answer is a
+              behaviour worth measuring too.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== 04 · architecture ====================== -->
+    <section>
+      <div class="wrap">
+        <div class="section-label">
+          <span class="section-num">04</span>
+          <span class="section-name">Architecture</span>
+        </div>
+        <div class="arch">
+          <div class="arch-row">
+            <span class="arch-key">Runtime</span>
+            <span class="arch-val">FastAPI, deployed as a <strong>single</strong>
+              serverless function. The repo directory is read-only at runtime and
+              the process freezes the instant a response is sent, so all writable
+              state goes to the database.</span>
+          </div>
+          <div class="arch-row">
+            <span class="arch-key">Storage</span>
+            <span class="arch-val">Neon Postgres with <code>pgvector</code> as
+              both the application database and the vector store. Chroma is
+              swapped in for local development behind one dispatch module.</span>
+          </div>
+          <div class="arch-row">
+            <span class="arch-key">Long jobs</span>
+            <span class="arch-val">A background thread would be frozen the moment
+              the response is sent, so the benchmark is <em>sliced</em>: the client
+              drives a loop of bounded steps, each committing before it
+              returns. Progress survives the function being killed.</span>
+          </div>
+          <div class="arch-row">
+            <span class="arch-key">Embeddings</span>
+            <span class="arch-val">One fixed <code>vector(768)</code> column shared
+              by every model, so models can be swapped without a migration. The
+              config's fingerprint changes with them and invalidates stale
+              chunks.</span>
+          </div>
+          <div class="arch-row">
+            <span class="arch-key">Configuration</span>
+            <span class="arch-val">Chunking, retrieval and model choices are
+              re-read from the database on every request — tuning takes effect on
+              the next question, with no redeploy.</span>
+          </div>
+          <div class="arch-row">
+            <span class="arch-key">Frontend</span>
+            <span class="arch-val">Vanilla JavaScript. No framework, no runtime
+              dependencies, two entry points and one stylesheet.</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <footer class="foot">
+      <div class="wrap" style="display:flex;flex-wrap:wrap;gap:16px;align-items:center;justify-content:space-between;">
+        <span class="tel">RAG-it</span>
+        <span class="foot-links">
+          <a href="/app">Open the app</a>
+          <a href="/api/health">Health</a>
+          <a href="/docs">API</a>
+        </span>
+      </div>
+    </footer>
+
+    <script>
+      // The ONLY script on this page. No app JS, no API calls — the landing
+      // page is CDN-served and costs zero serverless invocations for visitors
+      // who never enter. Kept inline for the same reason.
+      (function () {
+        var KEY = "ragchat-theme";
+        var btn = document.getElementById("theme-toggle");
+        function apply(theme) {
+          document.documentElement.setAttribute("data-theme", theme);
+          var dark = theme === "dark";
+          btn.textContent = dark ? "☾" : "☀";
+          btn.setAttribute("aria-pressed", String(!dark));
+          btn.title = dark ? "Switch to the light theme" : "Switch to the dark theme";
+          try { localStorage.setItem(KEY, theme); } catch (e) {}
+        }
+        apply(document.documentElement.getAttribute("data-theme") || "dark");
+        btn.onclick = function () {
+          apply(document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark");
+        };
+      })();
+    </script>
   </body>
 </html>

@@ -158,6 +158,20 @@
   --kind-video-bg:  #fdf2fa;  --kind-video-fg:  #c11574;  --kind-video-bd:  #fcceee;
   --kind-folder-bg: #f0f9ff;  --kind-folder-fg: #026aa2;  --kind-folder-bd: #b9e6fe;
 
+  /* ---------- landing-page atmosphere ----------
+     Used only by landing.css. Defined here because the palette lives in one
+     file — a value that differs between themes belongs in tokens, and the
+     starfield is the most theme-dependent thing on the page.
+
+     In LIGHT the stars are switched off entirely: white specks on a white
+     page are invisible, and darkening them into grey dots reads as dust
+     rather than as sky. Light gets the glow and grid alone. */
+  --star-bright: transparent;
+  --star-dim: transparent;
+  --star-faint: transparent;
+  --star-glow: rgba(168, 224, 31, 0.10);
+  --grid-line: rgba(16, 24, 40, 0.045);
+
   /* ---------- radii ---------- */
   --r-sm: 6px;
   --r-md: 10px;
@@ -265,6 +279,16 @@
   --kind-audio-bg:  #1c1630;  --kind-audio-fg:  #a58ae0;  --kind-audio-bd:  #382c5c;
   --kind-video-bg:  #2a1122;  --kind-video-fg:  #e07bb8;  --kind-video-bd:  #522242;
   --kind-folder-bg: #0b1f2b;  --kind-folder-fg: #5fb4d4;  --kind-folder-bd: #163d52;
+
+  /* ---------- landing-page atmosphere ----------
+     Three star brightnesses so the field reads as depth rather than as noise.
+     The glow is lime, not white: it is the horizon the app's accent rises
+     from, and a white glow would introduce a second light source. */
+  --star-bright: rgba(231, 238, 245, 0.95);
+  --star-dim: rgba(231, 238, 245, 0.55);
+  --star-faint: rgba(231, 238, 245, 0.3);
+  --star-glow: rgba(194, 245, 63, 0.11);
+  --grid-line: rgba(231, 238, 245, 0.035);
 
   /* ---------- elevation ----------
      Flat by design. Only the modal keeps a shadow, because it genuinely

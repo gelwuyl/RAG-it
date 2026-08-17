@@ -1,0 +1,370 @@
+/* ==========================================================================
+   Landing page (`/`) — a near-literal Grok-UI homage.
+
+   Separate from styles.css on purpose. This page has NO long-form answer to
+   protect, so it carries the reference's visual vocabulary at full strength:
+   display-scale numerals, hero type, starfield, grid tiles, numbered section
+   labels. PRODUCT_UX_PLAN.md §1 bans those from the workspace precisely so
+   they can be concentrated here, where they cost the reader nothing.
+
+   It shares tokens.css with the app, so both read as one product despite the
+   deliberately inverted proportions. It ships NO app JS and makes NO API
+   calls — it is CDN-served and costs zero serverless invocations for visitors
+   who never enter.
+   ========================================================================== */
+
+@import "./tokens.css";
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: var(--font-sans);
+  background: var(--bg);
+  color: var(--text);
+  font-size: var(--text-body);
+  line-height: 1.6;
+  -webkit-text-size-adjust: 100%;
+  overflow-x: hidden;
+}
+
+/* Everything on this page sits on one measure. */
+.wrap {
+  width: min(1080px, 100% - 2.5rem);
+  margin-inline: auto;
+}
+
+a { color: inherit; }
+
+/* ---------- the telemetry register, same contract as the app ---------- */
+
+.tel {
+  font-family: var(--font-mono);
+  font-size: var(--text-micro);
+  letter-spacing: var(--tracking-telemetry);
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* Numbered section labels (01 / 02 / 03) with the reference's accent
+   underline bar. The bar is what makes the number read as a marker rather
+   than as body text that happens to be a digit. */
+.section-label {
+  display: flex; align-items: center; gap: 12px;
+  margin-bottom: 28px;
+}
+.section-label::after {
+  content: ""; flex: 1; height: 1px; background: var(--border);
+}
+.section-num {
+  font-family: var(--font-mono);
+  font-size: var(--text-micro);
+  letter-spacing: var(--tracking-telemetry);
+  color: var(--primary-ink);
+  padding-bottom: 3px;
+  border-bottom: 2px solid var(--primary);
+}
+.section-name {
+  font-family: var(--font-mono);
+  font-size: var(--text-micro);
+  letter-spacing: var(--tracking-telemetry);
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+section { padding: 88px 0; }
+
+/* ---------- hero ---------- */
+
+.hero {
+  position: relative;
+  padding: 108px 0 96px;
+  overflow: hidden;
+  border-bottom: 1px solid var(--border);
+}
+
+/* Starfield, drawn entirely in CSS — no image, no licence question, no
+   network request, and it scales to any viewport without going soft.
+   Three layers at different sizes so it reads as depth rather than as noise. */
+.starfield {
+  position: absolute; inset: 0; z-index: 0;
+  pointer-events: none;
+  background-image:
+    radial-gradient(1.4px 1.4px at 12% 22%, var(--star-bright), transparent),
+    radial-gradient(1.2px 1.2px at 78% 14%, var(--star-bright), transparent),
+    radial-gradient(1.6px 1.6px at 45% 68%, var(--star-bright), transparent),
+    radial-gradient(1px 1px at 62% 42%, var(--star-dim), transparent),
+    radial-gradient(1px 1px at 27% 55%, var(--star-dim), transparent),
+    radial-gradient(1px 1px at 88% 61%, var(--star-dim), transparent),
+    radial-gradient(1px 1px at 8% 78%, var(--star-dim), transparent),
+    radial-gradient(1px 1px at 94% 33%, var(--star-dim), transparent),
+    radial-gradient(0.8px 0.8px at 36% 12%, var(--star-faint), transparent),
+    radial-gradient(0.8px 0.8px at 55% 86%, var(--star-faint), transparent),
+    radial-gradient(0.8px 0.8px at 71% 74%, var(--star-faint), transparent),
+    radial-gradient(0.8px 0.8px at 18% 38%, var(--star-faint), transparent),
+    /* the horizon glow the stars sit above */
+    radial-gradient(ellipse 80% 55% at 50% 118%, var(--star-glow), transparent);
+}
+/* The grid motif, kept to the hero. Masked to fade out before it reaches the
+   text, so it stays a texture and never competes with the words. */
+.hero-grid {
+  position: absolute; inset: 0; z-index: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: 64px 64px;
+  -webkit-mask-image: radial-gradient(ellipse 65% 70% at 50% 50%, transparent 35%, #000 100%);
+          mask-image: radial-gradient(ellipse 65% 70% at 50% 50%, transparent 35%, #000 100%);
+}
+
+.hero > .wrap { position: relative; z-index: 1; }
+
+.hero-mark {
+  display: inline-flex; align-items: center; gap: 10px;
+  margin-bottom: 30px;
+}
+.hero-mark-glyph {
+  width: 30px; height: 30px;
+  display: grid; place-items: center;
+  border-radius: 9px;
+  background: var(--primary);
+  color: var(--on-primary);
+  font-size: 14px;
+}
+.hero-mark-name { font-weight: 700; font-size: 15px; letter-spacing: -0.01em; }
+
+/* The hero face is JetBrains Mono at display size — no second webfont.
+   Big letterspaced mono leans into the instrument identity rather than
+   borrowing a generic geometric sans, and it ties the landing page to the
+   app's telemetry register instead of introducing a third voice. */
+.hero-title {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: clamp(2.2rem, 7vw, 4.6rem);
+  line-height: 1.04;
+  letter-spacing: -0.03em;
+  margin-bottom: 26px;
+  max-width: 16ch;
+}
+.hero-title em {
+  font-style: normal;
+  color: var(--primary-ink);
+}
+.hero-lede {
+  font-size: clamp(1rem, 2vw, 1.2rem);
+  line-height: 1.6;
+  color: var(--muted);
+  max-width: 56ch;
+  margin-bottom: 38px;
+}
+
+.hero-cta { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  font: inherit; font-size: var(--text-body);
+  padding: 12px 22px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border-strong);
+  background: var(--panel);
+  color: var(--text);
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.14s ease, border-color 0.14s ease;
+}
+.btn:hover { background: var(--btn-hover); }
+.btn-primary {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--on-primary);
+  font-weight: 600;
+}
+.btn-primary:hover { background: var(--primary-hover); }
+.hero-note {
+  margin-top: 18px;
+  font-family: var(--font-mono);
+  font-size: var(--text-micro);
+  letter-spacing: 0.05em;
+  color: var(--faint);
+}
+
+/* ---------- A1–A4 metric tiles ----------
+   Display-scale numerals live here and in the expanded benchmark view, and
+   nowhere else (plan §1). No answer is present to protect, so telemetry IS
+   the content.
+
+   Every figure is a STRUCTURAL fact — true by construction and verifiable
+   from the repo — not a score. Benchmark rates would need a published run
+   behind them and would go stale silently; these cannot. */
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  background: var(--panel);
+}
+.tile {
+  position: relative;
+  padding: 26px 22px 22px;
+  border-right: 1px solid var(--border);
+}
+.tile:last-child { border-right: 0; }
+.tile-id {
+  font-family: var(--font-mono);
+  font-size: var(--text-nano);
+  letter-spacing: var(--tracking-telemetry);
+  color: var(--faint);
+  display: block;
+  margin-bottom: 14px;
+}
+.tile-num {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: clamp(2.4rem, 5vw, 3.4rem);
+  line-height: 1;
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+  display: block;
+  margin-bottom: 12px;
+}
+/* The accent underline bar — the reference's most reusable marker. */
+.tile-num::after {
+  content: ""; display: block;
+  width: 34px; height: 2px;
+  background: var(--primary);
+  margin-top: 14px;
+}
+.tile-label {
+  font-family: var(--font-mono);
+  font-size: var(--text-micro);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  display: block;
+}
+
+/* ---------- pipeline diagram ---------- */
+
+.pipeline-intro {
+  max-width: 62ch; color: var(--muted); margin-bottom: 36px;
+  font-size: var(--text-content); line-height: var(--lh-content);
+}
+.pipeline-svg { width: 100%; height: auto; display: block; }
+/* The diagram is wide by nature; it scrolls in its own box rather than
+   forcing the page to scroll sideways. */
+.pipeline-scroll { overflow-x: auto; padding-bottom: 8px; }
+.pipeline-scroll > svg { min-width: 660px; }
+
+.stage-notes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 22px;
+  margin-top: 34px;
+}
+.stage-note-name {
+  font-family: var(--font-mono);
+  font-size: var(--text-micro);
+  letter-spacing: var(--tracking-telemetry);
+  text-transform: uppercase;
+  color: var(--primary-ink);
+  display: block;
+  padding-bottom: 8px;
+  margin-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.stage-note-text { color: var(--muted); font-size: var(--text-sm); }
+
+/* ---------- feature cards ---------- */
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 18px;
+}
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 26px 24px;
+  /* The reference's notched corner. One clipped corner reads as machined;
+     four reads as a decorative shape, which is a different and worse thing. */
+  clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 16px, 100% 100%, 0 100%);
+}
+.card-title {
+  font-size: 1.06rem; font-weight: 650; margin-bottom: 10px;
+  letter-spacing: -0.01em;
+}
+.card-text { color: var(--muted); font-size: var(--text-sm); }
+.card-text code {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  background: var(--panel-sunken);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
+/* ---------- architecture list ---------- */
+
+.arch { display: grid; gap: 0; border-top: 1px solid var(--border); }
+.arch-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 220px) 1fr;
+  gap: 20px;
+  padding: 20px 0;
+  border-bottom: 1px solid var(--border);
+}
+.arch-key {
+  font-family: var(--font-mono);
+  font-size: var(--text-micro);
+  letter-spacing: var(--tracking-telemetry);
+  text-transform: uppercase;
+  color: var(--muted);
+  padding-top: 3px;
+}
+.arch-val { color: var(--text); font-size: var(--text-sm); }
+.arch-val code {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  color: var(--primary-ink);
+}
+
+/* ---------- footer ---------- */
+
+.foot {
+  border-top: 1px solid var(--border);
+  padding: 40px 0 60px;
+  display: flex; flex-wrap: wrap; gap: 16px;
+  align-items: center; justify-content: space-between;
+}
+.foot-links { display: flex; gap: 20px; flex-wrap: wrap; }
+.foot a { color: var(--muted); text-decoration: none; }
+.foot a:hover { color: var(--primary-ink); }
+
+/* ---------- theme toggle ---------- */
+
+.theme-toggle {
+  position: fixed; top: 18px; right: 18px; z-index: 10;
+  width: 38px; height: 38px;
+  display: grid; place-items: center;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border-strong);
+  background: var(--panel);
+  color: var(--text);
+  font-size: 15px;
+  cursor: pointer;
+}
+.theme-toggle:hover { background: var(--btn-hover); }
+
+@media (max-width: 640px) {
+  section { padding: 60px 0; }
+  .hero { padding: 76px 0 64px; }
+  .arch-row { grid-template-columns: 1fr; gap: 6px; }
+  .tile { border-right: 0; border-bottom: 1px solid var(--border); }
+  .tile:last-child { border-bottom: 0; }
+  .theme-toggle { top: 12px; right: 12px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}

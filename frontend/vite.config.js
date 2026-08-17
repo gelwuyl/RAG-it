@@ -1,4 +1,18 @@
 export default {
+  // Two entry points, not one: `/` is the landing page and `/app` is the
+  // workspace. Without this Vite only builds index.html and app.html never
+  // reaches dist/, so the deploy 404s on /app with no build error to explain it.
+  //
+  // In DEV there is no /app rewrite (that lives in vercel.json), so the app is
+  // at http://localhost:5173/app.html during development.
+  build: {
+    rollupOptions: {
+      input: {
+        main: "index.html",
+        app: "app.html",
+      },
+    },
+  },
   server: {
     port: 5173,
     allowedHosts: [".mrchloep.com"],
