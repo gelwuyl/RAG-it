@@ -27,7 +27,19 @@ from .config import PipelineConfig, settings
 from .embeddings import openai_client, ProxyEmbeddings, retry_call, reranker_provider, rerank
 from .vectordb import add_chunks, query_chunks
 
-EMBED_BATCH = 16
+# Chunks per embedding request. 64 rather than 16 because both providers accept
+# batched input, so this is 4x fewer HTTP round trips for the same work — which
+# matters inside the 60s maxDuration, where ingest runs.
+#
+# Do NOT raise above 100: Gemini's batchEmbedContents rejects a larger batch
+# outright ("at most 100 requests can be in one batch", HTTP 400).
+#
+# Note this buys LATENCY, not quota. Gemini's free tier counts each TEXT
+# against its 100/minute limit, not each HTTP call — verified by embedding 90
+# then 20 in two requests and getting a 429 on the second. So batching cannot
+# rescue a free-tier key from the ~100 chunks/minute ceiling; only a paid
+# provider can.
+EMBED_BATCH = 64
 NOT_FOUND_ANSWER = "I couldn't find this in your documents."
 
 # Safety-net floor used when similarity_threshold is left at its default 0.0.

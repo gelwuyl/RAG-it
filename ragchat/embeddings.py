@@ -262,8 +262,21 @@ class ProxyEmbeddings(Embeddings):
                 dimensions=dims,
             )
             return [d.embedding for d in resp.data]
-        except Exception:
-            # Some provider models reject list inputs; fall back to one-by-one.
+        except Exception as exc:
+            # The one-by-one fallback exists for providers that reject LIST
+            # input — a permanent input-shape error, so retrying differently is
+            # the right move. On a TRANSIENT error it is actively harmful: a
+            # rate-limited batch of 200 chunks became 200 further requests
+            # against an already-exhausted quota, turning a pause into a
+            # stampede. Observed on Gemini's free tier, whose embedding quota is
+            # 100 requests/minute — indexing one ordinary document could exhaust
+            # it and then keep hammering.
+            #
+            # retry_call has already backed off and re-raised by this point, so
+            # a retryable error here means the quota is genuinely gone. Let it
+            # propagate; the caller surfaces it as a readable failure.
+            if _is_retryable(exc):
+                raise
             return [self._embed_one(t, client) for t in texts]
 
     def embed_query(self, text: str) -> list[float]:
