@@ -36,6 +36,10 @@ cd frontend && npm run dev
 # Fails the run on horizontal overflow or any page error.
 node shot.mjs http://localhost:5173
 
+# Workspace layout BEHAVIOUR (drag-resize, collapse, persistence) — the part a
+# screenshot cannot see. Exits non-zero on the first failed assertion.
+node layout_check.mjs http://localhost:5173
+
 # Tests
 .venv\Scripts\python -m pytest tests/ -v
 

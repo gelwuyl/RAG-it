@@ -183,9 +183,17 @@
   --shadow-md: 0 2px 8px rgba(16, 24, 40, 0.06);
   --shadow-lg: 0 12px 40px rgba(16, 24, 40, 0.14);
 
-  /* ---------- layout metrics ---------- */
+  /* ---------- layout metrics ----------
+     These three size the workspace grid tracks AND position the drag handles
+     (styles.css: .panes, .resizer). app.js overwrites them on :root from
+     localStorage, so they are defaults rather than constants — keep them here
+     so a browser with nothing stored still gets a sane layout, and so the
+     media queries have something to override. --chats-w is 0 when the
+     conversation column is collapsed; the rail width comes from --rail-w. */
   --sources-w: 288px;
+  --chats-w: 216px;
   --eval-w: 344px;
+  --rail-w: 40px;
   --head-h: 46px;
 }
 

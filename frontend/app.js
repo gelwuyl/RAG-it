@@ -13,6 +13,10 @@ const state = {
   models: { chat: [], embedding: [] }, // proxy model catalog for the settings dropdowns
   evalRunning: false, // true while the chunked benchmark loop is driving
   simThreshold: 0,    // live retrieval threshold, marked on the per-answer meter
+  // Documents + folders currently in the workspace. Only the COUNT is kept:
+  // it is what the empty conversation needs to say something true, and holding
+  // the full lists here would be a second copy of the DOM's own state.
+  sourceCount: 0,
   // Documents whose sliced-index loop is already being driven by this tab.
   // Guards against two loops racing the same document — they would both POST
   // /index-step, and the second would embed a slice the first had just done.
@@ -592,8 +596,15 @@ async function refreshSources() {
         .finally(() => { state.indexing.delete(d.id); refreshSources(); });
     }
   }
-  $("source-count").textContent = String(docs.length + folders.length);
-  $("sources-empty").classList.toggle("hidden", docs.length + folders.length > 0);
+  state.sourceCount = docs.length + folders.length;
+  $("source-count").textContent = String(state.sourceCount);
+  $("sources-empty").classList.toggle("hidden", state.sourceCount > 0);
+  // Sources and chats load in parallel, so the empty conversation may have
+  // been painted before the count was known. Repaint it — but only while it IS
+  // the empty state, never over a real conversation.
+  if ($("messages").querySelector(".empty-state")) {
+    $("messages").innerHTML = chatEmptyState();
+  }
   // Every add and delete moves a guest's allowance. Not awaited: the badge is
   // secondary to the list it annotates, and blocking the render on a second
   // round-trip would make uploads feel slower than they are.
@@ -1035,8 +1046,36 @@ $("reindex-btn").onclick = reindexAll;
 // the source of truth after each refresh.
 const chatStatusOverride = new Map(); // chatId -> "pending" | "done"
 
+// The empty conversation used to hard-code "Add sources on the left" — advice
+// that is wrong for the visitor who most needs it, since a guest arrives with
+// the demo corpus already loaded and nothing to add. Ask about what is there.
+function chatEmptyState() {
+  const n = state.sourceCount;
+  return n
+    ? emptyState(
+        "◈",
+        "Ask a question to see results",
+        `You have ${n} source${n === 1 ? "" : "s"} ready. Ask anything about ${
+          n === 1 ? "it" : "them"
+        } — every answer cites the exact passage it came from.`
+      )
+    : emptyState(
+        "◈",
+        "Add a source to begin",
+        "Drop a file into Sources on the left, or paste a URL. Answers are grounded in your documents and cite them."
+      );
+}
+
 function renderChats() {
   const list = $("chat-list");
+  const count = $("chat-count");
+  if (count) count.textContent = String(state.chats.length);
+  const titleEl = $("chat-title");
+  if (titleEl) {
+    const open = state.chats.find((c) => c.id === state.currentChatId);
+    titleEl.textContent = open ? open.title : "";
+    titleEl.title = open ? open.title : "";
+  }
   list.innerHTML = "";
   for (const c of state.chats) {
     const item = document.createElement("div");
@@ -1068,11 +1107,7 @@ function renderChats() {
         if (!state.chats.length) {
           state.currentChatId = null;
           renderChats();
-          $("messages").innerHTML = emptyState(
-            "◈",
-            "Ask a question to see results",
-            "Add sources on the left, then ask anything about them. Answers are grounded in your documents and cite their sources."
-          );
+          $("messages").innerHTML = chatEmptyState();
         }
         toast("Conversation deleted");
       } catch (err) { toast(err.message, true); }
@@ -1090,11 +1125,7 @@ async function refreshChats(selectId = null) {
   } else {
     state.currentChatId = null;
     renderChats();
-    $("messages").innerHTML = emptyState(
-      "◈",
-      "Ask a question to see results",
-      "Add sources on the left, then ask anything about them. Answers are grounded in your documents and cite their sources."
-    );
+    $("messages").innerHTML = chatEmptyState();
   }
 }
 
@@ -1474,6 +1505,22 @@ async function loadEval() {
 function renderEval(data) {
   const statusEl = $("eval-status");
   const runBtn = $("eval-run-btn");
+  // `locked` is not "no run yet" — it is a feature that is not this visitor's
+  // to run. Saying "No benchmark run yet" to a guest invites them to press a
+  // button that will answer 403, so say what actually unblocks it. The
+  // per-answer grades below still work for guests and are left alone.
+  if (data && data.locked) {
+    statusEl.textContent = "";
+    $("eval-scorecard").innerHTML = emptyState(
+      "◎",
+      "Benchmark needs an account",
+      "Sign in with Google to score retrieval and generation against the 46-question golden set. Every answer you ask below is still graded for faithfulness and relevance."
+    );
+    $("eval-questions").innerHTML = "";
+    runBtn.disabled = true;
+    runBtn.classList.add("guest-locked");
+    return;
+  }
   if (!data || data.status === "none") {
     statusEl.textContent = "";
     $("eval-scorecard").innerHTML = emptyState(
@@ -1640,6 +1687,137 @@ function applyBreakpointDefaults() {
 applyBreakpointDefaults();
 NARROW.addEventListener("change", applyBreakpointDefaults);
 MOBILE.addEventListener("change", applyBreakpointDefaults);
+
+// ---------- resizable columns ----------
+//
+// The grid tracks are sized by three custom properties (tokens.css). Dragging
+// a handle writes one of them onto <html> as an inline style, which is why
+// nothing here measures or positions a pane: the track and the handle both
+// read the same property, and the browser lays out the rest. Inline styles on
+// :root also outrank every media-query default, so a width you chose by hand
+// survives crossing a breakpoint — a resize that silently reverted your layout
+// would be worse than not offering one.
+const LAYOUT_KEY = "ragchat-layout";
+const RESIZE_VARS = ["--sources-w", "--chats-w", "--eval-w"];
+
+function readLayout() {
+  try { return JSON.parse(localStorage.getItem(LAYOUT_KEY)) || {}; }
+  catch { return {}; }        // private mode / corrupt value — use defaults
+}
+
+function saveLayout(patch) {
+  try {
+    localStorage.setItem(LAYOUT_KEY, JSON.stringify({ ...readLayout(), ...patch }));
+  } catch { /* storage disabled: widths just don't persist */ }
+}
+
+function setVar(name, px) {
+  document.documentElement.style.setProperty(name, `${Math.round(px)}px`);
+}
+
+function currentVar(name) {
+  return parseFloat(getComputedStyle(document.documentElement).getPropertyValue(name)) || 0;
+}
+
+function bindResizer(el) {
+  const varName = el.dataset.var;
+  const min = parseFloat(el.dataset.min);
+  const max = parseFloat(el.dataset.max);
+  // The Evaluation column is anchored to the right edge, so dragging right
+  // must SHRINK it. Without this the handle would run away from the cursor.
+  const dir = el.dataset.invert ? -1 : 1;
+  const panes = document.querySelector(".panes");
+
+  const clamp = (px) => Math.min(max, Math.max(min, px));
+
+  el.addEventListener("pointerdown", (e) => {
+    // Ignore secondary buttons: a right-click drag should open the context
+    // menu, not resize.
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = currentVar(varName);
+    el.setPointerCapture(e.pointerId);
+    el.classList.add("is-dragging");
+    panes.classList.add("is-resizing");
+
+    const onMove = (ev) => setVar(varName, clamp(startW + (ev.clientX - startX) * dir));
+    const onUp = () => {
+      el.removeEventListener("pointermove", onMove);
+      el.removeEventListener("pointerup", onUp);
+      el.removeEventListener("pointercancel", onUp);
+      el.classList.remove("is-dragging");
+      panes.classList.remove("is-resizing");
+      // Persist once, on release — not on every move, which would hammer
+      // localStorage with a synchronous write per animation frame.
+      saveLayout({ [varName]: currentVar(varName) });
+    };
+    el.addEventListener("pointermove", onMove);
+    el.addEventListener("pointerup", onUp);
+    el.addEventListener("pointercancel", onUp);
+  });
+
+  // Keyboard: a separator that can only be dragged is unusable without a
+  // mouse, and these are focusable (role="separator", tabindex=0) so they
+  // already appear in the tab order.
+  el.addEventListener("keydown", (e) => {
+    const step = e.shiftKey ? 32 : 8;
+    let next = null;
+    if (e.key === "ArrowLeft") next = currentVar(varName) - step * dir;
+    else if (e.key === "ArrowRight") next = currentVar(varName) + step * dir;
+    else if (e.key === "Home") {                    // reset this column
+      document.documentElement.style.removeProperty(varName);
+      const l = readLayout(); delete l[varName];
+      try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(l)); } catch {}
+      e.preventDefault();
+      return;
+    } else return;
+    e.preventDefault();
+    setVar(varName, clamp(next));
+    saveLayout({ [varName]: currentVar(varName) });
+  });
+
+  // Double-click resets, the convention every split-pane UI uses.
+  el.addEventListener("dblclick", () => {
+    document.documentElement.style.removeProperty(varName);
+    const l = readLayout(); delete l[varName];
+    try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(l)); } catch {}
+  });
+}
+
+document.querySelectorAll(".resizer").forEach(bindResizer);
+
+// Restore saved widths before first paint of the panes.
+(function restoreLayout() {
+  const l = readLayout();
+  for (const v of RESIZE_VARS) {
+    if (typeof l[v] === "number") setVar(v, l[v]);
+  }
+})();
+
+// ---------- conversations column collapse ----------
+//
+// Auto-collapses below 1300px so four columns do not squeeze the conversation,
+// but ONLY until you express a preference: an explicit collapse or expand is
+// remembered and the breakpoint stops overriding it. Otherwise every window
+// resize would undo a deliberate choice.
+const CHATS_AUTO = window.matchMedia("(max-width: 1299px)");
+
+function setChatsCollapsed(collapsed, remember) {
+  document.querySelector(".panes").classList.toggle("chats-collapsed", collapsed);
+  $("chats-collapse").setAttribute("aria-expanded", String(!collapsed));
+  if (remember) saveLayout({ chatsCollapsed: collapsed });
+}
+
+function applyChatsDefault() {
+  const saved = readLayout().chatsCollapsed;
+  setChatsCollapsed(typeof saved === "boolean" ? saved : CHATS_AUTO.matches, false);
+}
+
+$("chats-collapse").onclick = () => setChatsCollapsed(true, true);
+$("chats-expand").onclick = () => setChatsCollapsed(false, true);
+applyChatsDefault();
+CHATS_AUTO.addEventListener("change", applyChatsDefault);
 
 // ---------- boot ----------
 

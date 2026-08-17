@@ -26,7 +26,7 @@
         }
       })();
     </script>
-    <link rel="stylesheet" href="/styles.css?v=14" />
+    <link rel="stylesheet" href="/styles.css?v=15" />
     <script>
       // Boot diagnostics: collect load/runtime errors so a broken app.js
       // shows a visible message instead of a silently dead UI.
@@ -152,20 +152,49 @@
           </div>
         </aside>
 
+        <!-- Conversations: its own column, between Sources and Chat.
+             It was a strip inside the chat pane's header, which put the list of
+             past conversations above the conversation itself and stole height
+             from the messages. As a column it is a peer of Sources — both are
+             "things you pick from" — and the chat pane holds only the chat. -->
+        <aside class="pane chats-pane" id="chats-pane">
+          <div class="pane-head">
+            <h2 class="pane-title">Conversations</h2>
+            <span id="chat-count" class="count-pill">0</span>
+            <button id="chats-collapse" class="pane-toggle" type="button"
+              aria-expanded="true" aria-controls="chats-pane"
+              title="Collapse the conversation list">‹</button>
+          </div>
+          <div class="pane-scroll">
+            <button id="new-chat-btn" class="btn btn-small btn-block" type="button">+ New chat</button>
+            <div id="chat-list" class="chat-list"></div>
+          </div>
+          <!-- Shown only while collapsed: the rail is 40px wide, so the label
+               is rotated rather than truncated to nothing. -->
+          <button id="chats-expand" class="chats-rail" type="button"
+            title="Show the conversation list">
+            <span class="chats-rail-icon" aria-hidden="true">›</span>
+            <span class="chats-rail-label">Conversations</span>
+          </button>
+        </aside>
+
         <!-- Center: chat -->
         <main class="pane chat-pane">
           <div class="pane-head">
             <h2 class="pane-title">Chat</h2>
-            <span class="chats-label">Conversations</span>
-            <button id="new-chat-btn" class="btn btn-small" type="button">+ New chat</button>
+            <span id="chat-title" class="chat-title"></span>
           </div>
-          <div id="chat-list" class="chat-list"></div>
           <div id="messages" class="messages">
+            <!-- Pre-JS placeholder only. app.js replaces this with copy that
+                 knows whether the workspace actually has sources yet — a guest
+                 arrives with the demo corpus already loaded, so telling them to
+                 add one is wrong for exactly the visitor who needs the most
+                 help. Kept deliberately neutral for the moment before boot. -->
             <div class="empty-state" id="empty-hint">
               <span class="empty-icon" aria-hidden="true">◈</span>
               <p class="empty-title">Ask a question to see results</p>
-              <p class="empty-text">Add sources on the left, then ask anything about them.
-                Answers are grounded in your documents and cite their sources.</p>
+              <p class="empty-text">Answers are grounded in your documents and
+                cite the exact passage they came from.</p>
             </div>
           </div>
           <form id="ask-form" class="ask-form">
@@ -213,6 +242,24 @@
             </div>
           </div>
         </section>
+
+        <!-- Column resizers.
+             Absolutely positioned from the SAME custom properties that size the
+             grid tracks, so they follow the columns with no JS keeping them in
+             sync — dragging one writes the property and both the track and the
+             handle move together. Kept out of the grid on purpose: putting them
+             in their own tracks would mean seven tracks to reason about in
+             three media queries. role=separator + tabindex makes them
+             keyboard-operable (arrows nudge, Home resets). -->
+        <div class="resizer resizer-sources" data-var="--sources-w" data-min="200" data-max="460"
+          role="separator" aria-orientation="vertical" tabindex="0"
+          aria-label="Resize the Sources column"></div>
+        <div class="resizer resizer-chats" data-var="--chats-w" data-min="150" data-max="420"
+          role="separator" aria-orientation="vertical" tabindex="0"
+          aria-label="Resize the Conversations column"></div>
+        <div class="resizer resizer-eval" data-var="--eval-w" data-min="240" data-max="620" data-invert="1"
+          role="separator" aria-orientation="vertical" tabindex="0"
+          aria-label="Resize the Evaluation column"></div>
       </div>
 
     </div>
@@ -339,6 +386,6 @@
       </div>
     </div>
 
-    <script type="module" src="/app.js?v=18"></script>
+    <script type="module" src="/app.js?v=19"></script>
   </body>
 </html>

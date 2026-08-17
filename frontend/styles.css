@@ -368,16 +368,22 @@ input::placeholder, textarea::placeholder { color: var(--faint); }
 .panes {
   grid-area: panes;
   display: grid;
-  grid-template-columns: var(--sources-w) minmax(0, 1fr) var(--eval-w);
+  grid-template-columns:
+    var(--sources-w) var(--chats-w) minmax(0, 1fr) var(--eval-w);
   /* Chat takes the free height; excerpt sizes to its content, capped below. */
   grid-template-rows: minmax(0, 1fr) auto;
   grid-template-areas:
-    "sources chat    eval"
-    "sources excerpt eval";
+    "sources chats chat    eval"
+    "sources chats excerpt eval";
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+  /* Containing block for the absolutely-positioned .resizer handles. */
+  position: relative;
 }
+/* Collapsed conversation column: the track shrinks to the rail, and the pane's
+   own contents are swapped for the rotated label (see .chats-rail). */
+.panes.chats-collapsed { --chats-w: var(--rail-w); }
 
 .pane {
   background: var(--panel);
@@ -388,6 +394,7 @@ input::placeholder, textarea::placeholder { color: var(--faint); }
   overflow: hidden;
 }
 .sources-pane { grid-area: sources; border-right: 1px solid var(--border); }
+.chats-pane   { grid-area: chats;   border-right: 1px solid var(--border); }
 .chat-pane    { grid-area: chat;    border-right: 1px solid var(--border); }
 .eval-pane    { grid-area: eval; }
 .excerpt-pane {
@@ -636,17 +643,29 @@ input::placeholder, textarea::placeholder { color: var(--faint); }
 
 /* ---------- chat pane ---------- */
 
-.chats-label { margin-left: auto; font-size: 12px; color: var(--faint); white-space: nowrap; }
-.chat-pane .pane-head > .btn { margin-left: 0; }
-
-.chat-list {
-  display: flex; flex-direction: column; gap: 2px;
-  max-height: 148px; overflow-y: auto;
-  padding: 6px 8px;
-  border-bottom: 1px solid var(--border);
-  background: var(--panel-sunken);
-  flex-shrink: 0;
+/* Title of the open conversation. Takes the space the conversation LIST used
+   to occupy in this header, which is the point of moving the list out. */
+.chat-title {
+  margin-left: auto;
+  font-size: 12px; color: var(--faint);
+  min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+
+/* ---------- conversations pane ----------
+   Formerly a capped, scrolling strip wedged into the chat pane's header. Now a
+   column, so the list simply fills it: no max-height, no inner scroller of its
+   own, no border pretending to be a divider between two things in one pane. */
+.chats-pane .pane-scroll { padding: 8px; display: flex; flex-direction: column; gap: 8px; }
+.btn-block { width: 100%; justify-content: center; }
+/* .pane-toggle is display:none by default because the other two panes only
+   collapse on narrow viewports. This one is the opposite: collapsing is a
+   DESKTOP affordance (it buys the conversation its width back) and meaningless
+   below 1100px, where the column becomes a horizontal band — the media queries
+   turn it off again there. */
+#chats-collapse { display: inline-flex; }
+
+.chat-list { display: flex; flex-direction: column; gap: 2px; }
 .chat-list:empty { display: none; }
 .chat-item {
   display: flex; align-items: center; gap: 8px;
@@ -661,6 +680,78 @@ input::placeholder, textarea::placeholder { color: var(--faint); }
 .chat-item .chat-delete { opacity: 0; }
 .chat-item:hover .chat-delete, .chat-item.active .chat-delete { opacity: 1; }
 .chat-item .chat-delete:hover { color: var(--error); }
+
+/* ---------- collapsed conversations rail ----------
+   Collapsing to zero would leave nothing to click to get the column back, and
+   a stray chevron in another pane's header would be the only affordance. The
+   rail IS the pane at 40px: whole thing is one button, label rotated because
+   there is no horizontal room for it. */
+.chats-rail { display: none; }
+.chats-collapsed .chats-pane > .pane-head,
+.chats-collapsed .chats-pane > .pane-scroll { display: none; }
+.chats-collapsed .chats-rail {
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  width: 100%; height: 100%;
+  padding: 12px 0;
+  border: 0; background: none; cursor: pointer;
+  color: var(--muted);
+}
+.chats-collapsed .chats-rail:hover { background: var(--hover); color: var(--text); }
+.chats-rail-icon { font-size: 14px; line-height: 1; }
+.chats-rail-label {
+  writing-mode: vertical-rl;
+  font-family: var(--font-mono);
+  font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* ---------- column resizers ----------
+   Positioned from the same custom properties that size the tracks, so a drag
+   writes one property and the track and the handle move together — no JS
+   syncing positions, nothing to fall out of step on a window resize.
+
+   The hit area is 9px but the visible line is 1px, drawn by ::after: a handle
+   you can actually grab with a mouse should not look like a 9px gutter. */
+.resizer {
+  position: absolute;
+  top: 0; bottom: 0;
+  width: 9px;
+  z-index: 6;
+  cursor: col-resize;
+  /* Sits ON the border between two panes, not in a gap of its own. */
+  margin-left: -4px;
+  touch-action: none;
+}
+.resizer::after {
+  content: "";
+  position: absolute; inset-block: 0; left: 4px;
+  width: 1px;
+  background: transparent;
+  transition: background 120ms ease;
+}
+.resizer:hover::after,
+.resizer:focus-visible::after,
+.resizer.is-dragging::after { background: var(--primary); }
+.resizer:focus-visible { outline: none; }
+.resizer:focus-visible::after { width: 2px; }
+
+.resizer-sources { left: var(--sources-w); }
+.resizer-chats   { left: calc(var(--sources-w) + var(--chats-w)); }
+/* Anchored to the right edge instead, so it tracks --eval-w directly rather
+   than through the 1fr chat column, which has no fixed width to measure. */
+.resizer-eval    { right: var(--eval-w); margin-left: 0; margin-right: -4px; }
+
+/* Dragging: kill text selection and pointer events inside the panes so the
+   cursor stays col-resize and a fast drag cannot select the whole message
+   list on its way past. */
+.panes.is-resizing { user-select: none; }
+.panes.is-resizing .pane { pointer-events: none; }
+.panes.is-resizing .resizer { pointer-events: auto; }
+
+/* Nothing to drag when the columns are stacked. */
+@media (max-width: 1099px) {
+  .resizer { display: none; }
+}
 
 .status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 .status-dot.done { background: var(--pass); }
@@ -997,9 +1088,13 @@ fieldset legend {
    Responsive
    ========================================================================== */
 
-/* Slightly narrower rails before the tablet reflow. */
+/* Slightly narrower rails before the tablet reflow.
+   These are DEFAULTS only: app.js writes dragged widths onto :root as inline
+   styles, which beat any stylesheet rule regardless of media query. That is
+   deliberate — once you have sized a column by hand, crossing a breakpoint
+   must not silently undo it. */
 @media (max-width: 1360px) {
-  :root { --sources-w: 260px; --eval-w: 312px; }
+  :root { --sources-w: 260px; --chats-w: 196px; --eval-w: 312px; }
 }
 
 /* --- Tablet: Sources | Chat side by side. Excerpt and Evaluation stack
@@ -1008,14 +1103,26 @@ fieldset legend {
        which is what made it start at the left edge of the screen. --- */
 @media (min-width: 768px) and (max-width: 1099px) {
   :root { --sources-w: 236px; }
+  /* Conversations rejoins the Sources column here rather than claiming a
+     third: two lists stacked in one rail beats four columns of ~190px. */
   .panes {
     grid-template-columns: var(--sources-w) minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr) auto auto;
     grid-template-areas:
       "sources chat"
-      "sources excerpt"
-      "sources eval";
+      "chats   excerpt"
+      "chats   eval";
   }
+  .chats-pane {
+    border-right: 1px solid var(--border);
+    border-top: 1px solid var(--border);
+  }
+  /* The rail's rotated label is meaningless once this is a horizontal band. */
+  .chats-collapsed .chats-pane > .pane-head,
+  .chats-collapsed .chats-pane > .pane-scroll { display: flex; }
+  .chats-collapsed .chats-rail { display: none; }
+  .panes.chats-collapsed { --chats-w: var(--sources-w); }
+  #chats-collapse { display: none; }
   .chat-pane, .excerpt-pane { border-right: none; }
   .eval-pane {
     border-top: 1px solid var(--border);
@@ -1028,8 +1135,7 @@ fieldset legend {
 @media (max-width: 1099px) {
   #eval-toggle { display: inline-flex; }
   .pane.collapsed > .pane-scroll,
-  .pane.collapsed > .pane-foot,
-  .pane.collapsed > .chat-list { display: none; }
+  .pane.collapsed > .pane-foot { display: none; }
   .eval-pane.collapsed { max-height: none; }
 }
 
@@ -1063,18 +1169,26 @@ fieldset legend {
      the conversation it belongs to, and Evaluation trails as reference. */
   .panes {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto auto auto auto;
+    grid-template-rows: auto auto auto auto auto;
     grid-template-areas:
       "sources"
+      "chats"
       "chat"
       "excerpt"
       "eval";
     overflow: visible;
   }
+  /* Both pickers sit above the conversation, in the order you use them. The
+     rail is a horizontal-space device and has none of its meaning here. */
+  .chats-pane { border-right: none; }
+  .chats-collapsed .chats-pane > .pane-head,
+  .chats-collapsed .chats-pane > .pane-scroll { display: flex; }
+  .chats-collapsed .chats-rail { display: none; }
+  #chats-collapse { display: none; }
 
   .pane { overflow: visible; }
   .sources-pane, .chat-pane, .excerpt-pane { border-right: none; }
-  .sources-pane, .eval-pane { border-bottom: 1px solid var(--border); }
+  .sources-pane, .chats-pane, .eval-pane { border-bottom: 1px solid var(--border); }
   .pane-head { position: sticky; top: 0; z-index: 5; }
 
   /* Sources + Evaluation size to content (page scrolls); chat keeps an
