@@ -547,6 +547,36 @@ input::placeholder, textarea::placeholder { color: var(--faint); }
   letter-spacing: 0.06em; text-transform: uppercase;
   font-variant-numeric: tabular-nums;
 }
+/* ---------- sliced-index progress ----------
+   Lives INSIDE the source card, so the file reports on itself. A toast would
+   vanish and leave a long index looking like a hung app — which is the exact
+   failure this replaces. */
+.src-progress {
+  grid-column: 2 / span 2;
+  height: 3px;
+  border-radius: var(--r-pill);
+  background: var(--track);
+  overflow: hidden;
+  margin-top: 2px;
+}
+.src-progress-fill {
+  display: block; height: 100%;
+  background: var(--primary);
+  border-radius: var(--r-pill);
+  /* Lime means "active / live" here, which is exactly what this is. */
+  transition: width 0.25s ease;
+}
+.src-progress-label {
+  grid-column: 2 / span 2;
+  font-family: var(--font-mono);
+  font-size: var(--text-nano);
+  letter-spacing: 0.06em;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+/* The optimistic card, rendered from the File before the upload returns. */
+.source-item.is-pending { opacity: 0.7; }
+
 /* NOT telemetry: an error is a sentence the user has to read and act on. */
 .src-error {
   grid-column: 2 / span 2;

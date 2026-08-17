@@ -13,6 +13,10 @@ const state = {
   models: { chat: [], embedding: [] }, // proxy model catalog for the settings dropdowns
   evalRunning: false, // true while the chunked benchmark loop is driving
   simThreshold: 0,    // live retrieval threshold, marked on the per-answer meter
+  // Documents whose sliced-index loop is already being driven by this tab.
+  // Guards against two loops racing the same document — they would both POST
+  // /index-step, and the second would embed a slice the first had just done.
+  indexing: new Set(),
 };
 
 // Human-friendly labels for known models. With live proxy discovery the
@@ -468,6 +472,7 @@ function renderDocs(docs) {
   for (const d of docs) {
     const item = document.createElement("div");
     item.className = "source-item";
+    item.dataset.docId = d.id;
     const { kind, tag } = sourceKind(d);
     const status = STATUS_META[d.status] || { label: d.status || "unknown", cls: "" };
     const sub = d.source_type === "url" ? d.path_or_url : (d.path_or_url || "upload");
@@ -481,6 +486,7 @@ function renderDocs(docs) {
         <span class="badge-status ${status.cls}">${escapeHtml(status.label)}</span>
         ${d.n_chunks ? `<span class="src-meta">${d.n_chunks} chunks</span>` : ""}
       </span>
+      ${indexProgressHtml(d)}
       ${d.error ? `<span class="src-error">${escapeHtml(d.error)}</span>` : ""}`;
     item.querySelector('[data-act="delete"]').onclick = async () => {
       try {
@@ -492,6 +498,83 @@ function renderDocs(docs) {
   }
 }
 
+// The progress bar lives INSIDE the document card, so the file the user just
+// dropped is the thing that reports on itself — rather than a detached toast
+// that vanishes and leaves them wondering whether anything is happening.
+function indexProgressHtml(d) {
+  if (d.status !== "indexing") return "";
+  const total = d.n_chunks || 0;
+  const done = d.indexed_chunks || 0;
+  // Before the first slice lands the width would be 0, which reads as stalled.
+  // A small floor makes it obvious the work has started.
+  const pct = total ? Math.max(4, Math.round((done / total) * 100)) : 8;
+  return `<span class="src-progress" role="progressbar"
+      aria-valuemin="0" aria-valuemax="${total}" aria-valuenow="${done}">
+      <span class="src-progress-fill" style="width:${pct}%"></span>
+    </span>
+    <span class="src-progress-label">${total ? `${done} / ${total} chunks` : "reading…"}</span>`;
+}
+
+// Optimistic card, rendered from the File before any request is made, so the
+// source list responds the instant a file is dropped. Replaced by the real
+// document as soon as the upload returns.
+function renderPendingDoc(file) {
+  const item = document.createElement("div");
+  item.className = "source-item is-pending";
+  item.dataset.pendingName = file.name;
+  const ext = file.name.includes(".") ? file.name.split(".").pop().toLowerCase() : "";
+  const hit = EXT_KINDS[ext];
+  const kind = hit ? hit[0] : "text";
+  const tag = hit ? hit[1] : (ext || "file").slice(0, 4).toUpperCase();
+  item.innerHTML = `
+    <span class="src-icon" data-kind="${kind}" aria-hidden="true">${escapeHtml(tag)}</span>
+    <span class="src-title">${escapeHtml(file.name)}</span>
+    <span class="src-actions"></span>
+    <span class="src-sub">
+      <span class="badge-status working">uploading…</span>
+    </span>
+    <span class="src-progress"><span class="src-progress-fill" style="width:6%"></span></span>`;
+  $("doc-list").appendChild(item);
+  $("sources-empty").classList.add("hidden");
+  // Count the optimistic card too, or the header reads one short of what is
+  // visibly on screen until the upload returns.
+  const count = $("source-count");
+  count.textContent = String((parseInt(count.textContent, 10) || 0) + 1);
+  return item;
+}
+
+// Drive one document's sliced indexing to completion, repainting its card after
+// every step. Each call does a bounded unit of work and commits server-side, so
+// a refresh mid-run resumes rather than restarting.
+async function driveIndexing(docId, onStep) {
+  for (let guard = 0; guard < 2000; guard++) {
+    let p;
+    try {
+      p = await api(`/api/documents/${docId}/index-step`, { method: "POST" });
+    } catch (e) {
+      toast(`Indexing failed: ${e.message}`, true);
+      return null;
+    }
+    if (onStep) onStep(p);
+    if (p.done) return p;
+  }
+  toast("Indexing did not finish — reload to resume.", true);
+  return null;
+}
+
+// Repaint just one card's progress, so a running upload does not fight a full
+// list re-render (which would drop the other cards' in-flight state).
+function paintProgress(docId, p) {
+  const el = document.querySelector(`.source-item[data-doc-id="${docId}"]`);
+  if (!el) return;
+  const bar = el.querySelector(".src-progress-fill");
+  const label = el.querySelector(".src-progress-label");
+  const total = p.n_chunks || 0;
+  const pct = total ? Math.max(4, Math.round((p.indexed_chunks / total) * 100)) : 8;
+  if (bar) bar.style.width = `${pct}%`;
+  if (label) label.textContent = `${p.indexed_chunks} / ${total} chunks`;
+}
+
 async function refreshSources() {
   const [docs, folders] = await Promise.all([
     api("/api/documents"),
@@ -499,6 +582,16 @@ async function refreshSources() {
   ]);
   renderFolders(folders);
   renderDocs(docs);
+  // Resume any document left mid-index — after a reload, or a step that failed
+  // to be driven because the tab was closed. Without this a half-indexed
+  // document sits at "indexing" forever with no one advancing it.
+  for (const d of docs) {
+    if (d.status === "indexing" && !state.indexing.has(d.id)) {
+      state.indexing.add(d.id);
+      driveIndexing(d.id, (p) => paintProgress(d.id, p))
+        .finally(() => { state.indexing.delete(d.id); refreshSources(); });
+    }
+  }
   $("source-count").textContent = String(docs.length + folders.length);
   $("sources-empty").classList.toggle("hidden", docs.length + folders.length > 0);
   // Every add and delete moves a guest's allowance. Not awaited: the badge is
@@ -527,17 +620,55 @@ dropZone.addEventListener("drop", async (e) => {
 });
 
 async function uploadFiles(files) {
+  // Each file gets a card in the sources list the moment it is dropped —
+  // before any network call — so the app visibly reacts to the drop. The card
+  // then carries its own progress bar through upload and indexing, which is
+  // what stops a slow index from looking like a hung app.
+  const jobs = [];
   for (const file of files) {
-    try {
-      toast(`Uploading ${file.name}…`);
-      const form = new FormData();
-      form.append("file", file);
-      await api("/api/documents/upload", { method: "POST", body: form });
-      toast(`${file.name} indexed`);
-    } catch (e) {
-      toast(`${file.name}: ${e.message}`, true);
-    }
+    const card = renderPendingDoc(file);
+    jobs.push(
+      (async () => {
+        let doc;
+        try {
+          const form = new FormData();
+          form.append("file", file);
+          // Returns as soon as the text is extracted and staged; embedding is
+          // sliced across the /index-step calls below.
+          doc = await api("/api/documents/upload", { method: "POST", body: form });
+        } catch (e) {
+          card.querySelector(".badge-status").className = "badge-status error";
+          card.querySelector(".badge-status").textContent = "failed";
+          card.querySelector(".src-progress")?.remove();
+          card.insertAdjacentHTML(
+            "beforeend", `<span class="src-error">${escapeHtml(e.message)}</span>`
+          );
+          return;
+        }
+        // Hand the optimistic card its real identity so paintProgress can find
+        // it, rather than re-rendering the whole list and losing the others.
+        card.dataset.docId = doc.id;
+        card.classList.remove("is-pending");
+        delete card.dataset.pendingName;
+        const badge = card.querySelector(".badge-status");
+        if (badge) badge.textContent = "embedding…";
+        if (!card.querySelector(".src-progress-label")) {
+          card.insertAdjacentHTML(
+            "beforeend", `<span class="src-progress-label">0 / ${doc.n_chunks || 0} chunks</span>`
+          );
+        }
+        state.indexing.add(doc.id);
+        try {
+          await driveIndexing(doc.id, (p) => paintProgress(doc.id, p));
+        } finally {
+          state.indexing.delete(doc.id);
+        }
+      })()
+    );
   }
+  // Sequential would be safer for quota but makes a multi-file drop feel
+  // serialised; the server caps each slice, so concurrency is bounded anyway.
+  await Promise.all(jobs);
   await refreshSources();
 }
 
@@ -552,7 +683,10 @@ $("add-url-btn").onclick = async () => {
       body: JSON.stringify({ url }),
     });
     $("url-input").value = "";
-    toast(`Indexed “${doc.title}”`);
+    // The card appears immediately in `indexing` state; refreshSources picks it
+    // up and drives its slices, so the page shows the same progress bar an
+    // uploaded file gets rather than a toast claiming it is already done.
+    toast(`Added “${doc.title}” — indexing…`);
     await refreshSources();
   } catch (e) {
     toast(e.message, true);
@@ -879,8 +1013,12 @@ async function reindexAll() {
   toast("Re-indexing all sources (this may take a while)…");
   $("reindex-btn").disabled = true;
   try {
+    // Queues rather than re-embeds: reindex returns at once and refreshSources
+    // drives each document's slices, so a whole-workspace re-index cannot
+    // overrun the function budget and shows per-document progress.
     const r = await api("/api/documents/reindex", { method: "POST" });
-    toast(`Re-indexed ${r.reindexed} sources`);
+    const bad = r.unreadable ? `, ${r.unreadable} unreadable` : "";
+    toast(`Re-indexing ${r.queued ?? r.reindexed} sources${bad}…`);
     await refreshSources();
   } catch (e) {
     toast(e.message, true);

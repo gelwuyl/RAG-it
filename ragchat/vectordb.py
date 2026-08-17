@@ -42,6 +42,7 @@ def add_chunks(
     embeddings: list[list[float]],
     refs: list[str],
     embedding_model: str = "text-embedding-005",
+    start_index: int = 0,
 ) -> None:
     return _impl().add_chunks(
         user_id,
@@ -52,6 +53,7 @@ def add_chunks(
         embeddings,
         refs,
         embedding_model,
+        start_index,
     )
 
 

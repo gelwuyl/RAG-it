@@ -77,6 +77,56 @@ def _embed_texts(model: str, texts: list[str], provider: str | None = None) -> l
     return out
 
 
+# Chunks embedded per sliced-ingest step. Sized so a step finishes well inside
+# the 60s maxDuration with headroom: at the ~30 chunks/sec measured on the
+# default provider this is ~4s of embedding, leaving room for a slow request
+# without the function being killed mid-write. The benchmark runner learned
+# this the hard way — an overrunning step is killed BEFORE it commits, so the
+# client retries the same slice forever (see CLAUDE.md).
+INGEST_SLICE = 128
+
+
+def plan_chunks(text: str, title: str, cfg: PipelineConfig):
+    """The chunks a document will produce, without embedding anything.
+
+    Chunking is a pure function of (text, title, cfg), so every ingest step can
+    re-derive the same list and take its slice. That is what lets progress be
+    tracked with a single integer instead of staging chunk rows somewhere.
+    """
+    return refine_refs(split_document(text, title, cfg), text)
+
+
+def ingest_slice(
+    user_id: str,
+    doc_id: str,
+    title: str,
+    text: str,
+    cfg: PipelineConfig,
+    start: int,
+    count: int = INGEST_SLICE,
+) -> tuple[int, int]:
+    """Embed and store chunks [start : start+count]. Returns (added, total).
+
+    One bounded unit of work for the sliced-job pattern: the caller commits
+    after each call, so progress survives the function being frozen and a
+    resumed run picks up from `start` rather than re-embedding what is done.
+    """
+    chunks = plan_chunks(text, title, cfg)
+    total = len(chunks)
+    window = chunks[start : start + count]
+    if not window:
+        return 0, total
+    texts = [c.text for c in window]
+    embeddings = _embed_texts(cfg.embedding_model, texts, provider=cfg.embedding_provider)
+    add_chunks(
+        user_id, doc_id, title, cfg.fingerprint(), texts, embeddings,
+        [c.ref for c in window],
+        embedding_model=cfg.embedding_model,
+        start_index=start,
+    )
+    return len(window), total
+
+
 def ingest_document_text(
     user_id: str,
     doc_id: str,
@@ -84,7 +134,12 @@ def ingest_document_text(
     text: str,
     cfg: PipelineConfig,
 ) -> int:
-    """Chunk, embed, and store a document's text. Returns the chunk count."""
+    """Chunk, embed, and store a document's text in ONE call. Returns the count.
+
+    Kept for callers that are not request-bound — folder sync, the benchmark
+    corpus, demo seeding. The upload path uses ingest_slice instead, because a
+    large document cannot finish inside one serverless request.
+    """
     chunks = split_document(text, title, cfg)
     chunks = refine_refs(chunks, text)
     if not chunks:

@@ -102,9 +102,17 @@ def add_chunks(
     embeddings: list[list[float]],
     refs: list[str],
     embedding_model: str = "text-embedding-005",
+    start_index: int = 0,
 ) -> None:
+    """Add chunks for a document.
+
+    ``start_index`` is the position of ``texts[0]`` within the whole document.
+    Sliced ingest calls this once per slice, and without an offset every slice
+    would write ids 0..n-1 and overwrite the previous one, leaving a document
+    with only its last slice indexed.
+    """
     col = collection_for(user_id, embedding_model)
-    ids = [f"{doc_id}:{i}" for i in range(len(texts))]
+    ids = [f"{doc_id}:{start_index + i}" for i in range(len(texts))]
     col.add(
         ids=ids,
         documents=texts,
@@ -115,16 +123,23 @@ def add_chunks(
                 "title": title,
                 "ref": ref,
                 "fingerprint": fingerprint,
-                "chunk_index": i,
+                "chunk_index": start_index + i,
             }
             for i, ref in enumerate(refs)
         ],
     )
     name = col.name
-    _BM25_DOCS.setdefault(name, {})[doc_id] = list(texts)
+    # BM25 is an in-memory per-instance index keyed by doc; EXTEND rather than
+    # replace, or a sliced ingest would leave only the final slice searchable
+    # by keyword even though every chunk is in the vector store.
+    bucket = _BM25_DOCS.setdefault(name, {})
+    if start_index == 0:
+        bucket[doc_id] = list(texts)
+    else:
+        bucket.setdefault(doc_id, []).extend(texts)
     _BM25_TITLE[(name, doc_id)] = title
     for i, ref in enumerate(refs):
-        _BM25_REF[(name, doc_id, i)] = ref
+        _BM25_REF[(name, doc_id, start_index + i)] = ref
     _rebuild_bm25(name)
 
 

@@ -79,6 +79,20 @@ class Document(Base):
     # BY the app, so counting it against the visitor's quota would leave them
     # almost no room to try their own files, which is the point of the demo.
     is_demo = Column(Boolean, default=False)
+    # Extracted text, kept so indexing can be SLICED across requests: each step
+    # re-splits deterministically and embeds the next slice. Chunking is a pure
+    # function of (text, title, cfg), so re-splitting per step costs nothing and
+    # avoids staging chunk rows.
+    #
+    # It also repairs re-indexing on Vercel. _load_source_text used to re-read
+    # the uploaded bytes from UPLOAD_DIR, which lives under DATA_DIR — and that
+    # is /tmp on Vercel: per-instance and wiped on cold start. A later request
+    # usually lands elsewhere, so the file was gone and "Re-index all" marked
+    # uploads "Source no longer readable". The DB is the only durable store the
+    # function has.
+    source_text = Column(Text, nullable=True)
+    # Chunks embedded so far, for the progress bar and to resume a sliced run.
+    indexed_chunks = Column(Integer, default=0)
     created_at = Column(Float, default=now)
     user = relationship("User", back_populates="documents")
 

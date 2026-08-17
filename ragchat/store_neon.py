@@ -196,12 +196,19 @@ def add_chunks(
     embeddings: list[list[float]],
     refs: list[str],
     embedding_model: str = "text-embedding-005",
+    start_index: int = 0,
 ) -> None:
-    """Upsert chunks for a document (delete-then-insert by stable id)."""
+    """Upsert chunks for a document (delete-then-insert by stable id).
+
+    ``start_index`` is the position of ``texts[0]`` within the whole document.
+    Sliced ingest calls this once per slice, and without an offset every slice
+    would write ids 0..n-1 and silently overwrite the previous one, leaving a
+    document with only its last slice indexed.
+    """
     eng = _get_engine()
     with eng.begin() as conn:
         _ensure_table(conn)
-        ids = [f"{user_id}::{doc_id}:{i}" for i in range(len(texts))]
+        ids = [f"{user_id}::{doc_id}:{start_index + i}" for i in range(len(texts))]
         # Remove any previous version of these exact chunks (idempotent upsert).
         conn.execute(chunks_table.delete().where(chunks_table.c.id.in_(ids)))
         rows = [
@@ -212,7 +219,7 @@ def add_chunks(
                 "doc_id": doc_id,
                 "title": title,
                 "fingerprint": fingerprint,
-                "chunk_index": i,
+                "chunk_index": start_index + i,
                 "ref": refs[i],
                 "text": texts[i],
                 "embedding": list(embeddings[i]),

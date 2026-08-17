@@ -41,7 +41,7 @@ from .db import (
     now,
 )
 from .loaders import fetch_url, load_bytes, page_title, TEXT_EXTENSIONS, HTML_EXTENSIONS, PDF_EXTENSIONS
-from .pipeline import ingest_document_text, ask
+from .pipeline import ingest_document_text, ingest_slice, plan_chunks, ask
 from .vectordb import delete_document_chunks, prune_chunks
 
 app = FastAPI(title="RAG-it")
@@ -161,6 +161,72 @@ def _index_document(db: Session, user: User, doc: Document, text: str) -> None:
         doc.status = "failed"
         doc.error = str(exc)[:500]
     db.commit()
+
+
+def _stage_for_indexing(db: Session, doc: Document, text: str) -> None:
+    """Record a document's text and chunk count without embedding anything.
+
+    The document appears in the UI immediately, in `indexing` status with a
+    known total, so the client can render a real progress bar rather than an
+    indeterminate spinner. The embedding happens in bounded steps afterwards.
+    """
+    cfg = load_config()
+    doc.source_text = text
+    doc.n_chunks = len(plan_chunks(text, doc.title, cfg))
+    doc.indexed_chunks = 0
+    doc.config_fingerprint = cfg.fingerprint()
+    doc.status = "indexing" if doc.n_chunks else "ready"
+    doc.error = None
+    db.commit()
+
+
+def _index_next_slice(db: Session, user: User, doc: Document) -> dict:
+    """Embed one bounded slice of `doc`. Commits before returning.
+
+    Committing per slice is the whole point of the pattern: the function may be
+    frozen the instant it responds, and a later step may land on a different
+    instance, so progress has to be durable at every boundary.
+    """
+    text = doc.source_text or _load_source_text(doc)
+    if text is None:
+        doc.status = "failed"
+        doc.error = "Source no longer readable"
+        db.commit()
+        return _index_progress(doc)
+    cfg = load_config()
+    try:
+        added, total = ingest_slice(
+            user.id, doc.id, doc.title, text, cfg, start=doc.indexed_chunks or 0
+        )
+    except Exception as exc:  # embedding quota, provider outage, bad model id
+        doc.status = "failed"
+        doc.error = str(exc)[:500]
+        db.commit()
+        return _index_progress(doc)
+
+    doc.n_chunks = total
+    doc.indexed_chunks = (doc.indexed_chunks or 0) + added
+    if doc.indexed_chunks >= total or added == 0:
+        doc.status = "ready"
+        doc.config_fingerprint = cfg.fingerprint()
+        # source_text is deliberately KEPT, not cleared. It is staging for the
+        # slicing loop, but it is also the only durable copy of the source on
+        # Vercel — /tmp does not survive — so clearing it here would re-break
+        # "Re-index all" for every upload, which is what _load_source_text
+        # reads it to fix.
+    db.commit()
+    return _index_progress(doc)
+
+
+def _index_progress(doc: Document) -> dict:
+    return {
+        "id": doc.id,
+        "status": doc.status,
+        "indexed_chunks": doc.indexed_chunks or 0,
+        "n_chunks": doc.n_chunks or 0,
+        "error": doc.error,
+        "done": doc.status in ("ready", "failed"),
+    }
 
 
 def _sync_folder(db: Session, user: User, folder: FolderSource) -> dict:
@@ -463,6 +529,9 @@ def _doc_view(d: Document) -> dict:
         "status": d.status,
         "error": d.error,
         "n_chunks": d.n_chunks,
+        # Progress for the sliced-ingest bar. Sent on every document so a page
+        # reload mid-index resumes the bar instead of showing a stalled card.
+        "indexed_chunks": d.indexed_chunks or 0,
         "created_at": d.created_at,
     }
 
@@ -515,9 +584,32 @@ async def upload_document(
     dest = stored / f"{doc.id}_{doc.title}"
     dest.write_bytes(data)
     doc.path_or_url = str(dest)
-    _index_document(db, user, doc, text)
-    db.commit()
+    # Return WITHOUT embedding. Ingest is sliced across follow-up calls to
+    # /api/documents/{id}/index-step, because a large document cannot finish
+    # inside one 60s request — and an overrunning request is killed before it
+    # commits, so the work is lost rather than merely slow.
+    _stage_for_indexing(db, doc, text)
     return _doc_view(doc)
+
+
+@app.post("/api/documents/{doc_id}/index-step")
+def index_document_step(
+    doc_id: str,
+    user: User = Depends(authn.get_current_user),
+    db: Session = Depends(get_session),
+):
+    """Advance one document's indexing by one bounded slice.
+
+    The client loops on this until `done`. Same sliced-job shape as
+    /api/eval/step, and for the same reason: background threads are frozen the
+    moment the response is sent, so long work has to be driven from outside.
+    """
+    doc = db.get(Document, doc_id)
+    if not doc or doc.user_id != user.id:
+        raise HTTPException(status_code=404, detail="Document not found")
+    if doc.status in ("ready", "failed"):
+        return _index_progress(doc)
+    return _index_next_slice(db, user, doc)
 
 
 @app.post("/api/documents/url")
@@ -563,7 +655,8 @@ def add_url_document(
     )
     db.add(doc)
     db.commit()
-    _index_document(db, user, doc, text)
+    # Sliced like uploads: a long article is no cheaper to embed than a file.
+    _stage_for_indexing(db, doc, text)
     return _doc_view(doc)
 
 
@@ -611,23 +704,43 @@ def reindex_all(
     user: User = Depends(require_account),
     db: Session = Depends(get_session),
 ):
-    """Re-chunk and re-embed every source under the current config (F17)."""
+    """Queue every source for re-indexing under the current config (F17).
+
+    Returns immediately rather than re-embedding inline. Re-indexing a whole
+    workspace is unbounded work — exactly what the 60s function budget cannot
+    hold — so this only resets progress, and the client drives the same
+    /index-step loop it uses for uploads. That also gives re-index the same
+    per-document progress bars for free.
+    """
     docs = db.query(Document).filter(Document.user_id == user.id).all()
-    reindexed = 0
+    cfg = load_config()
+    queued, unreadable = 0, 0
     for doc in docs:
         data = _load_source_text(doc)
         if data is None:
             doc.status = "failed"
             doc.error = "Source no longer readable"
-            db.commit()
+            unreadable += 1
             continue
         delete_document_chunks(user.id, doc.id)
-        _index_document(db, user, doc, data)
-        reindexed += 1
-    return {"reindexed": reindexed}
+        doc.source_text = data
+        doc.n_chunks = len(plan_chunks(data, doc.title, cfg))
+        doc.indexed_chunks = 0
+        doc.status = "indexing" if doc.n_chunks else "ready"
+        doc.error = None
+        queued += 1
+    db.commit()
+    return {"queued": queued, "unreadable": unreadable, "reindexed": queued}
 
 
 def _load_source_text(doc: Document) -> Optional[str]:
+    # The DB copy first, and it is the only one that can be trusted on Vercel:
+    # UPLOAD_DIR lives under DATA_DIR, which is /tmp there — per-instance and
+    # wiped on cold start. Re-reading the file usually failed, so "Re-index all"
+    # marked every upload "Source no longer readable" on the deploy while
+    # working perfectly in local dev.
+    if doc.source_text:
+        return doc.source_text
     try:
         if doc.source_type == "url":
             _url, content = fetch_url(doc.path_or_url)
