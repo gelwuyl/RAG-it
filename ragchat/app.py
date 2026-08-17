@@ -1209,11 +1209,25 @@ def _corpus_files() -> list[str]:
         )
 
 
-def _active_run(db: Session):
-    """The most recent run row, or None."""
+def _active_run(db: Session, user: User | None):
+    """The caller's most recent run row, or None.
+
+    `user` is required rather than optional-with-a-default on purpose: this
+    used to return the globally latest row, which meant a guest opening the app
+    was shown the owner's benchmark — scorecard, golden-set questions and all.
+    Making the scope an explicit argument means a new call site cannot
+    accidentally reintroduce that by forgetting to pass it.
+    """
     from .db import EvalRun
 
-    return db.query(EvalRun).order_by(EvalRun.started_at.desc()).first()
+    if user is None:
+        return None
+    return (
+        db.query(EvalRun)
+        .filter(EvalRun.user_id == user.id)
+        .order_by(EvalRun.started_at.desc())
+        .first()
+    )
 
 
 def _run_payload(run) -> dict:
@@ -1256,15 +1270,26 @@ class EvalRunIn(BaseModel):
 
 
 @app.get("/api/eval")
-def get_eval(db: Session = Depends(get_session)):
-    """Latest benchmark report (RAGAS-style scorecard) for the Evaluation tab."""
-    return _run_payload(_active_run(db))
+def get_eval(
+    user: User = Depends(authn.get_current_user),
+    db: Session = Depends(get_session),
+):
+    """The CALLER'S latest benchmark report for the Evaluation pane.
+
+    `locked` tells the UI to render a sign-in prompt where the scorecard goes,
+    rather than "No benchmark run yet" — a guest is not looking at an empty
+    result, they are looking at a feature that is not theirs to run.
+    """
+    payload = _run_payload(_active_run(db, user))
+    if guests.is_guest(user):
+        payload["locked"] = True
+    return payload
 
 
 @app.post("/api/eval/run")
 def start_eval(
     body: EvalRunIn | None = None,
-    _: User = Depends(require_account),
+    user: User = Depends(require_account),
     db: Session = Depends(get_session),
 ):
     """Begin a benchmark run. Returns immediately; the client then calls
@@ -1277,7 +1302,7 @@ def start_eval(
 
     # Supersede any run left in "running" (e.g. the tab was closed mid-run) so
     # a stale row can't block a fresh start forever.
-    prev = _active_run(db)
+    prev = _active_run(db, user)
     if prev is not None and prev.status == "running":
         prev.status = "cancelled"
         prev.updated_at = time.time()
@@ -1293,6 +1318,7 @@ def start_eval(
     reset_eval_collection(cfg)
 
     run = EvalRun(
+        user_id=user.id,
         status="running",
         total=len(items),
         completed=0,
@@ -1311,7 +1337,7 @@ def start_eval(
 @app.post("/api/eval/step")
 def step_eval(
     body: EvalRunIn | None = None,
-    _: User = Depends(require_account),
+    user: User = Depends(require_account),
     db: Session = Depends(get_session),
 ):
     """Advance the active run by one bounded slice of work.
@@ -1329,7 +1355,7 @@ def step_eval(
     )
 
     body = body or EvalRunIn()
-    run = _active_run(db)
+    run = _active_run(db, user)
     if run is None or run.status != "running":
         return _run_payload(run)
 
@@ -1374,7 +1400,7 @@ def step_eval(
         db.commit()
     except Exception as exc:  # record the failure instead of 500-ing the poll
         db.rollback()
-        run = _active_run(db)
+        run = _active_run(db, user)
         if run is not None:
             run.status = "error"
             run.error = f"{type(exc).__name__}: {exc}"[:500]

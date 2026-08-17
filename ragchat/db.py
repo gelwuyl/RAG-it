@@ -162,6 +162,13 @@ class EvalRun(Base):
 
     __tablename__ = "eval_runs"
     id = Column(String, primary_key=True, default=new_id)
+    # Whose run this is. Without it `_active_run` returned the globally latest
+    # row, so any visitor — including an anonymous guest — was served the
+    # owner's scorecard AND `results`, which carries every golden-set question
+    # and the answers generated for them. Nullable because _reconcile_columns
+    # adds it to existing databases; rows predating it belong to nobody and are
+    # therefore visible to nobody, which is the safe direction to fail.
+    user_id = Column(String, index=True, nullable=True)
     status = Column(String, default="running")  # running | done | error | cancelled
     total = Column(Integer, default=0)          # questions in this run
     completed = Column(Integer, default=0)      # questions scored so far
