@@ -126,6 +126,14 @@ input[type="text"], input[type="password"], input[type="number"], textarea, sele
   padding: 8px 11px;
 }
 input::placeholder, textarea::placeholder { color: var(--faint); }
+/* A control that cannot be changed has to LOOK like one. The demo tier's
+   settings are read-only (plan §7) and the fields are disabled to match; without
+   this they render identically to live ones and read as a form that silently
+   ignores you. */
+input:disabled, textarea:disabled, select:disabled {
+  background: var(--panel-sunken); color: var(--muted);
+  border-color: var(--border); cursor: not-allowed;
+}
 
 /* ---------- auth ---------- */
 
@@ -1079,10 +1087,71 @@ fieldset legend {
   padding: 1px 6px; border-radius: var(--r-sm);
   text-transform: none; letter-spacing: 0;
 }
+/* ---------- settings presets (PRODUCT_UX_PLAN.md §7) ----------
+
+   The default view of the modal. A preset is a whole pipeline configuration with
+   the tradeoff it makes written on it, which is what the fifteen bare numeric
+   fields could never say for themselves. */
+
+.preset-block { display: flex; flex-direction: column; gap: 8px; }
+.preset-head {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+}
+.preset-label {
+  font-family: var(--font-mono); font-size: var(--text-nano);
+  text-transform: uppercase; letter-spacing: var(--tracking-telemetry);
+  color: var(--muted);
+}
+/* The live readout — the name of the matching preset, or "Custom". It is the one
+   thing here that changes as you edit, so it carries the accent. */
+.preset-current {
+  font-family: var(--font-mono); font-size: var(--text-micro);
+  color: var(--primary-ink);
+}
+.preset-list { display: flex; flex-direction: column; gap: 8px; }
+.preset {
+  display: flex; flex-direction: column; gap: 3px; text-align: left;
+  padding: 10px 12px; font: inherit; cursor: pointer;
+  background: var(--panel-sunken); color: var(--text);
+  border: 1px solid var(--border); border-radius: var(--r-md);
+}
+.preset:hover { background: var(--hover-soft); border-color: var(--border-strong); }
+/* Lime means "active" here exactly as it does everywhere else (§6). */
+.preset.is-active { background: var(--primary-soft); border-color: var(--primary); }
+.preset-name {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  font-size: var(--text-body); font-weight: 600;
+}
+.preset.is-active .preset-name { color: var(--primary-ink); }
+.preset-desc { font-size: var(--text-sm); line-height: 1.5; color: var(--muted); }
+
+/* ---------- advanced disclosure ---------- */
+
+.advanced-toggle {
+  display: flex; align-items: center; gap: 8px; align-self: flex-start;
+  padding: 2px 0; background: none; border: 0; cursor: pointer;
+  font-family: var(--font-mono); font-size: var(--text-micro);
+  text-transform: uppercase; letter-spacing: var(--tracking-telemetry);
+  color: var(--muted);
+}
+.advanced-toggle:hover { color: var(--text); }
+.advanced-caret { display: inline-block; transition: transform 0.15s ease; }
+.advanced-toggle[aria-expanded="true"] .advanced-caret { transform: rotate(90deg); }
+/* The fieldsets were direct children of .modal-body and inherited its gap;
+   inside the disclosure they need their own. */
+.advanced-fields { display: flex; flex-direction: column; gap: 16px; }
+
 .field { display: flex; align-items: center; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
 .field label { font-size: 14px; color: var(--muted); min-width: 140px; flex-shrink: 0; }
 .field input, .field select { flex: 1; min-width: 0; padding: 7px 10px; font-size: 14px; border-radius: var(--r-sm); }
 .field input[type="number"] { max-width: 110px; }
+/* One line of "what this does, and what a sane range is" per field. Wraps onto
+   its own row (flex-basis 100%) and indents past the label column so it reads as
+   annotation on the control rather than as a second label. */
+.field-hint {
+  flex-basis: 100%; margin-left: 150px;
+  font-size: var(--text-xs); line-height: 1.5; color: var(--faint);
+}
 #settings-save { min-width: 84px; }
 #settings-note { min-width: 0; overflow-wrap: anywhere; }
 
@@ -1218,6 +1287,8 @@ fieldset legend {
   .add-row input, .ask-form textarea { font-size: 16px; } /* avoid iOS zoom-on-focus */
   .field label { min-width: 0; width: 100%; }
   .field input[type="number"] { max-width: none; }
+  /* The label owns its own row here, so there is no label column to indent past. */
+  .field-hint { margin-left: 0; }
 }
 
 @media (max-width: 400px) {

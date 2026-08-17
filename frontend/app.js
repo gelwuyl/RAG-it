@@ -802,8 +802,214 @@ $("prune-btn").onclick = async () => {
 function openSettings() {
   $("settings-overlay").classList.remove("hidden");
   $("settings-note").classList.add("hidden");
+  // Say up front that nothing here will save, rather than letting a guest tune
+  // ten fields and meet the refusal at the Save button.
+  $("settings-guest-note").classList.toggle("hidden", !state.isGuest);
+  setSettingsReadOnly(state.isGuest);
   loadSettingsIntoForm();
 }
+
+// "Read-only in the demo tier" (plan §7) means every control, not just Save.
+// Leaving the fields editable while the save was refused let a guest tune ten
+// numbers that could never take effect — the note at the top of the modal is
+// only true if the controls agree with it. The preset cards stay clickable and
+// aria-disabled instead, because they can still explain themselves.
+function setSettingsReadOnly(readOnly) {
+  for (const el of $("advanced-fields").querySelectorAll("input, select")) {
+    el.disabled = readOnly;
+  }
+}
+
+// ---------- presets (PRODUCT_UX_PLAN.md §7) ----------
+//
+// The default view is four named configurations, each stating what it trades
+// away; the fifteen individual fields stay one click behind "Advanced".
+//
+// Presets deliberately do NOT touch the model or provider fields. Those are
+// deployment facts rather than tradeoffs — switching embedding provider
+// re-points every vector in the store, and 422s outright when that provider has
+// no key configured — so a card called "Fast" has no business deciding them.
+const PRESET_KEYS = [
+  "chunk_size", "chunk_overlap", "splitter", "top_k", "candidate_k",
+  "similarity_threshold", "hybrid_search", "reranker", "query_rewrite",
+  "temperature",
+];
+
+// Keys whose change invalidates existing chunks — the same set the backend uses
+// to decide `needs_reindex` (app.py:1129), minus the embedding fields no preset
+// touches. A card's badge is computed against the SAVED config, not against
+// another preset, so it promises a re-index only when one is really coming.
+const PRESET_INDEX_KEYS = ["chunk_size", "chunk_overlap", "splitter"];
+
+const PRESETS = [
+  {
+    id: "fast",
+    name: "Fast",
+    desc: "One model call per question. No rerank, no rewrite, a small pool — the quickest answer this pipeline can give.",
+    values: {
+      chunk_size: 512, chunk_overlap: 75, splitter: "recursive",
+      top_k: 3, candidate_k: 10, similarity_threshold: 0.0,
+      hybrid_search: false, reranker: false, query_rewrite: false, temperature: 0.0,
+    },
+  },
+  {
+    id: "balanced",
+    name: "Balanced",
+    desc: "The shipped default. Follow-ups are rewritten so they still retrieve; everything else stays cheap.",
+    values: {
+      chunk_size: 512, chunk_overlap: 75, splitter: "recursive",
+      top_k: 4, candidate_k: 20, similarity_threshold: 0.0,
+      hybrid_search: false, reranker: false, query_rewrite: true, temperature: 0.0,
+    },
+  },
+  {
+    id: "accurate",
+    name: "High accuracy",
+    desc: "Smaller chunks, a 40-wide pool, keyword fusion and LLM rerank. Two extra model calls per question, and slower.",
+    values: {
+      chunk_size: 384, chunk_overlap: 96, splitter: "recursive",
+      top_k: 6, candidate_k: 40, similarity_threshold: 0.0,
+      hybrid_search: true, reranker: true, query_rewrite: true, temperature: 0.0,
+    },
+  },
+  {
+    id: "low-cost",
+    name: "Low cost",
+    desc: "Bigger chunks means roughly a third fewer embedding calls to index. BM25 carries the recall it loses, for free.",
+    values: {
+      chunk_size: 768, chunk_overlap: 64, splitter: "recursive",
+      top_k: 3, candidate_k: 8, similarity_threshold: 0.0,
+      hybrid_search: true, reranker: false, query_rewrite: false, temperature: 0.0,
+    },
+  },
+];
+
+// Config as last read from (or written to) the server. Presets compare their
+// chunking against this to decide whether to warn about a re-index.
+let loadedConfig = null;
+
+// Floats arrive as 0.0 from JSON and as "0" from a number input, so compare
+// numerically with a tolerance and everything else by string.
+function sameSetting(a, b) {
+  if (typeof a === "number" || typeof b === "number") {
+    return Math.abs(Number(a) - Number(b)) < 1e-9;
+  }
+  return String(a) === String(b);
+}
+
+function readPresetFieldsFromForm() {
+  return {
+    chunk_size: parseInt($("set-chunk-size").value, 10),
+    chunk_overlap: parseInt($("set-chunk-overlap").value, 10),
+    splitter: $("set-splitter").value,
+    top_k: parseInt($("set-top-k").value, 10),
+    candidate_k: parseInt($("set-candidate-k").value, 10),
+    similarity_threshold: parseFloat($("set-sim-threshold").value),
+    hybrid_search: $("set-hybrid-search").value === "true",
+    reranker: $("set-reranker").value === "true",
+    query_rewrite: $("set-query-rewrite").value === "true",
+    temperature: parseFloat($("set-temperature").value),
+  };
+}
+
+function matchPreset(vals) {
+  return PRESETS.find((p) => PRESET_KEYS.every((k) => sameSetting(p.values[k], vals[k]))) || null;
+}
+
+function presetNeedsReindex(preset) {
+  if (!loadedConfig) return false;
+  return PRESET_INDEX_KEYS.some((k) => !sameSetting(preset.values[k], loadedConfig[k]));
+}
+
+function renderPresets() {
+  const list = $("preset-list");
+  if (!list) return;
+  list.innerHTML = PRESETS.map((p) => {
+    const badge = presetNeedsReindex(p)
+      ? `<span class="index-badge">needs re-index</span>`
+      : "";
+    // aria-disabled rather than `disabled` for guests, for the same reason as
+    // the topbar controls: a disabled button dispatches no click, so the
+    // visitor would get silence where applyPreset() gives them a reason.
+    return `<button class="preset${state.isGuest ? " guest-locked" : ""}" type="button"
+        data-preset="${p.id}" aria-pressed="false"${state.isGuest ? ' aria-disabled="true"' : ""}>
+        <span class="preset-name">${escapeHtml(p.name)}${badge}</span>
+        <span class="preset-desc">${escapeHtml(p.desc)}</span>
+      </button>`;
+  }).join("");
+  for (const btn of list.querySelectorAll(".preset")) {
+    btn.onclick = () => applyPreset(btn.dataset.preset);
+  }
+  updatePresetSelection();
+}
+
+// Fills the form; it does NOT save. Saving is one deliberate press of the same
+// button every other change goes through, so a preset cannot re-point the
+// pipeline (or trigger a re-index) on a stray click.
+function applyPreset(id) {
+  // The refusal belongs on the whole modal, not on Save alone — a guest filling
+  // the form and then being told no has been misled by the intervening step.
+  if (guestBlocked("settings-save")) return;
+  const preset = PRESETS.find((p) => p.id === id);
+  if (!preset) return;
+  const v = preset.values;
+  $("set-chunk-size").value = v.chunk_size;
+  $("set-chunk-overlap").value = v.chunk_overlap;
+  $("set-splitter").value = v.splitter;
+  $("set-top-k").value = v.top_k;
+  $("set-candidate-k").value = v.candidate_k;
+  $("set-sim-threshold").value = v.similarity_threshold;
+  $("set-hybrid-search").value = String(v.hybrid_search);
+  $("set-reranker").value = String(v.reranker);
+  $("set-query-rewrite").value = String(v.query_rewrite);
+  $("set-temperature").value = v.temperature;
+  updatePresetSelection();
+  const note = $("settings-note");
+  note.textContent = presetNeedsReindex(preset)
+    ? `${preset.name} filled in — press Save to apply. Its chunking differs from what is indexed, so sources will need a re-index.`
+    : `${preset.name} filled in — press Save to apply.`;
+  note.classList.remove("hidden");
+}
+
+// Reflects the form back onto the cards, so hand-editing any advanced field
+// flips the readout to "Custom" instead of leaving a preset falsely lit.
+function updatePresetSelection() {
+  const active = matchPreset(readPresetFieldsFromForm());
+  const label = $("preset-current");
+  if (label) label.textContent = active ? active.name : "Custom";
+  for (const btn of document.querySelectorAll(".preset")) {
+    const on = !!active && btn.dataset.preset === active.id;
+    btn.classList.toggle("is-active", on);
+    btn.setAttribute("aria-pressed", String(on));
+  }
+}
+
+// Advanced stays where you left it. Collapsing it on every open would make the
+// full field set feel hidden rather than folded, and this is a tuning app.
+const ADVANCED_KEY = "ragchat-settings-advanced";
+
+function setAdvanced(open, remember) {
+  $("advanced-fields").classList.toggle("hidden", !open);
+  $("advanced-toggle").setAttribute("aria-expanded", String(open));
+  if (remember) {
+    try { localStorage.setItem(ADVANCED_KEY, open ? "1" : "0"); } catch { /* storage off */ }
+  }
+}
+
+$("advanced-toggle").onclick = () => {
+  setAdvanced($("advanced-fields").classList.contains("hidden"), true);
+};
+
+(function restoreAdvanced() {
+  let open = false;
+  try { open = localStorage.getItem(ADVANCED_KEY) === "1"; } catch { /* storage off */ }
+  setAdvanced(open, false);
+})();
+
+// One delegated listener rather than fifteen: any edit inside the advanced
+// fields re-derives which preset (if any) the form now describes.
+$("advanced-fields").addEventListener("input", updatePresetSelection);
+$("advanced-fields").addEventListener("change", updatePresetSelection);
 
 // Value the embedding model had when the settings form was opened; used to
 // decide whether saving needs a re-index prompt.
@@ -904,6 +1110,10 @@ async function loadSettingsIntoForm() {
     if (rpSel) {
       rpSel.onchange = () => updateProviderWarnings(openrouterConfigured);
     }
+    // Presets are drawn AFTER the form is populated: each card's re-index badge
+    // is computed against what is actually saved, so it needs the live config.
+    loadedConfig = cfg;
+    renderPresets();
   } catch (e) {
     toast(e.message, true);
   }
@@ -995,9 +1205,20 @@ $("settings-save").onclick = async () => {
     // level yielded undefined, so saving any change while OpenRouter was
     // selected raised "no OPENROUTER_API_KEY found" even with a valid key.
     updateProviderWarnings(res.config?.openrouter_configured);
-    if (res.needs_reindex) {
+    const embeddingChanged =
+      body.embedding_model !== loadedEmbeddingModel ||
+      body.embedding_provider !== loadedEmbeddingProvider;
+    // The server reports needs_reindex from WHICH KEYS WERE SENT, and this form
+    // always sends all of them — so it is true on every save, including one that
+    // changed nothing index-affecting. Compare against the config we loaded
+    // before believing it: a warning that fires every time teaches the user to
+    // ignore the one time it matters.
+    const chunkingChanged = !loadedConfig || PRESET_INDEX_KEYS.some(
+      (k) => !sameSetting(body[k], loadedConfig[k])
+    );
+    if (res.needs_reindex && (embeddingChanged || chunkingChanged)) {
       $("settings-note").classList.remove("hidden");
-      if (body.embedding_model !== loadedEmbeddingModel || body.embedding_provider !== loadedEmbeddingProvider) {
+      if (embeddingChanged) {
         // The index is unusable until re-embedded with the new model — offer
         // to do it right away rather than only leaving a note.
         $("settings-note").textContent =
@@ -1011,6 +1232,16 @@ $("settings-save").onclick = async () => {
       }
     } else {
       $("settings-note").classList.add("hidden");
+    }
+    // What was persisted becomes the new baseline — for the preset re-index
+    // badges and for the next save's comparison alike. Without this, saving the
+    // same form twice re-announced (and re-prompted for) a re-index that had
+    // already been done.
+    if (res.config) {
+      loadedConfig = res.config;
+      loadedEmbeddingModel = res.config.embedding_model;
+      loadedEmbeddingProvider = String(res.config.embedding_provider || "gemini").toLowerCase();
+      renderPresets();
     }
     await refreshHybridToggle();
     toast("Settings saved — next ask will use the new config.");
