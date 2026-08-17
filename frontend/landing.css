@@ -250,8 +250,9 @@ section { padding: 88px 0; }
 
    Each label gets a rule the full width of its column: with four columns of
    ragged prose and no boxes, those rules are the only thing holding the row
-   on a grid. The label stays --text, not accent — lime is reserved for what
-   is live or selected, and none of this is either. */
+   on a grid. Labels take --primary-ink, the same theme-aware accent the
+   section numbers use — at this size the mono/uppercase register alone reads
+   as grey noise above the prose, and these four words are the page's index. */
 .stages { padding: 56px 0; border-bottom: 1px solid var(--border); }
 
 .stage-notes {
@@ -265,7 +266,7 @@ section { padding: 88px 0; }
   font-size: var(--text-micro);
   letter-spacing: var(--tracking-telemetry);
   text-transform: uppercase;
-  color: var(--text);
+  color: var(--primary-ink);
   padding-bottom: 12px;
   border-bottom: 1px solid var(--border);
 }
