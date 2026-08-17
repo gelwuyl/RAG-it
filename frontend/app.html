@@ -26,7 +26,7 @@
         }
       })();
     </script>
-    <link rel="stylesheet" href="/styles.css?v=26" />
+    <link rel="stylesheet" href="/styles.css?v=27" />
     <script>
       // Boot diagnostics: collect load/runtime errors so a broken app.js
       // shows a visible message instead of a silently dead UI.
@@ -75,11 +75,11 @@
              the controls it belongs with. Inside this cluster it wraps
              right-aligned instead, staying beside Settings at every width. -->
         <div class="topbar-right">
-          <!-- Keyword fusion used to have a switch here. It is now simply ON —
-               it is not a preference a visitor can reason about, it costs no
-               model call, and as a topbar toggle it was dead chrome for guests,
-               who cannot change deployment-wide config. Still a field in
-               Settings -> Advanced. See config.yaml.
+          <!-- Keyword fusion used to have a switch here, and then a field in
+               Settings. It has neither now: it is unconditional. Not a preference
+               a visitor can reason about, no model call to trade away, and as a
+               topbar toggle it was dead chrome for the guests who cannot change
+               deployment-wide config at all. See config.py's load_config.
 
                The remaining switch label is a glossary TERM, not text. Its
                explanation used to live in a `title` attribute on the container,
@@ -445,16 +445,12 @@
                  here with the SAME id="set-reranker", which is invalid HTML:
                  getElementById returns only the first match, so the lower
                  control was dead and changing it did nothing. -->
-            <div class="field">
-              <label for="set-hybrid-search">Keyword fusion (BM25)</label>
-              <select id="set-hybrid-search">
-                <option value="false">Off</option>
-                <option value="true">On</option>
-              </select>
-              <span class="field-hint">Blends BM25 keyword scores with vector
-                similarity — better on exact names, codes and part numbers. Costs no
-                extra model call.</span>
-            </div>
+            <!-- Keyword fusion has no field here. It is unconditional: BM25
+                 keyword scores are always fused into the vector ranking by RRF,
+                 which costs no model call and is what makes exact strings — part
+                 numbers, form codes — rank as well as paraphrases. Nothing reads
+                 a stored value for it any more, so a control would be theatre.
+                 See config.py's load_config. -->
           </fieldset>
 
           <fieldset>
@@ -539,6 +535,6 @@
       </div>
     </div>
 
-    <script type="module" src="/app.js?v=32"></script>
+    <script type="module" src="/app.js?v=33"></script>
   </body>
 </html>

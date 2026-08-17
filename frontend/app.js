@@ -1068,8 +1068,7 @@ function setSettingsReadOnly(readOnly) {
 // no key configured — so a card called "Fast" has no business deciding them.
 const PRESET_KEYS = [
   "chunk_size", "chunk_overlap", "splitter", "top_k", "candidate_k",
-  "similarity_threshold", "hybrid_search", "reranker", "query_rewrite",
-  "temperature",
+  "similarity_threshold", "reranker", "query_rewrite", "temperature",
 ];
 
 // Keys whose change invalidates existing chunks — the same set the backend uses
@@ -1086,7 +1085,7 @@ const PRESETS = [
     values: {
       chunk_size: 512, chunk_overlap: 75, splitter: "recursive",
       top_k: 3, candidate_k: 10, similarity_threshold: 0.0,
-      hybrid_search: true, reranker: false, query_rewrite: false, temperature: 0.0,
+      reranker: false, query_rewrite: false, temperature: 0.0,
     },
   },
   {
@@ -1096,7 +1095,7 @@ const PRESETS = [
     values: {
       chunk_size: 512, chunk_overlap: 75, splitter: "recursive",
       top_k: 4, candidate_k: 20, similarity_threshold: 0.0,
-      hybrid_search: true, reranker: false, query_rewrite: true, temperature: 0.0,
+      reranker: false, query_rewrite: true, temperature: 0.0,
     },
   },
   {
@@ -1106,7 +1105,7 @@ const PRESETS = [
     values: {
       chunk_size: 384, chunk_overlap: 96, splitter: "recursive",
       top_k: 6, candidate_k: 40, similarity_threshold: 0.0,
-      hybrid_search: true, reranker: true, query_rewrite: true, temperature: 0.0,
+      reranker: true, query_rewrite: true, temperature: 0.0,
     },
   },
   {
@@ -1116,7 +1115,7 @@ const PRESETS = [
     values: {
       chunk_size: 768, chunk_overlap: 64, splitter: "recursive",
       top_k: 3, candidate_k: 8, similarity_threshold: 0.0,
-      hybrid_search: true, reranker: false, query_rewrite: false, temperature: 0.0,
+      reranker: false, query_rewrite: false, temperature: 0.0,
     },
   },
 ];
@@ -1142,7 +1141,6 @@ function readPresetFieldsFromForm() {
     top_k: parseInt($("set-top-k").value, 10),
     candidate_k: parseInt($("set-candidate-k").value, 10),
     similarity_threshold: parseFloat($("set-sim-threshold").value),
-    hybrid_search: $("set-hybrid-search").value === "true",
     reranker: $("set-reranker").value === "true",
     query_rewrite: $("set-query-rewrite").value === "true",
     temperature: parseFloat($("set-temperature").value),
@@ -1196,7 +1194,6 @@ function applyPreset(id) {
   $("set-top-k").value = v.top_k;
   $("set-candidate-k").value = v.candidate_k;
   $("set-sim-threshold").value = v.similarity_threshold;
-  $("set-hybrid-search").value = String(v.hybrid_search);
   $("set-reranker").value = String(v.reranker);
   $("set-query-rewrite").value = String(v.query_rewrite);
   $("set-temperature").value = v.temperature;
@@ -1315,7 +1312,6 @@ async function loadSettingsIntoForm() {
     $("set-candidate-k").value = cfg.candidate_k;
     $("set-sim-threshold").value = cfg.similarity_threshold;
     $("set-reranker").value = String(cfg.reranker);
-    $("set-hybrid-search").value = String(cfg.hybrid_search);
     $("set-query-rewrite").value = String(cfg.query_rewrite);
     fillModelSelect("set-llm-model", models.chat, cfg.llm_model);
     $("set-temperature").value = cfg.temperature;
@@ -1424,8 +1420,7 @@ $("settings-save").onclick = async () => {
       candidate_k: parseInt($("set-candidate-k").value),
       similarity_threshold: parseFloat($("set-sim-threshold").value),
       reranker: $("set-reranker").value === "true",
-      hybrid_search: $("set-hybrid-search").value === "true",
-      query_rewrite: $("set-query-rewrite").value === "true",
+        query_rewrite: $("set-query-rewrite").value === "true",
       llm_model: $("set-llm-model").value,
       temperature: parseFloat($("set-temperature").value),
       embedding_model: $("set-embedding-model").value,

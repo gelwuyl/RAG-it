@@ -1025,18 +1025,10 @@ def eval_config():
     }
 
 
-@app.post("/api/eval/hybrid-search")
-def toggle_hybrid_search(_: User = Depends(require_account)):
-    """Toggle hybrid_search (KEYWORD/BM25 fusion) on/off. The config is
-    re-read every request, so the change takes effect on the next ask. This is
-    real vector+keyword fusion, NOT web search. Persisted to the DB (writable)
-    because config.yaml is read-only on Vercel serverless."""
-    from dataclasses import replace
-
-    cfg = load_config()
-    cfg = replace(cfg, hybrid_search=not cfg.hybrid_search)
-    save_config_override(cfg)
-    return {"hybrid_search": cfg.hybrid_search}
+# POST /api/eval/hybrid-search is gone. Keyword fusion is unconditional (see
+# config.py's load_config), so an endpoint that toggled it would write a value
+# nothing reads and report a change that did not happen. Retrieval behaviour is
+# still visible in GET /api/health, which reports the effective retrieval shape.
 
 
 @app.post("/api/eval/web-augmentation")
@@ -1075,7 +1067,8 @@ class ConfigUpdateIn(BaseModel):
     top_k: int | None = Field(default=None, ge=1, le=20)
     candidate_k: int | None = Field(default=None, ge=1, le=100)
     similarity_threshold: float | None = Field(default=None, ge=0.0, le=1.0)
-    hybrid_search: bool | None = None
+    # No hybrid_search: it is not configurable, so accepting it would be an API
+    # that silently ignores what it was sent.
     reranker: bool | None = None
     query_rewrite: bool | None = None
     llm_model: str | None = None

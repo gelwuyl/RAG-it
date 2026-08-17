@@ -39,20 +39,14 @@ query:
   query_rewrite: true
 retrieval:
   candidate_k: 20
-  # Keyword fusion is ON by default and is no longer a user-facing switch.
+  # NOTE: there is no `hybrid_search` key here on purpose.
   #
-  # It is not a preference a visitor can reason about — "should BM25 scores be
-  # fused into the vector ranking by RRF" is an implementation detail — and it
-  # was exposed as a topbar toggle that guests could not use anyway, since config
-  # is deployment-wide. Meanwhile the landing page advertised "hybrid retrieval,
-  # fused" while the shipped default did vector-only, so the app under-delivered
-  # its own headline.
-  #
+  # Keyword fusion is unconditional — see the comment in config.py's load_config.
   # It costs no model call (in-memory BM25 locally, stateless Postgres full-text
-  # search on Neon, RRF k=60 in Python either way) and it is what makes exact
-  # strings — part numbers, form codes, names — rank as well as paraphrases.
-  # Still tunable in Settings -> Advanced for anyone who wants vector-only.
-  hybrid_search: true
+  # search on Neon, RRF k=60 in Python either way), it is what makes exact strings
+  # like part numbers and form codes rank as well as paraphrases, and it is what
+  # the landing page has always advertised. Adding the key back here would have
+  # no effect: nothing reads it.
   reranker: false
   similarity_threshold: 0.0
   top_k: 4

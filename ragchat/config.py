@@ -435,9 +435,23 @@ def load_config() -> PipelineConfig:
         top_k=int(r.get("top_k", 4)),
         candidate_k=int(r.get("candidate_k", 20)),
         similarity_threshold=float(r.get("similarity_threshold", 0.0)),
-        # Fusion is the default pipeline, not an opt-in (see config.yaml): it
-        # costs no model call and the app's own headline claims hybrid retrieval.
-        hybrid_search=bool(r.get("hybrid_search", True)),
+        # NOT read from config — keyword fusion is unconditional.
+        #
+        # It was a setting, and that was wrong twice over. "Should BM25 scores be
+        # fused into the vector ranking by RRF" is not a question a user can
+        # answer, and it costs no model call, so there is nothing to trade. It is
+        # simply how retrieval works here — the landing page has always said so.
+        #
+        # Hardcoded rather than defaulted, because a default can be masked: the
+        # config_overrides DB row merges on top of config.yaml, so every
+        # environment that had ever saved Settings would have kept running
+        # vector-only until someone re-saved. Reading nothing is the only way the
+        # promise holds everywhere without a migration.
+        #
+        # The field stays on PipelineConfig: the pipeline reads it, and the unit
+        # tests still exercise both paths to prove fusion changes what it claims
+        # to change (tests/test_retrieval_fixes.py).
+        hybrid_search=True,
         reranker=bool(r.get("reranker", False)),
         query_rewrite=bool(q.get("query_rewrite", True)),
         llm_model=str(g.get("llm_model", settings.default_llm_model)),
@@ -465,7 +479,9 @@ def save_config_override(cfg: "PipelineConfig") -> None:
             "top_k": cfg.top_k,
             "candidate_k": cfg.candidate_k,
             "similarity_threshold": cfg.similarity_threshold,
-            "hybrid_search": cfg.hybrid_search,
+            # hybrid_search is deliberately NOT persisted. load_config() no longer
+            # reads it, so writing it would leave a value in the row that looks
+            # authoritative and does nothing.
             "reranker": cfg.reranker,
         },
         "query": {"query_rewrite": cfg.query_rewrite},
