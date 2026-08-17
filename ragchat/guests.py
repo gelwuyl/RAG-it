@@ -28,11 +28,21 @@ GUEST_PROVIDER = "guest"
 # from last activity, not creation, so someone mid-session is never wiped.
 GUEST_IDLE_TTL_SECONDS = 2 * 60 * 60  # 2 hours
 
-# What a guest may upload before being asked to sign in. Anonymous uploads are
-# billed to the deployment's embedding quota, so this is a cost control as much
-# as a product nudge.
+# What a guest may upload before being asked to sign in.
+#
+# This is now the ONLY thing bounding what an anonymous visitor can spend.
+# Embeddings run on a paid provider for guests and accounts alike: per-tier
+# models were considered and rejected, because vectors from different models
+# are not comparable, so a promoted guest workspace would go silent at exactly
+# the moment the app promises "your work comes with you".
+#
+# Guests stay cheap by construction even so. The demo corpus is vector-COPIED
+# rather than embedded, so a visitor who only reads costs nothing however many
+# arrive, and asking a question costs one query embedding. Only uploads spend
+# real money — and 2 MB is roughly a 100-page document, ample to try the app
+# with and a 2.5x tighter worst case than the 5 MB it replaces.
 GUEST_MAX_DOCUMENTS = 3
-GUEST_MAX_UPLOAD_BYTES = 5 * 1024 * 1024  # 5 MB total across all their uploads
+GUEST_MAX_UPLOAD_BYTES = 2 * 1024 * 1024  # 2 MB total across all their uploads
 
 # Writing last_seen_at on literally every request would add a DB write to every
 # call. Only refresh it when it is already this stale — reaping resolution does

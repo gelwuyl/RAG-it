@@ -336,9 +336,20 @@ def is_known_model(model: str, kind: str, provider: str | None = None) -> bool:
         # nothing about the embedding.
         if any(same_embedding_model(model, m) for m in embedding_models_for(check_provider)):
             return True
-        if same_embedding_model(model, settings.default_embedding_model):
+        # The deployment-default escape hatch exists so a discovery miss cannot
+        # reject a model the provider will still serve — but it must be SCOPED
+        # to the provider that default belongs to. Unscoped, it accepted any
+        # provider+model pairing as soon as the default belonged to the other
+        # provider: with the default now qwen/qwen3-embedding-8b, saving
+        # provider=gemini with a Qwen id validated fine and then 404'd on every
+        # embedding call, which is exactly the near-miss this guard exists to
+        # catch (see CLAUDE.md, "Model ids must be exact").
+        if (
+            check_provider == settings.default_embedding_provider
+            and same_embedding_model(model, settings.default_embedding_model)
+        ):
             return True
-        if any(same_embedding_model(model, m) for m in _PROVIDER_DEFAULT_MODEL.values()):
+        if same_embedding_model(model, _PROVIDER_DEFAULT_MODEL.get(check_provider, "")):
             return True
         return False
 

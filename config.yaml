@@ -3,11 +3,26 @@ chunking:
   chunk_size: 512
   splitter: recursive
 embedding:
-  # Google gemini-embedding-001, requested at 768-dim via the OpenAI-compatible
-  # endpoint (see ragchat/embeddings.py dimensions=768). 768-dim keeps it UNDER
-  # pgvector's 2000-dim HNSW index ceiling (so ANN indexing works on Neon).
-  # text-embedding-004/005 do NOT exist on this proxy; only gemini-embedding-* do.
-  model: models/gemini-embedding-001
+  # Qwen3 Embedding 8B via OpenRouter, requested at 768-dim (see
+  # ragchat/embeddings.py dimensions=768). 768-dim keeps it UNDER pgvector's
+  # 2000-dim HNSW index ceiling, so ANN indexing works on Neon.
+  #
+  # Chosen over Google's gemini-embedding-001 on SUSTAINED throughput, which is
+  # what governs whether a document finishes indexing at all. Measured live:
+  #
+  #   gemini (free tier)  ~100 chunks/minute   hard quota ceiling
+  #   openrouter          384 chunks in 12.5s  (30.6/sec, no throttling)
+  #
+  # Burst latency is near-identical (1.66s vs 1.47s per 16 chunks); the gap is
+  # entirely quota. Gemini's free tier counts each TEXT against its 100/minute
+  # limit, not each HTTP call, so batching cannot work around it.
+  #
+  # ONE model for guests and accounts alike. Per-tier models were considered and
+  # rejected: vectors from different models are not comparable, so a promoted
+  # guest workspace would go silent at exactly the moment the app promises
+  # "your work comes with you". Guest cost is bounded by the caps in
+  # ragchat/guests.py instead.
+  model: qwen/qwen3-embedding-8b
 generation:
   # Gemma 4 26B instruct, served by Google AI Studio's OpenAI-compatible
   # endpoint. Used for generation AND the eval LLM-as-judge. The proxy exposes
