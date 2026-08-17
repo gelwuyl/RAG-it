@@ -87,3 +87,24 @@ def prune_chunks(
     stale_fingerprints: set[str] | None = None,
 ) -> int:
     return _impl().prune_chunks(user_id, valid_doc_ids, stale_fingerprints)
+
+
+def reassign_user_chunks(old_user_id: str, new_user_id: str) -> int:
+    """Move every chunk owned by `old_user_id` to `new_user_id`.
+
+    Used when a guest signs in: their vectors follow them into the permanent
+    account instead of being re-embedded, so promotion costs no API calls.
+    """
+    return _impl().reassign_user_chunks(old_user_id, new_user_id)
+
+
+def copy_user_chunks(
+    src_user_id: str, src_doc_id: str, dst_user_id: str, dst_doc_id: str
+) -> int:
+    """Duplicate one document's chunks to another user, vectors and all.
+
+    Lets the demo corpus be embedded ONCE under a template account and handed to
+    each new guest as a pure database copy — otherwise every anonymous page load
+    would spend embedding quota and add latency to first paint.
+    """
+    return _impl().copy_user_chunks(src_user_id, src_doc_id, dst_user_id, dst_doc_id)

@@ -258,3 +258,74 @@ def _flat_lookup(flat, cid, idx):
         if row[0] == cid:
             return row[idx]
     return None
+
+
+def reassign_user_chunks(old_user_id: str, new_user_id: str) -> int:
+    """Move a user's vectors by RENAMING their collections.
+
+    Chroma encodes the owner in the collection name rather than a column, so
+    there is no per-row user field to update. Renaming keeps the embeddings
+    byte-for-byte and costs no API calls (guest -> signed-in promotion).
+    """
+    client = get_client()
+    old_prefix = _user_collection_prefix(old_user_id)
+    new_prefix = _user_collection_prefix(new_user_id)
+    moved = 0
+    for col in client.list_collections():
+        name = col.name if hasattr(col, "name") else str(col)
+        if not name.startswith(old_prefix):
+            continue
+        client.get_collection(name).modify(name=new_prefix + name[len(old_prefix):])
+        moved += 1
+    # In-memory BM25 caches are keyed by collection name and are per-instance
+    # scratch; drop them so the renamed collections rebuild lazily.
+    for cache in (_BM25_DOCS, _BM25_FLAT, _BM25_OBJ):
+        cache.clear()
+    return moved
+
+
+def copy_user_chunks(
+    src_user_id: str, src_doc_id: str, dst_user_id: str, dst_doc_id: str
+) -> int:
+    """Copy one document's chunks (with embeddings) into another user's space.
+
+    Used to hand each new guest a private copy of the pre-embedded demo corpus
+    without spending embedding quota on every anonymous page load.
+    """
+    client = get_client()
+    src_prefix = _user_collection_prefix(src_user_id)
+    copied = 0
+    for col in client.list_collections():
+        name = col.name if hasattr(col, "name") else str(col)
+        if not name.startswith(src_prefix):
+            continue
+        model_slug = name[len(src_prefix):]
+        src_col = client.get_collection(name)
+        got = src_col.get(
+            where={"doc_id": src_doc_id},
+            include=["documents", "metadatas", "embeddings"],
+        )
+        docs = got.get("documents") or []
+        if not docs:
+            continue
+        metas = got.get("metadatas") or []
+        embs = got.get("embeddings")
+        if embs is None or len(embs) == 0:
+            continue  # nothing to copy without vectors; re-embedding is the caller's job
+        dst_col = get_client().get_or_create_collection(
+            name=f"{_user_collection_prefix(dst_user_id)}{model_slug}",
+            metadata={"hnsw:space": "cosine"},
+        )
+        new_metas = []
+        for m in metas:
+            m = dict(m or {})
+            m["doc_id"] = dst_doc_id  # retarget, keep title/ref/fingerprint/index
+            new_metas.append(m)
+        dst_col.add(
+            ids=[f"{dst_doc_id}:{i}" for i in range(len(docs))],
+            documents=list(docs),
+            embeddings=[list(e) for e in embs],
+            metadatas=new_metas,
+        )
+        copied += len(docs)
+    return copied

@@ -55,6 +55,13 @@ def get_current_user(request: Request, db: Session = Depends(get_session)) -> Us
     user = db.get(User, uid)
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
+    # Mark activity here rather than on page load alone: guests are reaped on
+    # idle time, and someone who keeps a tab open for hours without reloading is
+    # still actively using the app. guests.touch() throttles the write, so this
+    # costs at most one UPDATE every few minutes per session.
+    from . import guests
+
+    guests.touch(db, user)
     return user
 
 

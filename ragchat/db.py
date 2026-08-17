@@ -43,12 +43,16 @@ def new_id() -> str:
 class User(Base):
     __tablename__ = "users"
     id = Column(String, primary_key=True, default=new_id)
-    provider = Column(String, default="password")  # password | google
+    provider = Column(String, default="password")  # password | google | guest
     sub = Column(String)  # OAuth subject id or username
     email = Column(String)
     name = Column(String)
     password_hash = Column(String, nullable=True)
     created_at = Column(Float, default=now)
+    # Last time this account was seen on a request. Only guests are reaped on
+    # it, but it is written for everyone so the column never needs backfilling.
+    # _reconcile_columns() adds it to databases created before it existed.
+    last_seen_at = Column(Float, default=now)
     documents = relationship("Document", back_populates="user")
     folder_sources = relationship("FolderSource", back_populates="user")
     conversations = relationship("Conversation", back_populates="user")
@@ -66,6 +70,15 @@ class Document(Base):
     status = Column(String, default="pending")  # pending | indexing | ready | failed
     error = Column(Text, nullable=True)
     n_chunks = Column(Integer, default=0)
+    # Source size in bytes. Used to enforce the guest upload allowance; nullable
+    # because documents created before this column existed have no recorded size
+    # (treated as 0, which only ever under-counts an old row).
+    size_bytes = Column(Integer, default=0)
+    # Seeded demo content, handed to every guest so the app is not empty on
+    # arrival. Excluded from the guest upload allowance — the corpus is supplied
+    # BY the app, so counting it against the visitor's quota would leave them
+    # almost no room to try their own files, which is the point of the demo.
+    is_demo = Column(Boolean, default=False)
     created_at = Column(Float, default=now)
     user = relationship("User", back_populates="documents")
 

@@ -418,3 +418,47 @@ def _rrf_fuse(vector_chunks: list[dict], fts_rows: list, n_results: int) -> list
 
     ranked = sorted(fused.values(), key=lambda e: e["score"], reverse=True)
     return [e["chunk"] for e in ranked[: max(n_results, 1)]]
+
+
+def reassign_user_chunks(old_user_id: str, new_user_id: str) -> int:
+    """Re-point every chunk row from one owner to another (guest -> account)."""
+    eng = _get_engine()
+    with eng.begin() as conn:
+        _ensure_table(conn)
+        res = conn.execute(
+            text("UPDATE chunks SET user_id = :new WHERE user_id = :old"),
+            {"new": new_user_id, "old": old_user_id},
+        )
+        return int(res.rowcount or 0)
+
+
+def copy_user_chunks(
+    src_user_id: str, src_doc_id: str, dst_user_id: str, dst_doc_id: str
+) -> int:
+    """Copy one document's chunks (embeddings included) to another user.
+
+    A fresh `id` is generated per row because it is the primary key; everything
+    else, crucially the embedding and the fingerprint, is carried across
+    verbatim so the copy is retrievable exactly like the original.
+    """
+    eng = _get_engine()
+    with eng.begin() as conn:
+        _ensure_table(conn)
+        res = conn.execute(
+            text(
+                """
+                INSERT INTO chunks
+                    (id, user_id, embedding_model, doc_id, title, fingerprint,
+                     chunk_index, ref, text, embedding)
+                SELECT gen_random_uuid()::text, :dst_user, embedding_model,
+                       :dst_doc, title, fingerprint, chunk_index, ref, text, embedding
+                FROM chunks
+                WHERE user_id = :src_user AND doc_id = :src_doc
+                """
+            ),
+            {
+                "dst_user": dst_user_id, "dst_doc": dst_doc_id,
+                "src_user": src_user_id, "src_doc": src_doc_id,
+            },
+        )
+        return int(res.rowcount or 0)

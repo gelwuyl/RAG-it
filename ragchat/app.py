@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from . import auth as authn
+from . import guests
 from .config import (
     CONFIG_PATH,
     UPLOAD_DIR,
@@ -208,15 +209,26 @@ class LoginIn(RegisterIn):
 def auth_status(request: Request, db: Session = Depends(get_session)):
     uid = authn.decode_session(request.cookies.get(authn.SESSION_COOKIE, ""))
     user = get_user(db, uid) if uid else None
+    if user is not None:
+        guests.touch(db, user)
     return {
         "authenticated": bool(user),
         "user": {"id": user.id, "name": user.name, "email": user.email} if user else None,
         "google_oauth": authn.oauth_configured(),
+        # Lets the UI show a "Guest — sign in to keep your files" state and the
+        # remaining allowance, rather than presenting a throwaway workspace as
+        # if it were permanent.
+        "is_guest": guests.is_guest(user),
+        "guest_limits": {
+            "max_documents": guests.GUEST_MAX_DOCUMENTS,
+            "max_upload_bytes": guests.GUEST_MAX_UPLOAD_BYTES,
+            "idle_ttl_seconds": guests.GUEST_IDLE_TTL_SECONDS,
+        } if guests.is_guest(user) else None,
     }
 
 
 @app.post("/api/auth/register")
-def register(body: RegisterIn, response: Response, db: Session = Depends(get_session)):
+def register(body: RegisterIn, request: Request, response: Response, db: Session = Depends(get_session)):
     exists = (
         db.query(User)
         .filter(User.provider == "password", User.sub == body.username)
@@ -225,16 +237,35 @@ def register(body: RegisterIn, response: Response, db: Session = Depends(get_ses
     if exists:
         raise HTTPException(status_code=409, detail="Username already taken")
     user, _err = authn.find_or_create_password_user(db, body.username, body.password)
+    _promote_prior_guest(request, db, user)
     response.set_cookie(authn.SESSION_COOKIE, authn.encode_session(user.id), httponly=True)
     return {"id": user.id, "name": user.name}
 
 
+def _promote_prior_guest(request: Request, db: Session, target: User) -> None:
+    """Hand any in-progress guest workspace to the account just signed into.
+
+    Applies to every sign-in path, not just Google: a visitor who uploads as a
+    guest and then creates a local account should keep their work for the same
+    reason. Never blocks sign-in — on failure the guest data is simply left to
+    its normal idle reap.
+    """
+    prior_uid = authn.decode_session(request.cookies.get(authn.SESSION_COOKIE, ""))
+    prior = get_user(db, prior_uid) if prior_uid else None
+    if guests.is_guest(prior) and prior.id != target.id:
+        try:
+            guests.promote_guest(db, prior, target)
+        except Exception:
+            db.rollback()
+
+
 @app.post("/api/auth/login")
-def login(body: LoginIn, response: Response, db: Session = Depends(get_session)):
+def login(body: LoginIn, request: Request, response: Response, db: Session = Depends(get_session)):
     try:
         user, _err = authn.find_or_create_password_user(db, body.username, body.password)
     except ValueError:
         raise HTTPException(status_code=401, detail="Invalid username or password")
+    _promote_prior_guest(request, db, user)
     response.set_cookie(authn.SESSION_COOKIE, authn.encode_session(user.id), httponly=True)
     return {"id": user.id, "name": user.name}
 
@@ -294,10 +325,63 @@ async def google_callback(request: Request, db: Session = Depends(get_session)):
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Google OAuth exchange failed: {exc}")
     user = authn.find_or_create_google_user(db, info)
+    # The session cookie still identifies whoever was here before the redirect.
+    # If that was a guest mid-session, their work is promoted rather than
+    # abandoned — trying the app then signing in should not cost you your files.
+    _promote_prior_guest(request, db, user)
+
     resp = RedirectResponse("/")
     resp.set_cookie(authn.SESSION_COOKIE, authn.encode_session(user.id), httponly=True)
     resp.delete_cookie("oauth_state")
     return resp
+
+
+@app.post("/api/auth/guest-login")
+def guest_login(request: Request, response: Response, db: Session = Depends(get_session)):
+    """Provision a private, throwaway workspace for a visitor who has not signed in.
+
+    Each caller gets their OWN account. The previous behaviour signed everyone
+    into one shared `local` account, which meant strangers could read and delete
+    each other's uploads — per-user scoping is only as good as the identity
+    behind it. Reuses the existing guest session if the browser already has one,
+    so a reload does not strand the last workspace.
+    """
+    uid = authn.decode_session(request.cookies.get(authn.SESSION_COOKIE, ""))
+    existing = get_user(db, uid) if uid else None
+    if guests.is_guest(existing):
+        guests.touch(db, existing)
+        return {"id": existing.id, "name": existing.name, "guest": True}
+
+    guest = guests.create_guest(db)
+    try:
+        guests.seed_demo_corpus(db, guest)
+    except Exception:
+        # An empty workspace is a worse demo but still a working one.
+        db.rollback()
+    response.set_cookie(authn.SESSION_COOKIE, authn.encode_session(guest.id), httponly=True)
+    return {"id": guest.id, "name": guest.name, "guest": True}
+
+
+@app.delete("/api/auth/account")
+def delete_account(
+    response: Response,
+    user: User = Depends(authn.get_current_user),
+    db: Session = Depends(get_session),
+):
+    """Delete the signed-in account and everything it owns.
+
+    Matters once real people's email addresses are stored: "delete my data" was
+    previously a manual database operation. Shares purge_user_data() with guest
+    reaping so neither path can forget a table.
+    """
+    if user.provider == "password" and user.sub == LOCAL_USERNAME:
+        raise HTTPException(
+            status_code=400,
+            detail="The built-in local account cannot be deleted.",
+        )
+    summary = guests.purge_user_data(db, user, drop_user=True)
+    response.delete_cookie(authn.SESSION_COOKIE)
+    return {"deleted": True, **summary}
 
 
 # ---------- sources ----------
@@ -343,6 +427,12 @@ async def upload_document(
     data = await file.read()
     if not data:
         raise HTTPException(status_code=400, detail="Empty file")
+    # Guests spend the deployment's embedding quota, so their workspace is
+    # capped. Checked BEFORE any parsing or embedding so a rejected upload costs
+    # nothing. Signed-in accounts are unaffected.
+    denied = guests.upload_allowance(db, user, len(data))
+    if denied:
+        raise HTTPException(status_code=422, detail=denied)
     try:
         text = load_bytes(file.filename or "document", data)
     except ValueError as exc:
@@ -355,6 +445,7 @@ async def upload_document(
         source_type="upload",
         title=Path(file.filename or "document").name,
         content_hash=_content_hash(data),
+        size_bytes=len(data),
     )
     db.add(doc)
     db.commit()
