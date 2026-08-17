@@ -26,7 +26,7 @@
         }
       })();
     </script>
-    <link rel="stylesheet" href="/styles.css?v=23" />
+    <link rel="stylesheet" href="/styles.css?v=25" />
     <script>
       // Boot diagnostics: collect load/runtime errors so a broken app.js
       // shows a visible message instead of a silently dead UI.
@@ -75,19 +75,18 @@
              the controls it belongs with. Inside this cluster it wraps
              right-aligned instead, staying beside Settings at every width. -->
         <div class="topbar-right">
-          <!-- The two switch labels are glossary TERMS, not text. Their
-               explanations used to live in `title` attributes on the container,
-               which do not exist on touch — the definition of "Keyword fusion"
-               was unreachable for every phone visitor (PRODUCT_UX_PLAN.md §5).
-               The toggles keep an aria-label so the control is still named
-               without re-introducing a hover-only tooltip. -->
+          <!-- Keyword fusion used to have a switch here. It is now simply ON —
+               it is not a preference a visitor can reason about, it costs no
+               model call, and as a topbar toggle it was dead chrome for guests,
+               who cannot change deployment-wide config. Still a field in
+               Settings -> Advanced. See config.yaml.
+
+               The remaining switch label is a glossary TERM, not text. Its
+               explanation used to live in a `title` attribute on the container,
+               which does not exist on touch (PRODUCT_UX_PLAN.md §5). The toggle
+               keeps an aria-label so the control is still named without
+               re-introducing a hover-only tooltip. -->
           <div class="topbar-actions">
-            <div class="switch">
-              <button class="switch-label term" type="button" data-term="keyword-fusion"
-                aria-expanded="false">Keyword fusion</button>
-              <button id="hybrid-toggle" class="switch-btn" type="button"
-                aria-label="Toggle keyword fusion">Off</button>
-            </div>
             <div class="switch">
               <button class="switch-label term" type="button" data-term="web-fallback"
                 aria-expanded="false">Web fallback</button>
@@ -208,7 +207,7 @@
         </aside>
 
         <!-- Center: chat -->
-        <main class="pane chat-pane">
+        <main class="pane chat-pane" id="chat-pane">
           <div class="pane-head">
             <h2 class="pane-title">Chat</h2>
             <span id="chat-title" class="chat-title"></span>
@@ -243,6 +242,14 @@
               aria-expanded="true" title="Show or hide the evaluation scorecard">⌃</button>
           </div>
           <div class="pane-scroll">
+            <!-- Mobile only (plan §9): benchmark runs are a desktop operation.
+                 The run is client-driven in slices and takes several minutes with
+                 the tab held open — starting one on a phone is a promise the
+                 device cannot keep. The last run's scorecard still renders here,
+                 read-only, which is the part worth carrying in a pocket. -->
+            <p class="eval-desktop-note">Benchmark runs are desktop-only — a run
+              takes several minutes and needs its tab held open. The last run’s
+              scores are shown here.</p>
             <div id="eval-status" class="eval-status muted small"></div>
             <div id="eval-scorecard" class="eval-scorecard"></div>
             <div id="eval-questions" class="eval-questions"></div>
@@ -293,6 +300,41 @@
           role="separator" aria-orientation="vertical" tabindex="0"
           aria-label="Resize the Evaluation column"></div>
       </div>
+
+      <!-- Mobile tab bar (PRODUCT_UX_PLAN.md §9). Below 768px the panes stop
+           being a stacked scroll and become four tabbed views, one at a time,
+           with the conversation first — the phone is a reader, not a workbench.
+           Hidden entirely above that width, where all four are visible at once
+           and a tab bar would be a control for a problem that does not exist.
+
+           Excerpt is deliberately NOT a tab: it is the payoff for tapping a
+           citation, so it opens as a sheet over the conversation it belongs to
+           and closes back to it. A fifth tab would make the reader navigate away
+           from the answer to read the passage that answer came from. -->
+      <nav id="tabbar" class="tabbar" role="tablist" aria-label="Workspace sections">
+        <button class="tab" type="button" role="tab" data-tab="chat"
+          aria-selected="true" aria-controls="chat-pane">
+          <span class="tab-icon" aria-hidden="true">◈</span>
+          <span class="tab-label">Chat</span>
+        </button>
+        <button class="tab" type="button" role="tab" data-tab="sources"
+          aria-selected="false" aria-controls="sources-pane">
+          <span class="tab-icon" aria-hidden="true">◇</span>
+          <span class="tab-label">Sources</span>
+          <span id="tab-count-sources" class="tab-count hidden">0</span>
+        </button>
+        <button class="tab" type="button" role="tab" data-tab="chats"
+          aria-selected="false" aria-controls="chats-pane">
+          <span class="tab-icon" aria-hidden="true">☰</span>
+          <span class="tab-label">Chats</span>
+          <span id="tab-count-chats" class="tab-count hidden">0</span>
+        </button>
+        <button class="tab" type="button" role="tab" data-tab="eval"
+          aria-selected="false" aria-controls="eval-pane">
+          <span class="tab-icon" aria-hidden="true">◎</span>
+          <span class="tab-label">Eval</span>
+        </button>
+      </nav>
 
     </div>
 
@@ -494,6 +536,6 @@
       </div>
     </div>
 
-    <script type="module" src="/app.js?v=30"></script>
+    <script type="module" src="/app.js?v=31"></script>
   </body>
 </html>

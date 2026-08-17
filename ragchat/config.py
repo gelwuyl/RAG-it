@@ -435,7 +435,9 @@ def load_config() -> PipelineConfig:
         top_k=int(r.get("top_k", 4)),
         candidate_k=int(r.get("candidate_k", 20)),
         similarity_threshold=float(r.get("similarity_threshold", 0.0)),
-        hybrid_search=bool(r.get("hybrid_search", False)),
+        # Fusion is the default pipeline, not an opt-in (see config.yaml): it
+        # costs no model call and the app's own headline claims hybrid retrieval.
+        hybrid_search=bool(r.get("hybrid_search", True)),
         reranker=bool(r.get("reranker", False)),
         query_rewrite=bool(q.get("query_rewrite", True)),
         llm_model=str(g.get("llm_model", settings.default_llm_model)),

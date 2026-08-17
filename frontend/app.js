@@ -200,12 +200,6 @@ function paintReadoutNudge() {
 // attribute, which does not exist on touch. A tap target with a real popover
 // works for everyone; the trade is one shared element and a click-away handler.
 const GLOSSARY = {
-  "keyword-fusion": [
-    "Keyword fusion",
-    "Blends BM25 keyword scores with vector similarity, so exact strings — part " +
-    "numbers, form codes, names — rank as well as paraphrases do. It searches " +
-    "your documents only. It never adds text from the web.",
-  ],
   "web-fallback": [
     "Web fallback",
     "When on, web results are appended as labelled [web] chunks — but only when " +
@@ -404,7 +398,7 @@ async function initAuth() {
   }
   showApp();
   try {
-    await Promise.all([refreshSources(), refreshChats(), refreshHybridToggle(), loadEval()]);
+    await Promise.all([refreshSources(), refreshChats(), refreshLiveConfig(), loadEval()]);
   } catch (e) {
     console.error("boot fetch failed:", e);
   }
@@ -471,7 +465,6 @@ const GUEST_LOCKED = {
   "eval-run-btn": "run the benchmark",
   "reindex-btn": "re-index every source",
   "add-folder-btn": "add a folder source",
-  "hybrid-toggle": "change keyword fusion",
   "web-toggle": "change the web fallback",
   "settings-save": "save tuning settings",
 };
@@ -868,6 +861,7 @@ async function refreshSources() {
   // A long job reports until it is actually finished, not until a toast fades.
   paintJobStatus(docs);
   paintBeats();
+  paintTabCounts();
   // Sources and chats load in parallel, so the empty conversation may have
   // been painted before the count was known. Repaint it — but only while it IS
   // the empty state, never over a real conversation.
@@ -995,47 +989,21 @@ $("add-folder-btn").onclick = async () => {
 
 /* ---------- settings ---------- */
 
-async function refreshHybridToggle() {
+// Reads the live pipeline config for the one value the UI needs outside the
+// Settings modal: the retrieval threshold marked on the per-answer meter. Read
+// rather than assumed, because config is hot-reloaded from the DB on every
+// request and a hardcoded copy would drift the moment anyone tunes it.
+//
+// This used to also paint the keyword-fusion switch. Fusion is now simply on
+// (config.yaml explains why), so there is no switch to paint.
+async function refreshLiveConfig() {
   try {
     const cfg = await api("/api/eval/config");
-    // Kept for the per-answer meter's threshold tick. Read from the live config
-    // rather than assumed: the config is hot-reloaded from the DB on every
-    // request, so a hardcoded value here would drift the moment anyone tunes it.
     state.simThreshold = cfg.similarity_threshold ?? 0;
-    const btn = $("hybrid-toggle");
-    if (cfg.hybrid_search) {
-      btn.textContent = "On";
-      btn.classList.add("on");
-    } else {
-      btn.textContent = "Off";
-      btn.classList.remove("on");
-    }
   } catch (e) {
-    console.error("hybrid toggle failed:", e);
+    console.error("live config read failed:", e);
   }
 }
-
-// Footer toggle controls real BM25 keyword fusion (vector + keyword RRF).
-// It is NOT web search — document grounding is unaffected. Web augmentation
-// is a separate, default-off fallback exposed elsewhere.
-$("hybrid-toggle").onclick = async () => {
-  if (guestBlocked("hybrid-toggle")) return;
-  try {
-    const r = await api("/api/eval/hybrid-search", { method: "POST" });
-    const btn = $("hybrid-toggle");
-    if (r.hybrid_search) {
-      btn.textContent = "On";
-      btn.classList.add("on");
-      toast("Keyword fusion ON — exact IDs/names surface better");
-    } else {
-      btn.textContent = "Off";
-      btn.classList.remove("on");
-      toast("Keyword fusion OFF — vector-only retrieval");
-    }
-  } catch (e) {
-    toast(e.message, true);
-  }
-};
 
 // Web augmentation fallback (DuckDuckGo [web] chunks only when documents don't answer).
 $("web-toggle").onclick = async () => {
@@ -1118,7 +1086,7 @@ const PRESETS = [
     values: {
       chunk_size: 512, chunk_overlap: 75, splitter: "recursive",
       top_k: 3, candidate_k: 10, similarity_threshold: 0.0,
-      hybrid_search: false, reranker: false, query_rewrite: false, temperature: 0.0,
+      hybrid_search: true, reranker: false, query_rewrite: false, temperature: 0.0,
     },
   },
   {
@@ -1128,13 +1096,13 @@ const PRESETS = [
     values: {
       chunk_size: 512, chunk_overlap: 75, splitter: "recursive",
       top_k: 4, candidate_k: 20, similarity_threshold: 0.0,
-      hybrid_search: false, reranker: false, query_rewrite: true, temperature: 0.0,
+      hybrid_search: true, reranker: false, query_rewrite: true, temperature: 0.0,
     },
   },
   {
     id: "accurate",
     name: "High accuracy",
-    desc: "Smaller chunks, a 40-wide pool, keyword fusion and LLM rerank. Two extra model calls per question, and slower.",
+    desc: "Smaller chunks, a 40-wide candidate pool and an LLM rerank pass. One extra model call per question, and slower.",
     values: {
       chunk_size: 384, chunk_overlap: 96, splitter: "recursive",
       top_k: 6, candidate_k: 40, similarity_threshold: 0.0,
@@ -1144,7 +1112,7 @@ const PRESETS = [
   {
     id: "low-cost",
     name: "Low cost",
-    desc: "Bigger chunks means roughly a third fewer embedding calls to index. BM25 carries the recall it loses, for free.",
+    desc: "Bigger chunks means roughly a third fewer embedding calls to index, and the smallest prompt per question.",
     values: {
       chunk_size: 768, chunk_overlap: 64, splitter: "recursive",
       top_k: 3, candidate_k: 8, similarity_threshold: 0.0,
@@ -1512,7 +1480,7 @@ $("settings-save").onclick = async () => {
       loadedEmbeddingProvider = String(res.config.embedding_provider || "gemini").toLowerCase();
       renderPresets();
     }
-    await refreshHybridToggle();
+    await refreshLiveConfig();
     toast("Settings saved — next ask will use the new config.");
   } catch (e) {
     toast("Save failed: " + e.message, true);
@@ -1644,6 +1612,7 @@ function renderChats() {
   const list = $("chat-list");
   const count = $("chat-count");
   if (count) count.textContent = String(state.chats.length);
+  paintTabCounts();
   const titleEl = $("chat-title");
   if (titleEl) {
     const open = state.chats.find((c) => c.id === state.currentChatId);
@@ -1992,10 +1961,10 @@ function showExcerpt(citation) {
   $("excerpt-title").textContent = citation.title;
   $("excerpt-ref").textContent = citation.ref || "";
   $("excerpt-text").textContent = citation.excerpt;
-  // On mobile the excerpt sits at the very bottom of the page — bring it up.
-  if (window.matchMedia("(max-width: 767px)").matches) {
-    $("excerpt-pane").scrollIntoView({ behavior: "smooth", block: "start" });
-  }
+  // On mobile the excerpt is a sheet over the conversation (plan §9), so the
+  // passage arrives on top of the answer that cited it rather than requiring a
+  // scroll — or, under the tabbed layout, a trip to another tab.
+  if (MOBILE.matches) $("excerpt-pane").classList.add("is-sheet");
 }
 
 $("excerpt-close").onclick = () => {
@@ -2004,6 +1973,7 @@ $("excerpt-close").onclick = () => {
   $("excerpt-title").textContent = "";
   $("excerpt-ref").textContent = "";
   document.querySelector(".excerpt-empty").classList.remove("hidden");
+  $("excerpt-pane").classList.remove("is-sheet");   // closes the mobile sheet
 };
 
 // ---------- evaluation tab (right) ----------
@@ -2289,12 +2259,76 @@ bindPaneToggle("sources-pane", "sources-toggle");
 // folded so Sources + Chat keep the room. Sources stays open — adding a source
 // is the first thing you do — but can be folded by hand on mobile.
 function applyBreakpointDefaults() {
-  setCollapsed("eval-pane", "eval-toggle", NARROW.matches);
+  // Not on mobile: there the panes are TABS, and a collapsed pane would open to
+  // nothing but its own heading. The tab bar is the show/hide control below 768px.
+  setCollapsed("eval-pane", "eval-toggle", NARROW.matches && !MOBILE.matches);
   if (!MOBILE.matches) setCollapsed("sources-pane", "sources-toggle", false);
+  else {
+    setCollapsed("sources-pane", "sources-toggle", false);
+    setCollapsed("eval-pane", "eval-toggle", false);
+  }
 }
 applyBreakpointDefaults();
 NARROW.addEventListener("change", applyBreakpointDefaults);
 MOBILE.addEventListener("change", applyBreakpointDefaults);
+
+// ---------- mobile tabs (PRODUCT_UX_PLAN.md §9) ----------
+//
+// Below 768px the panes stop being a stacked scroll and become four tabbed
+// views, one at a time, conversation first. The phone is a reader: the answer
+// should be on screen when you arrive, not three sections down.
+//
+// The excerpt is NOT one of the tabs. It opens as a sheet over the conversation
+// (showExcerpt) and closes back to it, because making the reader navigate away
+// from an answer to read the passage that answer came from is the wrong trade.
+const TABS = {
+  chat: ".chat-pane",
+  sources: ".sources-pane",
+  chats: ".chats-pane",
+  eval: ".eval-pane",
+};
+
+// Chat every load rather than the last tab used: arriving on the file list
+// because that is where you finished yesterday is not what a reader wants.
+let mobileTab = "chat";
+
+function applyMobileTab() {
+  const mobile = MOBILE.matches;
+  for (const [name, sel] of Object.entries(TABS)) {
+    document.querySelector(sel)?.classList.toggle("is-tab", mobile && name === mobileTab);
+  }
+  for (const btn of document.querySelectorAll(".tab")) {
+    btn.setAttribute("aria-selected", String(btn.dataset.tab === mobileTab));
+  }
+  // The pane you are looking at IS the active one here, so the accent follows the
+  // tab rather than the scroll position.
+  if (mobile) setActivePane(document.querySelector(TABS[mobileTab]));
+}
+
+function setMobileTab(name) {
+  if (!TABS[name]) return;
+  mobileTab = name;
+  applyMobileTab();
+}
+
+for (const btn of document.querySelectorAll(".tab")) {
+  btn.onclick = () => setMobileTab(btn.dataset.tab);
+}
+
+// Counts on the tabs, so switching away from Sources does not mean losing track
+// of what is in it. Called from the same refreshes that paint the pane heads.
+function paintTabCounts() {
+  const pairs = [
+    ["tab-count-sources", state.sourceCount],
+    ["tab-count-chats", state.chats.length],
+  ];
+  for (const [id, n] of pairs) {
+    const el = $(id);
+    if (!el) continue;
+    el.textContent = String(n);
+    el.classList.toggle("hidden", !n);
+  }
+}
 
 // ---------- active pane ----------
 //
@@ -2333,35 +2367,13 @@ for (const type of ["pointerdown", "focusin"]) {
   });
 }
 
-function markPaneByScroll() {
-  if (!MOBILE.matches) return;
-  // A line 30% down the VIEWPORT, not an offset from the topbar: on mobile the
-  // topbar scrolls away with the page, so its rect goes negative and a probe
-  // derived from it lands above every pane — which pinned the accent to the first
-  // section forever. 30% is below the sticky pane head and inside the content, so
-  // the accent moves when the section you are reading does, not when its heading
-  // first peeks in.
-  const probe = window.innerHeight * 0.3;
-  const hit = panes().find((p) => {
-    const r = p.getBoundingClientRect();
-    return r.top <= probe && r.bottom > probe;
-  });
-  if (hit) setActivePane(hit);
-}
-
-let scrollQueued = false;
-window.addEventListener("scroll", () => {
-  // rAF-coalesced: scroll fires far more often than the accent can meaningfully
-  // move, and this runs getBoundingClientRect over four panes.
-  if (scrollQueued) return;
-  scrollQueued = true;
-  requestAnimationFrame(() => { scrollQueued = false; markPaneByScroll(); });
-}, { passive: true });
-
-// Chat is the default on desktop: it is where the cursor goes and where the
+// Chat is the default on desktop too: it is where the cursor goes and where the
 // answer lands, so a title is lit from first paint rather than after a click.
+//
+// On mobile there is no scroll-position tracking to do — the tab bar decides
+// which pane is on screen, and applyMobileTab() sets the accent from it.
 function applyActivePaneDefault() {
-  if (MOBILE.matches) markPaneByScroll();
+  if (MOBILE.matches) applyMobileTab();
   else setActivePane(document.querySelector(".chat-pane"));
 }
 applyActivePaneDefault();
@@ -2539,7 +2551,6 @@ function paletteCommands() {
     { group: "Action", label: "New chat", run: clickThrough("new-chat-btn") },
     { group: "Action", label: "Open settings", run: () => openSettings() },
     { group: "Action", label: "Toggle theme (dark / light)", run: clickThrough("theme-toggle") },
-    { group: "Action", label: "Toggle keyword fusion", run: clickThrough("hybrid-toggle"), lock: "hybrid-toggle" },
     { group: "Action", label: "Toggle web fallback", run: clickThrough("web-toggle"), lock: "web-toggle" },
     { group: "Action", label: "Re-index all sources", run: clickThrough("reindex-btn"), lock: "reindex-btn" },
     { group: "Action", label: "Run benchmark", run: clickThrough("eval-run-btn"), lock: "eval-run-btn" },

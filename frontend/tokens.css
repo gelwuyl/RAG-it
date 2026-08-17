@@ -203,6 +203,10 @@
   --eval-w: 344px;
   --rail-w: 40px;
   --head-h: 46px;
+  /* Mobile tab bar (styles.css §9). Named here because the excerpt sheet is
+     positioned off it — the sheet has to sit ABOVE the tabs, and two files
+     agreeing on one number by coincidence is how that breaks. */
+  --tabbar-h: 52px;
 }
 
 /* ==========================================================================

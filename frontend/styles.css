@@ -1169,6 +1169,20 @@ input:disabled, textarea:disabled, select:disabled {
 }
 @keyframes job-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 
+/* ---------- mobile tab bar (PRODUCT_UX_PLAN.md §9) ----------
+   Hidden by default: above 768px all four panes are visible at once, so a tab bar
+   would be a control for a problem that does not exist. Everything that gives it
+   its shape lives in the mobile media query at the end of this file. */
+.tabbar { display: none; }
+/* Shown only on mobile, where the Run button is hidden — see plan §9. */
+.eval-desktop-note {
+  display: none;
+  font-size: var(--text-xs); line-height: 1.5; color: var(--muted);
+  background: var(--panel-sunken);
+  border: 1px solid var(--border); border-radius: var(--r-sm);
+  padding: 8px 10px;
+}
+
 /* ---------- toast ---------- */
 
 .toast {
@@ -1425,13 +1439,60 @@ fieldset legend {
 
 /* --- Mobile: one column, the page itself scrolls. --- */
 @media (max-width: 767px) {
-  body { height: auto; overflow-x: hidden; overflow-y: auto; }
+  /* The shell is a fixed-height app again, not a scrolling document. Under the
+     tabbed layout each pane scrolls its own content, so a scrolling PAGE on top
+     of that would give the reader two nested scrolls and a composer that walks
+     off the bottom of the screen. */
+  body { height: 100dvh; overflow: hidden; }
 
   .app-shell {
-    height: auto;
-    min-height: 100dvh;
-    grid-template-rows: auto auto auto;
-    overflow: visible;
+    height: 100dvh;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      "top"
+      "panes"
+      "tabs";
+    overflow: hidden;
+  }
+
+  /* ---------- tab bar ---------- */
+  .tabbar {
+    grid-area: tabs;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    background: var(--panel);
+    border-top: 1px solid var(--border);
+    /* Home-indicator gap on iOS: without it the last few pixels of the tab row
+       sit under the system bar and the tabs read as cut off. */
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .tab {
+    position: relative;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 3px; padding: 7px 4px 8px; min-height: var(--tabbar-h);
+    background: none; border: 0; cursor: pointer; color: var(--muted);
+    font: inherit;
+  }
+  .tab-icon { font-size: 16px; line-height: 1; }
+  .tab-label {
+    font-family: var(--font-mono); font-size: var(--text-nano);
+    letter-spacing: 0.06em; text-transform: uppercase;
+  }
+  /* Lime for the selected tab, the same meaning it carries on a pane title: this
+     is where you are. The 2px rule along the top edge is what makes it readable
+     at a glance without enlarging the label. */
+  .tab[aria-selected="true"] { color: var(--primary-ink); }
+  .tab[aria-selected="true"]::before {
+    content: ""; position: absolute; top: 0; left: 12px; right: 12px; height: 2px;
+    background: var(--primary); border-radius: var(--r-pill);
+  }
+  .tab-count {
+    position: absolute; top: 4px; right: 50%; transform: translateX(18px);
+    min-width: 16px; padding: 0 4px;
+    font-family: var(--font-mono); font-size: 10px; line-height: 16px;
+    text-align: center; color: var(--muted);
+    background: var(--panel-sunken); border: 1px solid var(--border);
+    border-radius: var(--r-pill);
   }
 
   /* THREE rows, not six.
@@ -1488,45 +1549,78 @@ fieldset legend {
   }
   .switch-btn { padding: 4px 8px; min-width: 40px; }
 
-  /* One column, so "contained in the chat column" is meaningless here —
-     everything is full width by definition. Order only: the excerpt follows
-     the conversation it belongs to, and Evaluation trails as reference. */
+  /* ONE PANE AT A TIME, chosen from the tab bar (PRODUCT_UX_PLAN.md §9).
+     Not a reflow of the desktop layout: three panes stacked into one endless
+     scroll made the phone a squeezed workbench, where reading an answer meant
+     scrolling past a file list and a conversation picker to reach it, and the
+     quality readout was somewhere below the fold. The phone is a reader.
+
+     The panes all occupy the same grid cell and only the selected one is
+     displayed, so each gets the full viewport minus the topbar and the tab bar,
+     and scrolls internally. The PAGE does not scroll at all here. */
   .panes {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto auto auto auto auto;
-    grid-template-areas:
-      "sources"
-      "chats"
-      "chat"
-      "excerpt"
-      "eval";
-    overflow: visible;
+    grid-template-rows: minmax(0, 1fr);
+    grid-template-areas: "pane";
+    overflow: hidden;
+    min-height: 0;
   }
-  /* Both pickers sit above the conversation, in the order you use them. The
-     rail is a horizontal-space device and has none of its meaning here. */
-  .chats-pane { border-right: none; }
+  .panes > .pane { grid-area: pane; display: none; overflow: hidden; }
+  .panes > .pane.is-tab { display: flex; }
+  .sources-pane, .chat-pane, .excerpt-pane, .chats-pane { border-right: none; }
+
+  /* Collapsing is a horizontal-space device with no meaning when a pane owns the
+     whole screen — the tab bar IS the show/hide control now. */
+  #sources-toggle, #eval-toggle, #chats-collapse, .chats-rail { display: none; }
   .chats-collapsed .chats-pane > .pane-head,
   .chats-collapsed .chats-pane > .pane-scroll { display: flex; }
-  .chats-collapsed .chats-rail { display: none; }
-  #chats-collapse { display: none; }
 
-  .pane { overflow: visible; }
-  .sources-pane, .chat-pane, .excerpt-pane { border-right: none; }
-  .sources-pane, .chats-pane, .eval-pane { border-bottom: 1px solid var(--border); }
-  .pane-head { position: sticky; top: 0; z-index: 5; }
-
-  /* Sources + Evaluation size to content (page scrolls); chat keeps an
-     internally scrolling message list so the composer stays reachable. */
-  .sources-pane .pane-scroll, .eval-pane .pane-scroll { overflow: visible; }
   .eval-pane { max-height: none; }
-  #sources-toggle { display: inline-flex; }
-
-  .chat-pane { height: 78dvh; min-height: 460px; overflow: hidden; }
   .messages { padding: 14px 12px; }
   .msg { max-width: 92%; }
-  .excerpt-pane { max-height: none; border-top: 1px solid var(--border); }
-  .excerpt-pane .pane-scroll { overflow: visible; }
+
+  /* ---------- what the phone deliberately does NOT carry (plan §9) ----------
+
+     "Available but demoted" is per-item maintenance: new chat, delete a chat,
+     delete a source, re-index one source. Those stay. What goes is the bulk and
+     tuning surface — a benchmark run, a folder scan, re-index everything, the
+     advanced fields — because each is a long-running operation aimed at a corpus,
+     not a question aimed at a document, and each was spending topbar rows on a
+     screen with none to spare.
+
+     Web fallback and Prune ghosts are the same call: deployment-wide config a
+     guest cannot change at all, and a decision no reader makes mid-answer. Both
+     remain on desktop; fusion is simply on everywhere now. */
+  .switch, .term-pair:has(#prune-btn) { display: none; }
+  #eval-run-btn { display: none; }
+  .eval-desktop-note { display: block; }
+  /* Folder sources need a server-side path — not something typed on a phone. */
+  .add-row:has(#folder-input) { display: none; }
+  .term-pair:has(#reindex-btn) { display: none; }
+  /* Which leaves the foot holding only the job status, and that hides itself when
+     nothing is running — so the empty strip goes too. */
+  .pane-foot:not(:has(#job-status:not(.hidden))) { display: none; }
+
+  /* Excerpt as a SHEET over the conversation, not a fifth tab: it is the payoff
+     for tapping a citation, and navigating away from the answer to read the
+     passage that answer came from is exactly the wrong trade. It sits above the
+     tab bar so the reader can still move on without closing it. */
+  .excerpt-pane {
+    position: fixed; left: 0; right: 0; z-index: 60;
+    bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px));
+    max-height: 62dvh;
+    display: none;
+    background: var(--panel);
+    border-top: 1px solid var(--border-strong);
+    border-radius: var(--r-lg) var(--r-lg) 0 0;
+    box-shadow: var(--shadow-lg);
+  }
+  .excerpt-pane.is-sheet { display: flex; }
+  .excerpt-pane .pane-scroll { overflow-y: auto; }
   .excerpt-ref { margin-left: 0; white-space: normal; }
+  /* The sheet is opened by a tap and has to be closeable the same way, so the
+     close button is not optional here the way it is beside a desktop column. */
+  #excerpt-close { display: inline-flex; }
 
   /* Touch-friendly targets — but sized by ROLE, not uniformly. Ask and Sign in
      are the two things a thumb reaches for and stay large; the topbar's
