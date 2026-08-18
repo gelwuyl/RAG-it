@@ -1,98 +1,227 @@
 # RAG-it
 
-A multi-user **Retrieval-Augmented Generation (RAG)** web app: chat with an LLM that answers **only from your own documents** (PDFs, web pages, Markdown/text) with citations, a tunable pipeline, and built-in evaluation.
+Ask questions about your own documents and get answers that cite the exact
+passage behind them. Upload PDFs, notes or reports; every claim points at the
+text it came from, so checking it takes one click.
 
-Deployed on **Vercel** (Python backend) with a **Neon Postgres + pgvector** database. Models are served through the class LLM proxy (OpenAI-compatible `/v1` API).
+**Live:** [rag-gel.vercel.app](https://rag-gel.vercel.app) ·
+[how it was built](https://rag-gel.vercel.app/built) ·
+[health](https://rag-gel.vercel.app/api/health)
+
+No sign-up needed — you get a private workspace immediately, and signing in
+later brings your work with you.
+
+---
+
+## The stack
+
+| Layer | Choice | What it does |
+|---|---|---|
+| **Frontend** | Vanilla JS + Vite, 3 pages | Landing (`/`), workspace (`/app`), build write-up (`/built`). No framework, no runtime dependencies. |
+| **Backend** | FastAPI, one Vercel function | Every route in a single serverless function. 60s ceiling, frozen the instant it responds. |
+| **App database** | Neon Postgres + SQLAlchemy | Users, documents, chats, messages, saved settings, benchmark runs. |
+| **Vector store** | pgvector in the same Neon database | One fixed `vector(768)` column shared by every model. Chroma swaps in for local dev behind one dispatch module. |
+| **Chunking** | Recursive splitter, 512 tokens, 75 overlap | Splits on paragraph → sentence → word. Size is in **tokens**, not characters. |
+| **Embeddings** | `qwen/qwen3-embedding-8b` (OpenRouter), 768-dim | Turns chunks and questions into vectors. Chosen on sustained throughput: 30/sec against Gemini's ~100/minute free-tier ceiling. |
+| **Question rewrite** | Generation model | Restates the question before searching, so "and the second one?" still retrieves. Reasoning traces are stripped first. |
+| **Retrieval** | Vector + keyword, fused by RRF (k=60) | Two searches at once. Postgres full-text on Neon, in-process BM25 on Chroma. Always on — not a setting. |
+| **Reranker** | Cohere `rerank-v3.5` (OpenRouter) | **One** call re-orders the whole candidate pool against the question. Not one call per passage. |
+| **Deep search** | Literal scan of stored document text | Reads every document word for word and returns every literal match. Per-question, never a saved setting. |
+| **Generation** | `models/gemini-3.5-flash-lite` (Google AI Studio) | Writes the answer from the retrieved passages, with inline citations. |
+| **Judges** | Same model, LLM-as-judge | Scores each answer for faithfulness and relevancy. A judge that fails reports `ungraded`, never `failed`. |
+| **Evaluation** | 56 golden questions over 27 documents | The scored result **ships with the app** — nobody runs a benchmark to see it. |
+| **CI gate** | GitHub Actions on push to main | Fails the build if retrieval regresses against a committed baseline. Passes loudly when a provider is down. |
+| **Auth** | Google OAuth + password fallback | Signed HTTP-only session cookie, plus a non-secret cookie so the page can paint identity before the server replies. |
+| **Guest workspaces** | Throwaway, 30-minute idle limit | Private per visitor. A scheduled job sweeps expired ones every 15 minutes. |
+
+---
 
 ## Architecture
 
 ```mermaid
-flowchart TD
-    U[Browser / Frontend: Vanilla JS + Vite] --> BE[FastAPI Backend: auth, upload, chat, config, eval]
+flowchart TB
+    subgraph client [" Browser "]
+        UI["Vanilla JS · 3 pages<br/>landing · workspace · build notes"]
+    end
 
-    BE -->|ingest| L[Loaders: PDF, HTML, text, URL]
-    L --> C[Chunking]
-    C --> E[Embeddings via proxy /v1/embeddings]
-    E --> V[("pgvector (Neon Postgres)")]
+    subgraph fn [" One Vercel function — FastAPI "]
+        API["Routes: auth · sources · chat · settings · eval"]
 
-    BE -->|query| Q[Question rewrite]
-    Q --> R[Retrieve: vector + BM25 fusion]
-    V --> R
-    R --> RR[Reranker]
-    RR --> G[Generation via proxy /v1/chat]
-    G --> EV[Evaluation: LLM-as-judge]
+        subgraph ingest [" Ingest — sliced across requests "]
+            LOAD["Load<br/>PDF · HTML · text · URL"]
+            CHUNK["Chunk<br/>512 tokens, 75 overlap"]
+            EMB["Embed<br/>768-dim"]
+            LOAD --> CHUNK --> EMB
+        end
 
-    BE --> AUTH[Authentication: password + Google OAuth]
-    BE --> DB[("Neon Postgres: users, documents, chats, config")]
-    PX[Class LLM proxy: OpenAI-compatible /v1] --> E
-    PX --> G
+        subgraph ask [" Ask "]
+            RW["Rewrite the question"]
+            RET["Retrieve<br/>vector + keyword, RRF"]
+            DEEP["Deep search<br/>literal scan · opt-in"]
+            RR["Rerank<br/>one call, whole pool"]
+            GEN["Generate<br/>answer + citations"]
+            JUDGE["Judge<br/>faithful? relevant?"]
+            RW --> RET --> RR --> GEN --> JUDGE
+            RW -.-> DEEP -.-> RR
+        end
+    end
+
+    subgraph neon [" Neon Postgres "]
+        VEC[("chunks<br/>vector(768) + full-text")]
+        APPDB[("users · documents · chats<br/>settings · benchmark runs")]
+    end
+
+    subgraph ext [" Model providers "]
+        OR["OpenRouter<br/>embeddings · reranker"]
+        GAI["Google AI Studio<br/>generation · judges"]
+    end
+
+    GH["GitHub Actions<br/>sweeps guests · gates retrieval"]
+
+    UI --> API
+    API --> ingest
+    API --> ask
+    EMB --> VEC
+    VEC --> RET
+    APPDB --> DEEP
+    API <--> APPDB
+    EMB -.-> OR
+    RR -.-> OR
+    RW -.-> GAI
+    GEN -.-> GAI
+    JUDGE -.-> GAI
+    GH -->|scheduled| API
 ```
 
-**Component notes**
+**The constraint that shapes it:** the function is frozen the instant it sends
+a response and has 60 seconds to work in. So long jobs are sliced across
+requests, nothing periodic runs inside the app, and every durable byte goes to
+Postgres. The [build write-up](https://rag-gel.vercel.app/built) covers why in
+full.
 
-- **Frontend** — Vanilla JS + Vite 3-pane UI (sources / chat / excerpt). No framework overhead; easy to maintain.
-- **Backend** — FastAPI (Python) on Vercel's uv runtime. Lightweight async REST API.
-- **Database** — Neon Postgres. Serverless; survives Vercel's read-only filesystem and redeploys.
-- **Vector DB** — pgvector inside Neon. One store, no separate vector service to run.
-- **Embeddings** — class proxy `/v1/embeddings` (`models/gemini-embedding-001`, 768-dim). One embedding model per deployment; OpenAI-compatible.
-- **Generation** — class proxy `/v1/chat/completions` (`models/gemma-4-26b-a4b-it`). Grounds every answer in retrieved passages.
-- **Question rewrite** — LLM turns follow-ups ("and what about X?") into standalone queries; improves retrieval for conversational context.
-- **Reranker** — LLM cross-encoder re-scores candidates; raises top-k quality, can be toggled off.
-- **Evaluation** — LLM-as-judge scores every answer; surfaced as a grey line under each reply.
-- **Authentication** — Local username/password + optional Google OAuth. Works out of the box; OAuth is opt-in.
+---
 
-> Web fallback and the reranker are basic first versions that can be improved.
+## What each part does
 
-## Evaluation metrics
+**Retrieval is two searches, not one.** Vector search finds meaning; keyword
+search finds exact strings. Their rankings are fused, so an invoice number and
+a paraphrased policy are both findable. It is unconditional — there is no
+switch, because there is no trade worth offering.
 
-Each answer shows a grey performance line. These are **heuristic signals, not hard pass/fail** — read them as a tuning aid, not ground truth:
+**Deep search does not rank.** Ordinary search orders passages and takes the
+best few, which means anything below the cut is invisible to the answer. Deep
+search reads every document you own word for word and returns every literal
+match. It is sent with the question, never stored — settings here are shared by
+the whole deployment, so a stored toggle would change retrieval for everyone.
 
-- **Top similarity** — how close the best retrieved chunk is to your question (higher = a more on-topic source was found).
-- **Faithfulness** — whether the answer sticks to what the sources say, rather than guessing or adding outside info.
-- **Relevancy** — whether the answer actually addresses the question you asked.
-- **Latency** — total round-trip time for the answer, in milliseconds.
+**Evaluation ships, it does not run.** 56 questions with known answers over 27
+documents, including questions the corpus deliberately cannot answer. The
+result is committed to the repo and rendered on first paint. Each answer you
+get is then drawn on the same bars, so "is this one normal?" is a glance.
 
-## Pipeline configuration
+**Grading fails open.** A judge that times out is a broken grader, not a bad
+answer, so it reports `ungraded`. Rendering that as a failure would be a
+confident false claim about your documents.
 
-All knobs live in `config.yaml` (or are tuned live from the Settings panel, which persists to the database). Changing chunking or embedding settings invalidates stored chunks (a config *fingerprint* tags them), so click **Re-index all** afterward.
+---
 
-- **`chunking`** — `chunk_size`, `chunk_overlap`, `splitter` (recursive | markdown_header | semantic). Controls how documents are split.
-- **`embedding.model`** — embedding model spec. Switching models isolates old chunks (different vector dimension) until you re-index.
-- **`retrieval.hybrid_search`** — **real BM25 keyword fusion**: vector top-k and a BM25 keyword top-k are fused (RRF). Surfaces exact terms (IDs, codes, names) pure-vector search misses. **Not web search** — your documents only.
-- **`retrieval.similarity_threshold`** — minimum cosine similarity a chunk needs to be used. Below it → explicit "not found" answer.
-- **`retrieval.top_k` / `candidate_k`** — chunks shown to the LLM / the wider pool the reranker narrows.
-- **`retrieval.reranker`** — LLM cross-encoder re-scores candidates → top_k.
-- **`generation.web_augmentation`** — **fallback only**, default OFF. Appends labeled `[web]` chunks (DuckDuckGo) **only** when your documents don't clear the relevance threshold. Never overrides a grounded answer.
-- **`generation.llm_model` / `temperature`** — answering model + temperature.
-- **Secrets (env vars only)** — `GEMINI_API_KEY` (proxy), `RAG_LLM_MODEL` / `RAG_EMBEDDING_MODEL` overrides.
-
-## Run locally
+## Run it locally
 
 ```bash
 # Backend (port 8000)
-.venv/Scripts/python -m uvicorn ragchat.app:app --host 0.0.0.0 --port 8000
+.venv/Scripts/python -m uvicorn ragchat.app:app --reload --port 8000
 
 # Frontend (port 5173, proxies /api to the backend)
 cd frontend && npm install && npm run dev
 ```
 
-Set `GEMINI_API_KEY` (and optionally `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` for OAuth) before starting the backend. In production the app uses Neon (`rag_gel_DATABASE_URL`) and a `/tmp` data dir — no local database needed.
+In dev the pages are at `/`, `/app.html` and `/built.html` — the clean `/app`
+and `/built` paths are Vercel rewrites and do not exist on the Vite server.
+
+```bash
+# Tests — no network, ~10s
+.venv/Scripts/python -m pytest tests/ -q
+
+# Screenshots: 3 pages x 5 breakpoints x 2 themes. Fails on overflow,
+# page errors, or a grid left with one item under a full row.
+node shot.mjs http://localhost:5173
+
+# Workspace layout behaviour a screenshot cannot see
+node layout_check.mjs http://localhost:5173
+
+# Benchmark: retrieval only (free), or the full run (spends model calls)
+.venv/Scripts/python -m eval.run_eval --retrieval-only
+.venv/Scripts/python -m eval.run_eval
+.venv/Scripts/python -m eval.published --from-run latest   # publish it
+```
+
+### Configuration
+
+Pipeline knobs live in `config.yaml` and can be tuned live from Settings.
+
+> **Saving Settings writes one row that replaces `config.yaml` entirely, for
+> the whole deployment.** `GET /api/health` reports the *effective* config and
+> which keys a save is pinning. **Settings → Reset to shipped defaults** puts
+> the file back in charge.
+
+Changing chunking or the embedding model changes a config *fingerprint* that
+tags every stored chunk, so existing chunks stop matching and the UI prompts to
+re-index.
+
+### Environment
+
+Required: `GEMINI_API_KEY`, `OPENROUTER_API_KEY`, `DATABASE_URL` (or
+`PG_DATABASE_URL`), `SESSION_SECRET`, `VECTOR_BACKEND=neon`.
+
+Optional: `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` for OAuth,
+`GUEST_SWEEP_SECRET` to arm the guest sweeper (unset disables the endpoint
+rather than opening it). See `DEPLOY_VERCEL.md`.
+
+---
 
 ## Project layout
 
 ```
-ragchat/          FastAPI backend
-  app.py          routes: auth, sources, chats, eval, config
-  auth.py         Google OAuth + password fallback, signed cookie sessions
-  config.py       env settings + config.yaml loader + DB-backed override + fingerprint
-  chunking.py     splitters per config
-  loaders.py      PDF/HTML/text extraction, URL fetch
-  store_neon.py   Neon pgvector chunks + documents
-  vectordb.py     vector store dispatcher (Neon impl)
-  pipeline.py     ingest + retrieve + rewrite + rerank + generate + eval
-  db.py           SQLAlchemy models + Neon engine (users, documents, conversations, messages, config_overrides)
-  embeddings.py   ProxyEmbeddings via /v1/embeddings + retry/backoff
-frontend/         vanilla JS + Vite (3-pane UI)
-eval/             golden set, corpus, judges, metrics, run_eval.py
-config.yaml       all pipeline knobs
+api/index.py         Vercel entrypoint — re-exports the FastAPI app
+ragchat/
+  app.py             routes: auth, sources, chats, settings, eval, admin
+  auth.py            Google OAuth + password fallback, signed cookie sessions
+  config.py          env settings, config.yaml, DB override, fingerprint
+  chunking.py        splitters
+  loaders.py         PDF / HTML / text extraction, URL fetch
+  embeddings.py      provider-aware embedding + rerank clients
+  pipeline.py        ingest, and ask: rewrite → retrieve → rerank → generate → judge
+  deepsearch.py      literal scan over stored document text
+  vectordb.py        dispatch to the Chroma or pgvector implementation
+  store.py           Chroma (local dev)
+  store_neon.py      pgvector (deployed)
+  guests.py          throwaway workspaces, seeding, expiry
+  demo_vectors.py    precomputed sample-corpus vectors, so seeding costs nothing
+  db.py              SQLAlchemy models + engine
+eval/
+  corpus/            27 synthetic documents
+  golden_set.jsonl   56 questions with known answers
+  build_golden_set.py generates it, and proves every passage is verbatim
+  run_eval.py        the harness
+  judges.py          LLM-as-judge
+  metrics.py         retrieval metrics, cosine and exact
+  baseline.py        the committed baseline the CI gate compares against
+  gate.py            CI entry point
+  published.py       the shipped benchmark result
+frontend/
+  index.html         landing        →  /
+  app.html           workspace      →  /app
+  built.html         build write-up →  /built
+  app.js, styles.css, landing.css, tokens.css
+.github/workflows/   retrieval gate (push) · guest sweeper (every 15 min)
+config.yaml          pipeline knobs
 ```
+
+---
+
+## Notes for contributors
+
+`CLAUDE.md` carries the non-obvious constraints — the serverless freeze, config
+precedence, the 768-dimension invariant, and why evaluation must fail open.
+Read it before changing retrieval or config handling; most of it exists because
+something broke.
