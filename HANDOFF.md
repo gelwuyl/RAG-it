@@ -234,29 +234,13 @@ verbatim invariant. **Consider committing it under `eval/` as part of §2.1.**
 
 ---
 
-## 5. Working agreements with this user
-
-- **Interview with `AskUserQuestion` option cards**, not numbered questions in
-  prose. They said so directly. Batch a round into one call, recommendation
-  first, tradeoff in the description.
-- **Explain commands in plain language** — purpose, outcome, and a choice. Never
-  hand over a bare shell command. Prefer running it yourself and reporting.
-- They read carefully and push back well. Twice they answered a question based on
-  a misreading of *my* wording (they thought "lower the reap limit to 3" meant
-  capping guest chat turns). **If an answer sounds like a yes to a different
-  question, re-ask rather than proceeding.**
-- They asked for speed, explicitly to shrink the exposure window. Prefer shipping
-  verified tranches over long silent stretches.
-
----
-
-## 6. Suggested skills
+## 5. Suggested skills
 
 Call these via the `Skill` tool:
 
 - **`anthropic-skills:grilling`** — for any multi-decision design work. This user
   responds very well to it; the guest-lifecycle design in §2.4 came out of it
-  cleanly. Combine with the option-card rule in §5.
+  cleanly.
 - **`code-review`** — before shipping §2.2 and §2.4. Both touch auth, deletion
   and CI, where a mistake is expensive and not obvious from tests.
 - **`security-review`** — specifically for §1 (a new cookie) and §2.4 (a sweep
@@ -264,7 +248,7 @@ Call these via the `Skill` tool:
 
 ---
 
-## 7. Open risk the user has accepted
+## 6. Open risk the user has accepted
 
 The KFD documents were publicly fetchable for some time before the history purge
 in `e2b2ecb`. The purge removed them from the repo and every commit (verified: no
