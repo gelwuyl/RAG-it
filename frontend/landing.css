@@ -471,3 +471,38 @@ section { padding: 88px 0; }
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
 }
+
+
+/* ---------- the build write-up (/built) ---------- */
+
+/* A shorter hero: this page is a read, not a pitch, and a full-height opener
+   would put the first sentence below the fold on a laptop. */
+.hero-compact { padding-block: clamp(56px, 9vw, 96px) clamp(36px, 6vw, 64px); }
+.hero-compact .hero-title { margin-top: 18px; }
+a.hero-mark { text-decoration: none; }
+
+/* Three across rather than the default two, because these are teasers and a
+   two-column grid would leave one card orphaned on its own row. */
+.cards-3 { grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); }
+
+/* A card that is a link needs to look like one without becoming a button. */
+a.card-link {
+  text-decoration: none; color: inherit;
+  display: flex; flex-direction: column; gap: 10px;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+a.card-link:hover { border-color: var(--primary); transform: translateY(-2px); }
+a.card-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+.card-more {
+  margin-top: auto; padding-top: 4px;
+  font-family: var(--font-mono); font-size: var(--text-nano);
+  letter-spacing: 0.06em; text-transform: uppercase; color: var(--primary-ink);
+}
+@media (prefers-reduced-motion: reduce) { a.card-link:hover { transform: none; } }
+
+/* The production-lessons grid: same note treatment as the pipeline gutter, but
+   free-standing rather than beside a rail, so it needs its own columns. */
+.trace-notes-wide {
+  display: grid; gap: 18px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}

@@ -24,13 +24,16 @@ import { mkdir } from "node:fs/promises";
 const BASE = process.argv[2] || "http://localhost:5173";
 const THEME_KEY = "ragchat-theme";
 
-// Two documents to capture since the routing split: the landing page at "/"
+// Three documents to capture since the routing split: the landing page at "/"
 // and the workspace at "/app". In DEV there is no /app rewrite — that lives in
 // vercel.json — so the app is served at /app.html. Against `npm run preview`
 // or a real deploy, pass the base and both still resolve.
 const PAGES = [
   { name: "landing", path: "/" },
   { name: "app", path: "/app.html" },
+  // The engineering write-up. Included because it is a real page a visitor can
+  // land on, and a page nobody screenshots is a page that breaks quietly.
+  { name: "built", path: "/built.html" },
 ];
 
 const BREAKPOINTS = [

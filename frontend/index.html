@@ -22,7 +22,7 @@
         }
       })();
     </script>
-    <link rel="stylesheet" href="/landing.css?v=7" />
+    <link rel="stylesheet" href="/landing.css?v=8" />
   </head>
   <body>
     <button id="theme-toggle" class="theme-toggle" type="button"
@@ -312,10 +312,49 @@
       </div>
     </section>
 
+    <!-- ============ 04 · how it was built (teaser) ============= -->
+    <section>
+      <div class="wrap">
+        <div class="section-label">
+          <span class="section-num">04</span>
+          <span class="section-name">How it was built</span>
+        </div>
+        <p class="pipeline-intro">
+          Three of the things that only showed up once it was running in front
+          of people. Each was measured, not guessed at.
+        </p>
+        <div class="cards cards-3">
+          <a class="card card-link" href="/built">
+            <h3 class="card-title">The ruler was broken</h3>
+            <p class="card-text">The check deciding whether retrieval found the
+              right passage was scoring 79.6% of correct answers as misses. Most
+              of this project's poor early numbers were a measurement fault, not
+              a retrieval one.</p>
+            <span class="card-more">Read what it cost →</span>
+          </a>
+          <a class="card card-link" href="/built">
+            <h3 class="card-title">Sign-in did 18 round trips</h3>
+            <p class="card-text">The database schema was re-verified before
+              every single operation. Its own comment claimed it happened once.
+              Sign-in went from 8.4 seconds to under one.</p>
+            <span class="card-more">Read what it cost →</span>
+          </a>
+          <a class="card card-link" href="/built">
+            <h3 class="card-title">A feature that hurt</h3>
+            <p class="card-text">Word-for-word search fed the model passages the
+              ranked search had already found. One question went from a correct
+              answer to "I couldn't find this" with the feature switched on.</p>
+            <span class="card-more">Read what it cost →</span>
+          </a>
+        </div>
+      </div>
+    </section>
+
     <footer class="foot">
       <div class="wrap" style="display:flex;flex-wrap:wrap;gap:16px;align-items:center;justify-content:space-between;">
         <span class="tel">RAG-it</span>
         <span class="foot-links">
+          <a href="/built">How it was built</a>
           <a href="/app">Open the app</a>
           <a href="/api/health">Health</a>
           <a href="/docs">API</a>
