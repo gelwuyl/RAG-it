@@ -1,0 +1,83 @@
+Havenmark Compliance Casebook 合规案例集
+
+Worked examples of findings, with the grade that was applied and the reasoning.
+These are illustrations of judgement, not a substitute for the grading rules
+themselves, which live in the Pathway document.
+
+本文为案例说明，分级规则以进阶体系文件为准。
+
+CASE 01 — Undated grading sheet
+An agent's case file contained a client grading sheet with no date of last
+change. The grade itself was correct and the client was being handled properly.
+Graded MINOR. Corrected within five working days. No standing impact.
+Reasoning: the harm is to future reviewability, not to the client.
+
+CASE 02 — Grading four months stale
+A different file carried a grade last changed in March, reviewed in July. The
+client had bought elsewhere in May. Graded MAJOR. The agent's next three cases
+were reviewed.
+Reasoning: a stale grade is not a paperwork gap. It means the pipeline the team
+leader reviewed described a client who no longer existed.
+
+CASE 03 — Document issued one stage early
+A tenancy agreement was sent to a prospective tenant before the good faith
+deposit was received. No loss occurred; the tenant proceeded normally.
+Graded MAJOR regardless of outcome.
+Reasoning: grading follows the act, not the luck. The same act with a different
+tenant creates a signed agreement with no deposit behind it.
+
+CASE 04 — Price quoted from memory
+An agent quoted a psf figure in a WhatsApp message, drawn from a transaction
+they remembered rather than from a lodged caveat. The figure was approximately
+correct. Graded CRITICAL. The case was suspended and the Practice Committee
+convened the following morning.
+Reasoning: approximately correct is the dangerous case, not the safe one. A
+wildly wrong figure is questioned; a plausible one is relied upon.
+
+CASE 05 — Undisclosed family interest
+An agent marketed a unit owned by a sibling without written disclosure to the
+buyer. Graded CRITICAL.
+Reasoning: the disclosure obligation exists precisely because the agent
+believes the conflict is immaterial. That belief is what it is protecting
+against.
+
+CASE 06 — Split changed after offer
+A co-broke split was renegotiated from fifty-fifty to sixty-forty after an offer
+was on the table. Graded CRITICAL and referred to the Practice Committee, which
+restored the default split.
+Reasoning: the renegotiation was not agreed before the first viewing, and
+leverage after an offer is not a basis for allocating work already done.
+
+CASE 07 — Missing meter photographs at handover
+A handover inventory was signed by both parties without photographs of the meter
+readings. A billing dispute followed six weeks later and could not be resolved
+from the file. Graded MINOR at the time, escalated to MAJOR when the dispute
+arose.
+Reasoning: a finding is graded on the exposure it creates, and the exposure was
+only visible once the dispute existed.
+
+CASE 08 — AI-drafted post published without review
+A market post generated with AI assistance went out without a named reviewer.
+It cited a figure that could not be traced to a caveat. Taken down within one
+working day. Graded MAJOR.
+Reasoning: the tool cannot be answerable for a claim. The absence of a named
+reviewer is the finding, independent of whether the number was right.
+
+CASE 09 — Correct escalation, no finding
+An agent was asked by a client to quote a price before a caveat check was
+possible. The agent declined and escalated the same day. NO FINDING recorded.
+Reasoning: the casebook records correct handling as well as failures. An agent
+reading only failures learns what to hide rather than what to do.
+
+CASE 10 — Handover completed with keys uncounted
+Access cards were handed over without the count being recorded. Graded MINOR.
+Reasoning: keys are the one handover category with no photograph requirement, so
+the count is the only record that exists. Missing it leaves nothing at all.
+
+HOW FINDINGS ARE USED
+
+Findings attach to the case, not to the agent's character. An agent with three
+Minor findings and clean escalation behaviour is in a better position than one
+with none and a habit of not raising things.
+
+合规记录归属于案件，不是对顾问的评价。

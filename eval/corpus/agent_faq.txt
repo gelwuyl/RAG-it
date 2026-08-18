@@ -1,0 +1,93 @@
+Havenmark Agent FAQ 顾问常见问题
+
+This FAQ explains WHY the rules exist. It does not restate the rules themselves.
+Where a number, a deadline or a threshold is involved, the Method and the
+Pathway documents are the authority and this FAQ deliberately does not repeat
+them — two copies of a number is one copy too many, and the second copy is
+always the one that goes stale.
+
+本文只解释原因，不重复具体数字。数字以方法与进阶体系文件为准。
+
+Q. Why does client grading exist at all? Surely a good agent just knows who is
+serious.
+
+Every agent believes they can tell. The grading exists because that belief is
+not measurable and does not survive a busy month. When forty conversations are
+open, the ones that feel most promising are the ones that were most recently
+flattering, and that is recency rather than judgement. Writing the grade down
+converts a feeling into something a team leader can review.
+
+分级的意义在于把感觉变成可以被复核的记录。
+
+Q. Why is there a rule about who may run a viewing alone?
+
+Because a viewing is where most of the irreversible mistakes are made. A price
+mentioned casually cannot be unmentioned. A defect not raised becomes a defect
+concealed. Shadowing is not ceremony; it is the cheapest place to watch someone
+make those mistakes without a client paying for them.
+
+Q. Why does the firm care about pipeline health rather than income?
+
+Income measures last quarter. Pipeline measures next quarter. An agent can have
+an excellent quarter through one large case and be in serious trouble, and the
+income figure will not say so until it is too late to help. This is why stage
+progression is assessed on pipeline and not on earnings.
+
+Q. Why must data be updated on a fixed day rather than whenever convenient?
+
+Because a pipeline that is updated whenever convenient is updated when it looks
+good. A fixed day removes the choice, and the choice is the problem. It also
+means every review is looking at data of the same age.
+
+数据必须在固定日更新，否则更新的时机本身会带来偏差。
+
+Q. Why is a co-broke split fixed before the first viewing rather than after?
+
+Because after an offer exists, the split is negotiated by whoever has more
+leverage rather than by whoever did more work. Fixing it beforehand is the only
+moment when neither side knows who that will be.
+
+Q. Why is a compliance finding graded rather than simply logged?
+
+Because "a missing date" and "an unverified price quoted to a client" are not
+the same event and must not produce the same response. Grading is what lets the
+serious ones interrupt the work while the trivial ones are simply corrected.
+
+Q. Why does the case file matter if the agent remembers the case?
+
+Because the obligation belongs to the client, not to the agent, and it outlasts
+the agent's employment. A file that exists only in someone's memory disappears
+when they change firms, and the client's rights do not.
+
+案卷是对客户的责任，不是对顾问的记录。
+
+Q. Why does the most junior person teach the last segment of Market Call?
+
+Because explaining a rule is the only reliable test of whether it is understood.
+Someone who has read a rule can repeat it. Someone who can teach it has to
+reconstruct why it exists, and that is where the gaps show.
+
+Q. Why does the firm refuse to quote a price it has not verified?
+
+Because an unverified price becomes the client's expectation within about a
+minute, and every conversation afterwards is spent walking it back. It is
+cheaper to say "I will check" than to spend three weeks correcting a number.
+
+Q. Why is response time treated as a standard rather than as good manners?
+
+Because the conversion difference is large enough to be a business rule rather
+than a courtesy. The specific figures are in the media briefing.
+
+Q. Why does the firm not track follower counts?
+
+Because the number can be moved without moving anything that matters, and any
+metric that can be improved without improving the business will eventually be
+improved instead of the business.
+
+Q. Why is AI allowed to draft but not to publish?
+
+Because accountability cannot be delegated to a tool. A claim in a published
+post is made by the firm, and somebody has to be answerable for it by name. The
+tool cannot be called to a Practice Committee.
+
+责任无法交给工具承担。

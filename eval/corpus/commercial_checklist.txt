@@ -1,0 +1,63 @@
+# Sheet: COMMERCIAL
+Stage | Lease Case Documents | Sale Case Documents
+Before Viewing | - Viewing List (shortlist of units)
+- Landlord unit info (floor plate, fit-out condition, service charge schedule) | - Viewing List (shortlist of units)
+- Vendor unit info (floor plate, tenancy schedule, outgoings statement)
+Offer Stage | - Letter of Offer (LOO)
+- Good faith deposit receipt (one month gross rent) | - Offer to Purchase
+- Deposit receipt (5% of purchase price)
+Acceptance | - Lease Agreement, three originals
+- Stamp duty computation sheet
+- Guarantor documents where required | - Sale and Purchase Agreement
+- Vendor tenancy warranties
+Completion | - Handover Condition Report, signed by both parties
+- Fit-out deposit acknowledgement
+- Access card and after-hours protocol issued | - Completion Account from conveyancing lawyer
+- Apportionment of outgoings
+- Tenancy novation letters issued to sitting tenants
+
+# Sheet: COMMISSION
+Case Type | Payable By | Standard Rate | Notes
+Commercial lease, term 3 years or under | Landlord | One month gross rent per year of term | Capped at three months
+Commercial lease, term over 3 years | Landlord | One month gross rent per year, first 3 years only | Balance by negotiation
+Commercial sale, vendor represented | Vendor | 1.5% of transacted price | Payable on completion
+Commercial sale, purchaser represented | Purchaser | 1% of transacted price | Waived where co-broke applies
+Industrial lease | Landlord | One month gross rent per year of term | Capped at two months
+
+# Sheet: TIMELINE
+Milestone | Lease | Sale
+Offer to acceptance | 5 working days | 28 calendar days
+Acceptance to completion | 30 to 60 days | 10 to 16 weeks
+Document retention after completion | 7 years | 7 years
+
+# Sheet: DISCLOSURES
+Trigger | Disclosure Required | Timing
+Agent or immediate family has an interest in the unit | Written, to all parties | Before first viewing
+Agent represents both sides | Written, signed by both | Before offer is made
+Existing tenancy expiring within 6 months | Written, to purchaser | Before offer is made
+Outstanding building or fire safety notice | Written, to all parties | Before offer is made
+Service charge under review | Written, to tenant or purchaser | Before offer is made
+
+# Sheet: FINANCING CHECKPOINTS
+Checkpoint | When | Owner | Blocking
+Corporate facility letter sighted | Before Offer to Purchase | Purchaser agent | Yes
+Loan-to-value confirmed for commercial asset class | Before Offer to Purchase | Purchaser agent | Yes
+GST registration status confirmed | Before acceptance | Purchaser agent | Yes
+Valuation report received | Before completion | Conveyancing lawyer | Yes
+Sinking fund position reviewed | Before completion | Purchaser agent | No
+
+# Sheet: HANDOVER CONDITION
+Category | Items Checked | Photograph Required
+Base build | Floor slab, ceiling grid, columns, glazing | Yes
+Mechanical and electrical | Distribution board, AC units, sprinkler heads | Yes
+Fit-out | Partitions, flooring, signage removal | Yes
+Compliance | Fire exits unobstructed, extinguishers in date | Yes
+Access | Unit keys, access cards, after-hours codes | No, count recorded
+Meters | Electricity, water, chilled water readings | Yes
+
+# Sheet: ESCALATION
+Situation | Escalate To | Within
+Tenant requests early possession before lease signing | Team Leader | Immediately
+Co-broke split disputed | Practice Committee | 2 working days
+Vendor withholds the tenancy schedule | Team Leader | Same week
+Fire safety notice discovered after offer | Practice Committee | 1 working day

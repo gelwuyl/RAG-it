@@ -1,0 +1,66 @@
+Havenmark Valuation Notes 估价说明
+
+How Havenmark reads a caveat, and what adjustments are defensible. This document
+explains METHOD. It contains no prices and must never be used as a source for a
+figure quoted to a client.
+
+本文说明方法，不含价格数据。
+
+1. WHAT A CAVEAT IS AND IS NOT
+
+A lodged caveat records a transacted price and a date. It does not record the
+condition of the unit, the motivation of either party, what furniture was
+included, or whether the buyer was related to the seller. Two caveats at the
+same psf can describe very different transactions.
+
+契约记录价格与日期，不记录成交背景。
+
+2. THE FOUR STANDARD ADJUSTMENTS
+
+2.1 Floor level. Higher floors transact above lower floors within the same
+stack. The gradient is not linear and flattens toward the top of a block. An
+adjustment applied as a flat percentage per floor across twenty floors will be
+wrong at both ends.
+
+2.2 Facing and outlook. A protected outlook holds value; an outlook that is
+merely current does not. Agents must check what is approved for construction on
+adjacent land before describing a view as permanent.
+
+2.3 Age and remaining lease. For leasehold stock, the decay is slow and then
+sudden. Adjustments drawn from transactions in a different decade of the lease
+term are not comparable, however close the psf looks.
+
+2.4 Unit efficiency. Two units of identical strata area can differ substantially
+in usable area. Dual-key layouts, long corridors and large planter areas all
+reduce efficiency, and buyers comparing on quoted size alone will not see it.
+
+3. WHAT IS NOT A DEFENSIBLE ADJUSTMENT
+
+3.1 Renovation cost. What the seller spent is not what the market pays. A
+renovation adjustment defensible at all is defensible only as a condition
+premium, and a small one.
+
+3.2 Seller expectation. Not a market input.
+
+3.3 Asking prices of unsold units. An asking price is evidence of an ask, not of
+a transaction. A comparable set built from asking prices will drift upward
+indefinitely, because unsold stock is by definition priced above what the market
+has paid.
+
+未成交的叫价不构成可比数据。
+
+4. HOW MANY COMPARABLES
+
+Three transactions in the last ninety days within the same development is a
+strong basis. One transaction is an anecdote. Where fewer than three exist,
+widen to adjacent developments of the same tenure and age band before widening
+the time window, because the market moves faster than buildings change.
+
+5. WHEN TO DECLINE
+
+An agent who cannot assemble a defensible comparable set says so. "I do not have
+enough recent transactions to give you a reliable range yet" is a professional
+answer and clients receive it far better than a confident number that moves
+twice in a fortnight.
+
+无法建立可比数据时，应当直说。
