@@ -26,7 +26,13 @@ sys.path.insert(0, str(ROOT))
 
 from ragchat.config import load_config  # noqa: E402
 from ragchat.embeddings import ProxyEmbeddings, openai_client  # noqa: E402
-from ragchat.pipeline import NOT_FOUND_ANSWER, ask, ingest_document_text, retrieve  # noqa: E402
+from ragchat.pipeline import (  # noqa: E402
+    NOT_FOUND_ANSWER,
+    _rerank,
+    ask,
+    ingest_document_text,
+    retrieve,
+)
 from ragchat.vectordb import delete_document_chunks  # noqa: E402
 from eval.metrics import (  # noqa: E402
     MATCH_THRESHOLD,
@@ -125,12 +131,40 @@ def _safe_judge(fn, *args) -> tuple[bool | None, str]:
         return None, f"judge error: {exc}"
 
 
-def score_item(item: dict, cfg, retrieval_only: bool = False) -> dict:
+def score_item(
+    item: dict,
+    cfg,
+    retrieval_only: bool = False,
+    rerank: bool = False,
+    ceiling: bool = False,
+) -> dict:
     """Score ONE golden question end-to-end and return its result entry.
 
     Factored out of run_benchmark so the serverless chunked runner can score a
     handful of questions per HTTP request (see ragchat/app.py) while the CLI
     still runs the whole set in one process.
+
+    Every retrieval metric is measured over the SAME list — the passages the
+    generator would actually be handed. That was not true before, and it made
+    the scorecard incoherent: retrieve() returns cfg.candidate_k chunks (the
+    pool), ask() then reranks and keeps cfg.top_k. context_recall was computed
+    over all 40, while precision/MRR/hit/NDCG sliced [:6]. So "Context Recall
+    49%" sat beside "Hit rate 41%" describing different retrievals, and the
+    headline metric was inflated by 34 chunks nothing downstream ever sees.
+
+    `rerank` decides which list that is:
+      False -> the pool's own top_k, PRE-rerank. Costs no model call, which is
+               what makes the CI gate free. Report it as a pre-rerank number.
+      True  -> the reranked top_k, i.e. what the deployment really answers from.
+               Costs one Cohere call per question.
+    The old behaviour reranked in neither case, so a preset with reranker: True
+    scored exactly as if it were False.
+
+    `ceiling` additionally reports recall over the whole candidate pool. That is
+    the diagnostic that separates "the right passage was never retrieved" from
+    "it was retrieved and the ranking buried it" — different bugs with different
+    fixes. Off by default because it means embedding candidate_k chunks per
+    question instead of top_k, several times the embedding spend.
     """
     question = item["question"]
     golden_embs = item.get("_golden_embs")
@@ -141,12 +175,31 @@ def score_item(item: dict, cfg, retrieval_only: bool = False) -> dict:
             provider=cfg.embedding_provider,
         )
 
-    chunks = retrieve(EVAL_USER, question, cfg)
-    # Embed the retrieved chunk texts with the same model used for the golden
-    # passages so we can cosine-match (user decision #3: embedding-cosine).
-    chunk_texts = [c["text"] for c in chunks]
+    pool = retrieve(EVAL_USER, question, cfg)
+    # A full run ALWAYS reranks for the retrieval metrics, whatever the caller
+    # passed. In full mode ask() reranks internally, so leaving these metrics on
+    # the pre-rerank order would describe a different list from the one the
+    # judges graded — faithfulness scoring the reranked passages while context
+    # recall scored the unreranked ones. The cost is one extra rerank call per
+    # question; ask() cannot hand its chunk list back without a wider refactor,
+    # and a cheap duplicated call is the better trade against an incoherent
+    # scorecard. --with-rerank is therefore only meaningful with
+    # --retrieval-only, where skipping the call is the whole point.
+    if not retrieval_only:
+        rerank = True
+    # Narrow the pool to what the generator would receive, by the same route the
+    # pipeline uses. _rerank is a no-op when cfg.reranker is off, so asking for
+    # rerank on a preset that does not rerank still measures that preset.
+    if rerank:
+        final = _rerank(question, [dict(c) for c in pool], cfg)
+    else:
+        final = pool[: cfg.top_k]
+
+    # Embed with the same model used for the golden passages so we can
+    # cosine-match (user decision #3: embedding-cosine).
     _emb = ProxyEmbeddings(cfg.embedding_model, provider=cfg.embedding_provider)
-    chunk_embs = _emb.embed_documents(chunk_texts) if chunk_texts else []
+    final_texts = [c["text"] for c in final]
+    chunk_embs = _emb.embed_documents(final_texts) if final_texts else []
 
     k = cfg.top_k
     cr = context_recall(chunk_embs, golden_embs)
@@ -164,10 +217,16 @@ def score_item(item: dict, cfg, retrieval_only: bool = False) -> dict:
         "hit_rate_at_k": hit_rate_at_k(chunk_embs, golden_embs, k),
         "retrieved": [
             {"title": c["title"], "similarity": round(c["similarity"], 4)}
-            for c in chunks[:k]
+            for c in final
             if c.get("similarity") is not None
         ],
     }
+    if ceiling:
+        pool_texts = [c["text"] for c in pool]
+        pool_embs = _emb.embed_documents(pool_texts) if pool_texts else []
+        entry["context_recall_at_candidate_k"] = round(
+            context_recall(pool_embs, golden_embs), 4
+        )
     if retrieval_only:
         return entry
 
@@ -220,6 +279,17 @@ def aggregate(results: list[dict], retrieval_only: bool = False) -> dict:
         "ndcg_at_k": _mean([r["ndcg_at_k"] for r in answerable]),
         "hit_rate_at_k": _mean([r["hit_rate_at_k"] for r in answerable]),
     }
+    # Present only on a --ceiling run. Recall over the whole candidate pool: how
+    # much the ranking is leaving on the table. A large gap between this and
+    # context_recall is a RANKING problem (the passage was fetched and buried);
+    # both being low is a RETRIEVAL problem (it was never fetched at all).
+    ceiling_rows = [
+        r for r in answerable if r.get("context_recall_at_candidate_k") is not None
+    ]
+    if ceiling_rows:
+        metrics["context_recall_at_candidate_k"] = _mean(
+            [r["context_recall_at_candidate_k"] for r in ceiling_rows]
+        )
     if not retrieval_only:
         metrics["faithfulness"] = _rate(answerable, "faithful")
         metrics["answer_relevancy"] = _rate(answerable, "relevant")
@@ -267,6 +337,8 @@ def config_snapshot(cfg) -> dict:
 def run_benchmark(
     limit: int | None = None,
     retrieval_only: bool = False,
+    rerank: bool = False,
+    ceiling: bool = False,
     preset: str | None = None,
 ) -> dict:
     """Run the full eval harness and return the report dict.
@@ -314,7 +386,10 @@ def run_benchmark(
 
     results = []
     for i, item in enumerate(items, start=1):
-        entry = score_item(item, cfg, retrieval_only=retrieval_only)
+        entry = score_item(
+            item, cfg, retrieval_only=retrieval_only,
+            rerank=rerank, ceiling=ceiling,
+        )
         results.append(entry)
         status = "✓" if entry.get("correct", entry["context_recall"] > 0) else "✗"
         print(f"  [{i}/{len(items)}] {status} {entry['question'][:60]}")
@@ -329,6 +404,14 @@ def run_benchmark(
         # Which named configuration this run scored, if any. Without it, comparing
         # four runs means reverse-engineering the preset from the config snapshot.
         "preset": preset,
+        # Which pipeline the numbers describe. A pre-rerank run and a reranked
+        # run measure different lists, so their scores are not comparable — and
+        # a report that does not say which it was invites exactly that mistake.
+        "mode": (
+            "full" if not retrieval_only
+            else "retrieval+rerank" if rerank
+            else "retrieval-pre-rerank"
+        ),
         "config": config_snapshot(cfg),
         "metrics": metrics,
         "results": results,
@@ -383,7 +466,29 @@ def run_benchmark(
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--limit", type=int, default=None)
-    ap.add_argument("--retrieval-only", action="store_true")
+    ap.add_argument(
+        "--retrieval-only",
+        action="store_true",
+        help="Skip generation and the judges. Free unless --with-rerank is given.",
+    )
+    ap.add_argument(
+        "--with-rerank",
+        action="store_true",
+        help=(
+            "Score the RERANKED top_k — what the deployment actually answers "
+            "from — instead of the pool's pre-rerank order. Costs one rerank "
+            "call per question, so the CI gate leaves it off."
+        ),
+    )
+    ap.add_argument(
+        "--ceiling",
+        action="store_true",
+        help=(
+            "Also report recall over the whole candidate pool, to separate a "
+            "ranking problem from a retrieval one. Embeds candidate_k chunks "
+            "per question instead of top_k."
+        ),
+    )
     ap.add_argument(
         "--preset",
         default=None,
@@ -394,6 +499,8 @@ def main() -> None:
     run_benchmark(
         limit=args.limit,
         retrieval_only=args.retrieval_only,
+        rerank=args.with_rerank,
+        ceiling=args.ceiling,
         preset=args.preset,
     )
 
