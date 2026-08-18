@@ -163,6 +163,46 @@ already-up-to-date check for that reason, and `seed_demo_corpus` copies it to
 each guest clone — otherwise the demo corpus, which is what a first-time visitor
 tries the feature on, is the one thing it cannot see.
 
+### Where this is going: tools the model chooses between
+
+The intended end state is agentic, and the name of the repo means it. Today
+`ask()` runs a fixed pipeline — rewrite → retrieve → rerank → generate — and
+deep search is a flag the *visitor* sets. The intent is that the MODEL decides,
+per question: is what retrieval returned enough to answer; if not, is this a
+case for a literal scan of the documents; if not, does it need something from
+outside. Reason, act, observe the result, decide again.
+
+What already fits that shape:
+
+- `ask(..., deep_search=<callable>)` takes a TOOL, not a boolean. It is passed
+  a function of the rewritten query returning chunk-shaped dicts. A second and
+  third tool are the same signature, and the loop that chooses between them
+  replaces the straight-line body of `ask()` without touching either tool.
+- Every passage in the pool is chunk-shaped and carries `similarity: None` when
+  it has no measured distance, so a new source of passages needs no special
+  case in rerank, context building, or citations (`_fallback_score`).
+- `_drop_duplicates` already exists, and any observe step needs it: tools that
+  read the same documents return overlapping text, and sending the model the
+  same passage twice measurably degraded answers.
+
+**Web search was deleted, not foreclosed.** `pipeline._web_search` and the
+`web_augmentation` config key are gone (see the commit that removed them for
+why: it was a *deployment-wide* toggle wearing the costume of a personal one,
+and it answered "your documents did not have it" by looking somewhere else
+instead of looking harder). Re-adding it as a TOOL the model may call is a
+different thing and is expected. When it comes back:
+
+- It is a tool, not a fallback triggered by a threshold.
+- Its passages must be labelled in the prompt and in the citation, because they
+  are the only ones not from the user's own documents. That distinction is the
+  app's whole promise.
+- It does NOT go in `config_overrides` — one row, whole deployment, see below.
+
+The constraint that shapes all of it: a serverless function is frozen the
+instant it responds and `maxDuration` is 60s, so a reason/act/observe loop
+cannot be an open-ended `while`. Either bound the iterations hard, or slice it
+across requests the way the benchmark does.
+
 ### Two vector backends
 
 `VECTOR_BACKEND=chroma` (local dev) or `neon` (deploy). `ragchat/vectordb.py`
