@@ -1676,3 +1676,13 @@ fieldset legend {
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
 }
+
+/* Metric name leads with what it measures; the RAGAS term sits under it in the
+   telemetry register. Two registers in one label: the plain-language line is
+   what a visitor reads, the formal name is what a practitioner searches for. */
+.score-name { display: flex; flex-direction: column; gap: 2px; }
+.score-sub {
+  font-family: var(--font-mono); font-size: var(--text-nano);
+  letter-spacing: var(--tracking-telemetry); text-transform: uppercase;
+  color: var(--faint);
+}

@@ -12,6 +12,7 @@ const state = {
   currentCitations: [], // citations of the last assistant message, for the excerpt pane
   models: { chat: [], embedding: [] }, // proxy model catalog for the settings dropdowns
   evalRunning: false, // true while the chunked benchmark loop is driving
+  evalData: null,     // last /api/eval payload, so an answer can place itself against the run
   simThreshold: 0,    // live retrieval threshold, marked on the per-answer meter
   // Documents + folders currently in the workspace. Only the COUNT is kept:
   // it is what the empty conversation needs to say something true, and holding
@@ -1754,6 +1755,37 @@ function evalVerdict(evalData) {
   return { state: "grounded", word: "Grounded" };
 }
 
+// Where this answer's retrieval sits against the last benchmark run.
+//
+// A bare "top similarity 0.60" is unreadable without knowing what good looks
+// like on THIS corpus — 0.60 is strong on one set of documents and weak on
+// another. The benchmark already establishes that distribution over 46
+// questions with known answers, and until now the two numbers sat in different
+// panes with nothing connecting them. Percentile is the plainest link: it needs
+// no understanding of cosine similarity to read.
+//
+// Returns null when there is nothing honest to compare against — no run, a
+// retrieval-only run with no similarities recorded, or a guest (who cannot run
+// a benchmark, so "run one to compare" would be an instruction they cannot
+// follow).
+function benchmarkPercentile(topSim) {
+  if (topSim == null || state.isGuest) return null;
+  const results = state.evalData?.results;
+  if (!Array.isArray(results) || !results.length) return null;
+
+  const sims = [];
+  for (const r of results) {
+    const best = (r.retrieved || [])
+      .map((c) => c.similarity)
+      .filter((x) => typeof x === "number");
+    if (best.length) sims.push(Math.max(...best));
+  }
+  // Too few points and a percentile is theatre rather than information.
+  if (sims.length < 5) return null;
+  const below = sims.filter((x) => x < topSim).length;
+  return { pct: Math.round((below / sims.length) * 100), n: sims.length };
+}
+
 // Build the per-answer quality readout: one ~20px composite indicator that
 // expands to the full detail on click.
 //
@@ -1769,6 +1801,14 @@ function buildEvalBlock(evalData, evalLine) {
     const rows = [];
     if (evalData.top_sim != null) {
       rows.push(["Top similarity", evalData.top_sim.toFixed(2), "how closely the best retrieved chunk matched your question (1.00 = exact)"]);
+      const place = benchmarkPercentile(evalData.top_sim);
+      if (place) {
+        rows.push([
+          "vs benchmark",
+          `${place.pct}%`,
+          `this answer retrieved better than ${place.pct}% of the ${place.n} benchmarked questions`,
+        ]);
+      }
     }
     // PASS is a CHECKMARK in neutral foreground, not a green pill. Acid lime is
     // the accent, and lime beside green is unreadable as two distinct meanings,
@@ -1995,16 +2035,21 @@ $("excerpt-close").onclick = () => {
 
 // RAGAS-style metric targets (from eval/EVAL_SPEC.md). Used to render the
 // scorecard bars and the pass/fail colouring.
+// Each metric leads with what it MEASURES, and keeps its RAGAS name underneath.
+// "Context Recall 49%" tells you nothing unless you already know the framework;
+// "Found the right passages" tells you what got worse when it drops. The formal
+// name stays because it is the searchable term, and dropping it would leave
+// anyone who does know RAGAS unable to map the scorecard onto it.
 const EVAL_TARGETS = {
-  context_recall: { label: "Context Recall", target: 0.80, higher: true },
-  precision_at_k: { label: "Precision@k", target: 0.70, higher: true },
-  mrr: { label: "MRR", target: 0.65, higher: true },
-  ndcg_at_k: { label: "NDCG@k", target: 0.70, higher: true },
-  hit_rate_at_k: { label: "Hit Rate@k", target: 0.80, higher: true },
-  faithfulness: { label: "Faithfulness", target: 0.90, higher: true },
-  answer_relevancy: { label: "Answer Relevancy", target: 0.85, higher: true },
-  answer_correctness: { label: "Answer Correctness", target: 0.80, higher: true },
-  not_found_rate_unanswerables: { label: "Not-found rate (unanswerables)", target: 0.90, higher: true },
+  context_recall: { label: "Found the right passages", sub: "Context Recall", target: 0.80, higher: true },
+  precision_at_k: { label: "Sent mostly relevant text", sub: "Precision@k", target: 0.70, higher: true },
+  mrr: { label: "Best passage ranked high", sub: "MRR", target: 0.65, higher: true },
+  ndcg_at_k: { label: "Good overall ordering", sub: "NDCG@k", target: 0.70, higher: true },
+  hit_rate_at_k: { label: "Right passage made the cut", sub: "Hit rate@k", target: 0.80, higher: true },
+  faithfulness: { label: "Stuck to the sources", sub: "Faithfulness", target: 0.90, higher: true },
+  answer_relevancy: { label: "Answered what was asked", sub: "Answer relevancy", target: 0.85, higher: true },
+  answer_correctness: { label: "Matched the expected answer", sub: "Answer correctness", target: 0.80, higher: true },
+  not_found_rate_unanswerables: { label: "Admitted when it could not answer", sub: "Not-found rate", target: 0.90, higher: true },
 };
 
 function fmtPct(v) {
@@ -2029,7 +2074,7 @@ function renderScorecard(metrics) {
     row.className = "score-row";
     row.innerHTML = `
       <div class="score-head">
-        <span class="score-name">${t.label}</span>
+        <span class="score-name">${t.label}<span class="score-sub">${t.sub}</span></span>
         <span class="score-val ${meets ? "pass" : "fail"}">${pct}%</span>
       </div>
       <div class="score-bar">
@@ -2088,6 +2133,11 @@ async function loadEval() {
 }
 
 function renderEval(data) {
+  // Kept so a per-answer readout can place itself against the run's
+  // distribution (benchmarkPercentile). The Evaluation pane and the answer
+  // readout used to share no state at all, which is why the two sets of numbers
+  // read as unrelated.
+  state.evalData = data;
   const statusEl = $("eval-status");
   const runBtn = $("eval-run-btn");
   // `locked` is not "no run yet" — it is a feature that is not this visitor's
