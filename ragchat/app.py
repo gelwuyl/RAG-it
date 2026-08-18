@@ -74,7 +74,26 @@ APP_PATH = "/app"
 _HTTPS_DEPLOY = bool(os.environ.get("VERCEL"))
 
 
-def set_session_cookie(response: Response, user_id: str) -> None:
+# A second cookie carrying ONLY the identity kind — "guest" or "account".
+#
+# The session cookie is httpOnly, correctly: it is the credential. But that
+# means the page has no synchronous way to know who it is, so the top bar sat
+# blank until /api/auth/status returned — 1.2s warm, ~3s on a cold function,
+# during which a first-time visitor sees neither a guest badge nor a sign-in
+# button. That is the "the sign-in button is missing" report.
+#
+# This cookie is NOT httpOnly, so the boot script reads it at ~70ms and paints
+# the right top bar immediately; /api/auth/status reconciles when it lands.
+# It carries no secret and being forgeable is harmless — every authorisation
+# decision still rests on the httpOnly session cookie. Faking it changes what
+# YOUR OWN browser draws for a moment, nothing else.
+#
+# It must be written and cleared in lockstep with the session cookie, or it
+# outlives the thing it describes and the page paints a lie.
+KIND_COOKIE = "ragchat_kind"
+
+
+def set_session_cookie(response: Response, user_id: str, *, kind: str) -> None:
     """Issue the session cookie with the same flags everywhere.
 
     Previously each of the five sign-in paths called set_cookie itself with only
@@ -82,6 +101,10 @@ def set_session_cookie(response: Response, user_id: str) -> None:
     rather than `strict` because the Google OAuth callback is a cross-site
     top-level navigation back into the app — under `strict` the browser withholds
     the cookie it was just handed and the user lands signed out.
+
+    `kind` is required rather than defaulted: a new sign-in path that forgot it
+    would leave the previous visitor's badge on screen, and a default would let
+    that happen silently.
     """
     response.set_cookie(
         authn.SESSION_COOKIE,
@@ -90,6 +113,20 @@ def set_session_cookie(response: Response, user_id: str) -> None:
         secure=_HTTPS_DEPLOY,
         samesite="lax",
     )
+    response.set_cookie(
+        KIND_COOKIE,
+        kind,
+        httponly=False,   # the whole point: the page must read it itself
+        secure=_HTTPS_DEPLOY,
+        samesite="lax",
+    )
+
+
+def clear_session_cookies(response: Response) -> None:
+    """Drop both cookies together. Leaving the hint behind paints a signed-in
+    top bar over a signed-out session until the first request comes back."""
+    response.delete_cookie(authn.SESSION_COOKIE)
+    response.delete_cookie(KIND_COOKIE)
 
 
 GUEST_WRITE_DENIED = (
@@ -331,11 +368,32 @@ class LoginIn(RegisterIn):
 
 
 @app.get("/api/auth/status")
-def auth_status(request: Request, db: Session = Depends(get_session)):
+def auth_status(
+    request: Request, response: Response, db: Session = Depends(get_session)
+):
     uid = authn.decode_session(request.cookies.get(authn.SESSION_COOKIE, ""))
     user = get_user(db, uid) if uid else None
     if user is not None:
         guests.touch(db, user)
+
+    # Repair the identity hint from the authoritative answer.
+    #
+    # Without this the hint only ever reaches sessions created AFTER it shipped:
+    # a visitor with an existing session never calls guest-login again, because
+    # this endpoint keeps answering successfully, so their top bar would go on
+    # painting blank forever. It also self-heals a hint that has drifted — a
+    # promoted guest, or a value someone edited by hand.
+    kind = "guest" if guests.is_guest(user) else "account" if user else None
+    if kind and request.cookies.get(KIND_COOKIE) != kind:
+        response.set_cookie(
+            KIND_COOKIE, kind, httponly=False,
+            secure=_HTTPS_DEPLOY, samesite="lax",
+        )
+    elif not kind and request.cookies.get(KIND_COOKIE):
+        # No session, but a hint says otherwise: clear it rather than let the
+        # next load paint a signed-in bar over nothing.
+        response.delete_cookie(KIND_COOKIE)
+
     return {
         "authenticated": bool(user),
         "user": {"id": user.id, "name": user.name, "email": user.email} if user else None,
@@ -364,7 +422,7 @@ def register(body: RegisterIn, request: Request, response: Response, db: Session
         raise HTTPException(status_code=409, detail="Username already taken")
     user, _err = authn.find_or_create_password_user(db, body.username, body.password)
     _promote_prior_guest(request, db, user)
-    set_session_cookie(response, user.id)
+    set_session_cookie(response, user.id, kind="account")
     return {"id": user.id, "name": user.name}
 
 
@@ -392,13 +450,13 @@ def login(body: LoginIn, request: Request, response: Response, db: Session = Dep
     except ValueError:
         raise HTTPException(status_code=401, detail="Invalid username or password")
     _promote_prior_guest(request, db, user)
-    set_session_cookie(response, user.id)
+    set_session_cookie(response, user.id, kind="account")
     return {"id": user.id, "name": user.name}
 
 
 @app.post("/api/auth/logout")
 def logout(response: Response):
-    response.delete_cookie(authn.SESSION_COOKIE)
+    clear_session_cookies(response)
     return {"ok": True}
 
 
@@ -416,7 +474,7 @@ def local_login(response: Response, db: Session = Depends(get_session)):
     )
     if not user:
         raise HTTPException(status_code=503, detail="Local user not initialized")
-    set_session_cookie(response, user.id)
+    set_session_cookie(response, user.id, kind="account")
     return {"id": user.id, "name": user.name}
 
 
@@ -462,7 +520,7 @@ async def google_callback(request: Request, db: Session = Depends(get_session)):
     # (vercel.json + vite.config.js) MUST ship together: alone it 404s, because
     # /app does not exist until the split builds app.html.
     resp = RedirectResponse(APP_PATH)
-    set_session_cookie(resp, user.id)
+    set_session_cookie(resp, user.id, kind="account")
     resp.delete_cookie("oauth_state")
     return resp
 
@@ -493,7 +551,7 @@ def guest_login(request: Request, response: Response, db: Session = Depends(get_
         # is how the corpus went missing for weeks without a trace.
         log.exception("guest %s: demo corpus seeding failed", guest.id)
         db.rollback()
-    set_session_cookie(response, guest.id)
+    set_session_cookie(response, guest.id, kind="guest")
     return {"id": guest.id, "name": guest.name, "guest": True}
 
 
@@ -575,7 +633,7 @@ def delete_account(
             detail="The built-in local account cannot be deleted.",
         )
     summary = guests.purge_user_data(db, user, drop_user=True)
-    response.delete_cookie(authn.SESSION_COOKIE)
+    clear_session_cookies(response)
     return {"deleted": True, **summary}
 
 

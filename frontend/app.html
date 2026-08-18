@@ -25,8 +25,29 @@
           document.documentElement.setAttribute("data-theme", "dark");
         }
       })();
+
+      // Identity, painted before any request is made.
+      //
+      // The session cookie is httpOnly — correctly, it is the credential — so
+      // the page cannot read it and used to wait on /api/auth/status before it
+      // knew whether to draw a guest badge or a sign-in button. That is 1.2s
+      // warm and about 3s on a cold serverless function, during which the top
+      // right corner is simply empty. `ragchat_kind` carries only "guest" or
+      // "account", is not httpOnly, and is read here at ~0ms.
+      //
+      // Forging it changes what YOUR browser draws for a moment and nothing
+      // else: every authorisation decision still rests on the httpOnly cookie.
+      // app.js overwrites this attribute with the truth when status lands.
+      (function () {
+        try {
+          var m = document.cookie.match(/(?:^|;\s*)ragchat_kind=(guest|account)/);
+          if (m) document.documentElement.setAttribute("data-kind", m[1]);
+        } catch (e) {
+          /* no hint is the old behaviour, not a broken one */
+        }
+      })();
     </script>
-    <link rel="stylesheet" href="/styles.css?v=33" />
+    <link rel="stylesheet" href="/styles.css?v=34" />
     <script>
       // Boot diagnostics: collect load/runtime errors so a broken app.js
       // shows a visible message instead of a silently dead UI.
@@ -117,6 +138,20 @@
                the note read as a floating slogan and the button as unrelated
                chrome. Filled by app.js from /api/auth/status. -->
           <div class="topbar-identity">
+            <!-- Placeholders, shown from the `ragchat_kind` cookie by the
+                 inline script above and removed the moment app.js has the real
+                 status. Without them this block is EMPTY until
+                 /api/auth/status returns — 1.2s warm, ~3s cold — which is what
+                 "the sign-in button is missing" was.
+
+                 Deliberately a skeleton and not a copy of the real controls:
+                 duplicating the Google button here would be markup that drifts
+                 out of step with the version app.js renders. This holds the
+                 space and says which way it will resolve. -->
+            <div class="identity-hint" aria-hidden="true">
+              <span class="hint-badge">Guest</span>
+              <span class="hint-btn"></span>
+            </div>
             <div id="guest-badge" class="guest-badge hidden"></div>
             <div id="auth-slot" class="auth-slot"></div>
           </div>
@@ -556,6 +591,6 @@
       </div>
     </div>
 
-    <script type="module" src="/app.js?v=41"></script>
+    <script type="module" src="/app.js?v=42"></script>
   </body>
 </html>

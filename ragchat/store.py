@@ -18,6 +18,7 @@ still surface (PRD §5 hybrid_search, real BM25 — not web search).
 """
 from __future__ import annotations
 
+import logging
 import re
 from collections import defaultdict
 
@@ -26,6 +27,8 @@ from chromadb.config import Settings as ChromaSettings
 from rank_bm25 import BM25Okapi
 
 from .config import CHROMA_DIR
+
+log = logging.getLogger(__name__)
 
 _client: chromadb.ClientAPI | None = None
 
@@ -143,6 +146,62 @@ def add_chunks(
     _rebuild_bm25(name)
 
 
+# Collections whose BM25 index has been hydrated from disk this process, so a
+# collection that genuinely holds nothing is not re-read on every query.
+_BM25_HYDRATED: set[str] = set()
+
+
+def _hydrate_bm25(col) -> None:
+    """Rebuild the keyword index for a collection from what is already stored.
+
+    The index is in-memory and per-process, built as a side effect of
+    add_chunks — so a freshly started process has NONE until something is
+    ingested, and until then every query silently skipped keyword fusion and
+    ran vector-only. That is not a small difference: fusion is what makes exact
+    strings like form codes and part numbers rank at all, and CLAUDE.md
+    describes it as unconditional. It was unconditional only if you had
+    uploaded something since the last restart.
+
+    Chroma is local dev only — the Neon backend uses Postgres full-text search,
+    which is stateless and always there — so this exists to stop local
+    behaviour drifting from deployed behaviour, not to serve visitors.
+
+    Read once per collection per process. `col.get()` pulls the documents and
+    metadata already on disk; nothing is re-embedded.
+    """
+    name = col.name
+    if name in _BM25_HYDRATED:
+        return
+    _BM25_HYDRATED.add(name)
+    try:
+        got = col.get(include=["documents", "metadatas"])
+    except Exception:
+        log.exception("bm25: could not hydrate %s from disk", name)
+        return
+    docs = got.get("documents") or []
+    metas = got.get("metadatas") or []
+    if not docs:
+        return
+    # Group by document and order by the stored chunk_index, because the flat
+    # list is addressed as "doc_id:position" and a shuffled order would make
+    # those ids point at the wrong text.
+    by_doc: dict[str, dict[int, str]] = defaultdict(dict)
+    for text, meta in zip(docs, metas):
+        meta = meta or {}
+        doc_id = meta.get("doc_id")
+        if doc_id is None:
+            continue
+        idx = int(meta.get("chunk_index") or 0)
+        by_doc[doc_id][idx] = text
+        _BM25_TITLE[(name, doc_id)] = meta.get("title") or ""
+        _BM25_REF[(name, doc_id, idx)] = meta.get("ref") or ""
+    bucket = _BM25_DOCS.setdefault(name, {})
+    for doc_id, chunks in by_doc.items():
+        # Only fill in what ingest has not already put there this process.
+        bucket.setdefault(doc_id, [t for _, t in sorted(chunks.items())])
+    _rebuild_bm25(name)
+
+
 def _user_collection_prefix(user_id: str) -> str:
     return f"user-{_slug(user_id)}__"
 
@@ -192,6 +251,11 @@ def query_chunks(
     col = collection_for(user_id, embedding_model)
     if col.count() == 0:
         return []
+    if bm25_index and query_text:
+        # Build the keyword index from what is on disk if this process has not
+        # done so yet, so fusion works on the first query after a restart
+        # instead of only after the next upload.
+        _hydrate_bm25(col)
     # Fetch a wider vector net when fusing, so BM25 can promote chunks the
     # vector ranker missed.
     v_n = max(n_results, 30) if bm25_index else n_results
@@ -355,6 +419,9 @@ def reassign_user_chunks(old_user_id: str, new_user_id: str) -> int:
     # scratch; drop them so the renamed collections rebuild lazily.
     for cache in (_BM25_DOCS, _BM25_FLAT, _BM25_OBJ):
         cache.clear()
+    # The rename changes collection NAMES, which is what every cache above is
+    # keyed by — including the record of which have been hydrated.
+    _BM25_HYDRATED.clear()
     return moved
 
 
@@ -383,6 +450,7 @@ def delete_users_chunks(user_ids: list[str]) -> int:
         for cache in (_BM25_DOCS, _BM25_FLAT, _BM25_OBJ):
             cache.clear()
         _BM25_TITLE.clear()
+        _BM25_HYDRATED.clear()
     return dropped
 
 

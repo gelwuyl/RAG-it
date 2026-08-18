@@ -237,6 +237,37 @@ input:disabled, textarea:disabled, select:disabled {
   flex-wrap: wrap;
 }
 
+/* ---------- identity skeleton ----------
+   Shown from the `ragchat_kind` cookie before any request is made, and removed
+   the instant app.js has the real status. It exists because this block used to
+   be EMPTY for 1.2s warm and ~3s cold, which read as a missing sign-in button
+   and let the top bar reflow under the visitor as it filled.
+
+   Hidden by default: with no cookie there is nothing truthful to show, and a
+   guess that resolves the other way is worse than a blank. */
+.identity-hint { display: none; align-items: center; gap: 10px; }
+html[data-kind="guest"] .identity-hint,
+html[data-kind="account"] .identity-hint { display: flex; }
+/* The badge half is guest-only; the button half stands in for either control,
+   because both resolve to something button-shaped in the same place. */
+html[data-kind="account"] .identity-hint .hint-badge { display: none; }
+/* Once app.js knows, the real controls take over in the same frame. */
+html.identity-resolved .identity-hint { display: none; }
+
+.identity-hint .hint-badge {
+  font-family: var(--font-mono); font-size: var(--text-nano);
+  letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--faint);
+  border: 1px solid var(--border); border-radius: var(--r-pill);
+  padding: 3px 9px;
+}
+/* Sized to the real button so nothing moves when it is replaced. */
+.identity-hint .hint-btn {
+  display: block; width: 104px; height: 32px;
+  border: 1px solid var(--border); border-radius: var(--r-md);
+  background: var(--panel-sunken);
+}
+
 /* ---------- guest workspace badge ----------
    Telemetry register (PRODUCT_UX_PLAN.md §1): mono, uppercase, letterspaced,
    deliberately low contrast. It is a status readout, not a call to action —

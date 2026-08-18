@@ -431,3 +431,30 @@ def test_candidate_k_bounds_the_pool_even_without_the_bm25_index():
 
     got = _pl.retrieve(u, "coffee", _make_cfg(candidate_k=3))
     assert len(got) <= 3, f"candidate_k=3 returned {len(got)} chunks"
+
+
+def test_keyword_fusion_survives_a_process_restart():
+    """The BM25 index is in-memory and built during ingest, so a freshly started
+    process had none — and every query until the next upload silently ran
+    vector-only. CLAUDE.md calls keyword fusion unconditional; it was
+    conditional on having uploaded something since the last restart.
+    """
+    u = "user-HY"
+    cfg = _make_cfg(hybrid_search=True)
+    _index_corpus(u, cfg)
+
+    # Simulate the restart: the collection stays on disk, every in-memory cache
+    # goes, exactly as it would in a new process.
+    for cache in (_store._BM25_DOCS, _store._BM25_FLAT, _store._BM25_OBJ):
+        cache.clear()
+    _store._BM25_TITLE.clear()
+    _store._BM25_REF.clear()
+    _store._BM25_HYDRATED.clear()
+
+    out = _store.query_chunks(
+        u, _stub_embed(["HE-104"])[0], cfg.fingerprint(), 4,
+        embedding_model="text-embedding-005",
+        bm25_index=True, query_text="HE-104 warranty form",
+    )
+    assert _store._BM25_OBJ, "the keyword index did not rebuild itself"
+    assert any(c["doc_id"] == "h" for c in out), [c["doc_id"] for c in out]

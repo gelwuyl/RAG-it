@@ -15,6 +15,7 @@ const state = {
   evalData: null,     // last /api/eval payload, so an answer can place itself against the run
   evalBaseline: null, // eval/baseline.json — what a bar is measured against
   simThreshold: 0,    // live retrieval threshold, marked on the per-answer meter
+  authStatusAt: 0,    // when /api/auth/status last landed, so it is not re-fetched at boot
   deepSearch: false,  // per-QUESTION literal scan; sent with ask, never stored
   // Documents + folders currently in the workspace. Only the COUNT is kept:
   // it is what the empty conversation needs to say something true, and holding
@@ -410,6 +411,13 @@ async function initAuth() {
 function applyAuthStatus(status) {
   state.user = status.user;
   state.isGuest = !!status.is_guest;
+  state.authStatusAt = Date.now();
+  // Reconcile the boot hint with the truth and stand the skeleton down. The
+  // cookie is only a hint — it can be stale (cleared session, expired guest)
+  // or forged — so whatever it said, this is what the page renders from now on.
+  const root = document.documentElement;
+  root.setAttribute("data-kind", status.is_guest ? "guest" : "account");
+  root.classList.add("identity-resolved");
   state.guestUsage = status.guest_usage || null;
   state.googleOAuth = !!status.google_oauth;
 
@@ -532,11 +540,26 @@ function renderGuestState() {
 // Usage changes on every add and delete, so the badge has to be refreshed from
 // the server rather than incremented locally — the server is the only thing
 // that knows which documents count against the cap.
+// How long the status we already hold counts as current. Long enough to cover
+// boot, short enough that the badge still moves when an upload lands.
+const AUTH_STATUS_FRESH_MS = 10_000;
+
 async function refreshGuestUsage() {
   if (!state.isGuest) return;
+  // initAuth() fetched status moments ago and applyAuthStatus stored the usage
+  // from it. refreshSources() runs at boot too, so without this guard every
+  // load made a SECOND status request — measured landing at 3669ms and
+  // re-rendering the badge well after first paint, which is a visible change
+  // the visitor has no explanation for. After an upload the timestamp is stale
+  // and the fetch happens, which is the case that actually needs it.
+  if (Date.now() - (state.authStatusAt || 0) < AUTH_STATUS_FRESH_MS) {
+    renderGuestState();
+    return;
+  }
   try {
     const status = await api("/api/auth/status");
     state.guestUsage = status.guest_usage || null;
+    state.authStatusAt = Date.now();
     renderGuestState();
   } catch (e) {
     /* the badge going stale is not worth interrupting the user for */
@@ -610,6 +633,10 @@ function renderSignedIn(slot, me) {
     } catch (e) {
       /* clearing the cookie is best-effort; reload reflects the real state */
     }
+    // The server clears both cookies together, but if that request failed the
+    // identity hint would still say "account" and the next load would paint a
+    // signed-in top bar over a signed-out session for a second.
+    document.documentElement.removeAttribute("data-kind");
     window.location.reload();
   };
 }
