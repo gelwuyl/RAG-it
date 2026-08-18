@@ -1195,19 +1195,31 @@ input:disabled, textarea:disabled, select:disabled {
 
 /* ---------- command palette (PRODUCT_UX_PLAN.md §8) ----------
 
-   Desktop only: both the overlay and the topbar hint are hidden below 1100px, the
-   same breakpoint where the columns stop being columns. On touch the shortcut has
-   no meaning and the hint would be spending scarce topbar width to advertise a
-   key the device does not have. */
+   Desktop only: both the overlay and its "/" button are hidden below 1100px, the
+   same breakpoint where the columns stop being columns. The palette's commands
+   work by clicking the real controls, and below that width those controls sit in
+   panes the tab bar has swapped off screen.
 
-.palette-hint {
-  font-family: var(--font-mono); font-size: var(--text-nano);
-  letter-spacing: var(--tracking-telemetry);
+   The affordance used to be a ⌘K chip in the topbar, next to the sign-in control.
+   Being desktop-only made the identity block shift position with the viewport, so
+   the one element that says whether you are signed in moved around and read as
+   part of the palette. It lives in the composer now, where a slash is what people
+   already reach for. */
+
+.slash-btn {
+  /* line-height is set in px, not a ratio: it is what makes this box exactly as
+     tall as #ask-btn (18 + 20 padding + 2 border = 40), and a ratio would drift
+     with the font. The composer looks broken if the two buttons flanking it are
+     different heights. */
+  font-family: var(--font-mono); font-size: 15px; line-height: 18px;
   color: var(--muted); background: var(--panel-sunken);
-  border: 1px solid var(--border); border-radius: var(--r-sm);
-  padding: 4px 7px; cursor: pointer; white-space: nowrap;
+  border: 1px solid var(--border); border-radius: var(--r-md);
+  /* Matches #ask-btn's box so the composer reads as one row of controls
+     rather than a tall button beside a short one. */
+  padding: 10px 14px; cursor: pointer;
+  flex-shrink: 0;
 }
-.palette-hint:hover { color: var(--text); border-color: var(--border-strong); }
+.slash-btn:hover { color: var(--primary-ink); border-color: var(--border-strong); }
 
 .palette-overlay {
   position: fixed; inset: 0; z-index: 130;
@@ -1268,7 +1280,7 @@ input:disabled, textarea:disabled, select:disabled {
 }
 
 @media (max-width: 1099px) {
-  .palette-hint, .palette-overlay { display: none !important; }
+  .slash-btn, .palette-overlay { display: none !important; }
 }
 
 /* ---------- settings modal ---------- */

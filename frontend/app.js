@@ -1937,6 +1937,19 @@ $("ask-form").onsubmit = async (e) => {
   }
 };
 
+// "/" on an empty composer opens the palette, the convention every chat box
+// has trained people into. Only when it is the WHOLE value: a question may
+// legitimately contain a slash, and swallowing that would be worse than having
+// no shortcut at all. The character is removed, because it was a trigger rather
+// than something the user meant to type.
+$("question-input").addEventListener("input", (e) => {
+  if (!PALETTE_DESKTOP.matches) return;
+  if (e.target.value === "/") {
+    e.target.value = "";
+    openPalette();
+  }
+});
+
 $("question-input").addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) {
     e.preventDefault();
@@ -2667,7 +2680,7 @@ function runPalette(i) {
   row.run();
 }
 
-$("palette-btn").onclick = openPalette;
+$("slash-btn").onclick = openPalette;
 
 $("palette-input").addEventListener("input", (e) => {
   paletteRows = paletteFilter(e.target.value);
@@ -2709,9 +2722,10 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
-// Ctrl on Windows and Linux, ⌘ on a Mac. Getting this wrong makes the hint read
-// as a shortcut for someone else's computer.
-$("palette-btn").textContent = IS_MAC ? "⌘K" : "Ctrl K";
+// Ctrl on Windows and Linux, ⌘ on a Mac. Getting this wrong advertises a
+// shortcut for someone else's computer. The button reads "/" at every size now,
+// so the key name lives in its tooltip rather than in its label.
+$("slash-btn").title = `Commands — type / here, or press ${IS_MAC ? "⌘K" : "Ctrl+K"}`;
 
 // Crossing into a narrow window closes it: the overlay is desktop-only, and a
 // resize should not leave a dialog on screen that the layout no longer offers.

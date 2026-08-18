@@ -26,7 +26,7 @@
         }
       })();
     </script>
-    <link rel="stylesheet" href="/styles.css?v=27" />
+    <link rel="stylesheet" href="/styles.css?v=28" />
     <script>
       // Boot diagnostics: collect load/runtime errors so a broken app.js
       // shows a visible message instead of a silently dead UI.
@@ -101,13 +101,14 @@
             <button id="settings-btn" class="btn btn-small" type="button" title="Tuning parameters">⚙ Settings</button>
             <button id="theme-toggle" class="btn btn-small" type="button"
               title="Switch between the dark and light theme" aria-pressed="false">☾</button>
-            <!-- The palette's own affordance, in the telemetry register (plan §8).
-                 A keyboard shortcut nobody is told about does not exist. Hidden
-                 below 1100px by CSS: it has no meaning on touch and must not
-                 spend mobile topbar space. app.js writes the right key name for
-                 the platform into it. -->
-            <button id="palette-btn" class="palette-hint" type="button"
-              aria-label="Open the command palette">⌘K</button>
+            <!-- The ⌘K affordance used to live here and no longer does. It sat
+                 immediately beside the sign-in control and the account button,
+                 and since it is hidden below 1100px the identity block shifted
+                 with the viewport — so the one control that tells you whether
+                 you are signed in moved around, and sometimes read as part of
+                 the palette. The affordance is now a "/" button in the
+                 composer, where the commands are actually used. ⌘K still works.
+              -->
           </div>
           <!-- Identity: guest status and the sign-in control, kept in ONE
                container so they stay adjacent and wrap together. "Sign in to keep
@@ -226,6 +227,14 @@
             </div>
           </div>
           <form id="ask-form" class="ask-form">
+            <!-- The command palette's affordance, moved off the topbar. A slash
+                 is where people already expect commands to live in a message
+                 box, so this button and typing "/" as the first character do
+                 the same thing. Desktop-only, like the palette itself: its
+                 commands work by clicking the real controls, and on mobile
+                 those sit inside panes the tab bar has swapped out. -->
+            <button id="slash-btn" class="slash-btn" type="button"
+              aria-label="Show commands" title="Commands — or type / here">/</button>
             <textarea id="question-input" rows="1" placeholder="Ask about your documents…"
               autocomplete="off"></textarea>
             <button id="ask-btn" class="btn btn-primary" type="submit">Ask</button>
@@ -532,6 +541,6 @@
       </div>
     </div>
 
-    <script type="module" src="/app.js?v=35"></script>
+    <script type="module" src="/app.js?v=36"></script>
   </body>
 </html>
