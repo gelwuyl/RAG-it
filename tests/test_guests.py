@@ -196,6 +196,13 @@ class _FakeVectorStore:
 @pytest.fixture
 def vectors(monkeypatch) -> _FakeVectorStore:
     store = _FakeVectorStore()
+    # Force the LIVE embedding path. These tests are about what seeding does with
+    # a document once its vectors exist — the flush/commit ordering, the rollback
+    # on a failed copy — and they simulate embedding through the fake store. The
+    # precomputed shortcut bypasses that fake entirely, so leaving it enabled
+    # would mean they silently stopped exercising the thing they were written
+    # for. The shortcut has its own tests further down.
+    monkeypatch.setattr("ragchat.demo_vectors.load", lambda cfg: None)
     monkeypatch.setattr("ragchat.pipeline.ingest_document_text", store.ingest)
     monkeypatch.setattr("ragchat.vectordb.copy_user_chunks", store.copy)
     monkeypatch.setattr("ragchat.vectordb.delete_document_chunks", store.delete)
@@ -335,3 +342,68 @@ def test_purge_removes_messages_with_their_conversation(clean_db):
     assert summary["messages"] == 1
     assert db.query(Message).count() == 0
     assert db.query(Conversation).count() == 0
+
+
+# --- the cold-start 504 -----------------------------------------------------
+#
+# The first visitor on a fresh database used to embed the whole demo corpus
+# inside their own guest-login request, which has 60s. It did not fit: the first
+# POST /api/auth/guest-login returned 504 after 63s, so the landing page's
+# primary call to action was broken for whoever arrived first. It then healed
+# itself on the next visit, which is what kept it hidden.
+
+
+def test_precomputed_vectors_match_the_shipped_config():
+    """The vectors only help if they apply. They are keyed by embedding model and
+    fingerprint, and a mismatch silently falls back to the slow path — so a
+    stale file would put the 504 back with nothing to show for it."""
+    from ragchat import demo_vectors
+
+    cfg = load_config()
+    loaded = demo_vectors.load(cfg)
+    assert loaded is not None, (
+        "demo_vectors.json does not match the shipped config — regenerate with "
+        "python -m ragchat.demo_vectors"
+    )
+    assert set(loaded) == set(_guests.DEMO_CORPUS_FILES)
+    for name, embs in loaded.items():
+        assert embs, f"{name} has no vectors"
+        assert all(len(e) == 768 for e in embs), f"{name} is not 768-dim"
+
+
+def test_a_stale_vector_file_falls_back_instead_of_seeding_junk(monkeypatch):
+    """Chunks written under a mismatched fingerprint are invisible to
+    query_chunks, so seeding from them would produce exactly the chunkless
+    document the rest of this file exists to prevent."""
+    from dataclasses import replace
+
+    from ragchat import demo_vectors
+
+    cfg = load_config()
+    assert demo_vectors.load(replace(cfg, embedding_model="some/other-model")) is None
+    assert demo_vectors.load(replace(cfg, chunk_size=cfg.chunk_size + 64)) is None
+
+
+def test_building_the_template_spends_no_embedding_call(clean_db, monkeypatch):
+    """The whole point: seeding is a database insert, not an embedding job."""
+    from ragchat import demo_vectors
+
+    calls = []
+    monkeypatch.setattr(
+        "ragchat.pipeline.ingest_document_text",
+        lambda *a, **k: calls.append(a) or 1,
+    )
+    stored = []
+    monkeypatch.setattr(
+        "ragchat.vectordb.add_chunks",
+        lambda *a, **k: stored.append((a[2], len(a[4]))),
+    )
+
+    cfg = load_config()
+    template = _guests.ensure_demo_template(clean_db, cfg)
+
+    assert not calls, f"embedded live instead of using precomputed vectors: {calls}"
+    assert {t for t, _ in stored} == set(_guests.DEMO_CORPUS_FILES)
+    docs = clean_db.query(Document).filter(Document.user_id == template.id).all()
+    assert {d.title for d in docs} == set(_guests.DEMO_CORPUS_FILES)
+    assert all(d.status == "ready" and d.n_chunks > 0 for d in docs)

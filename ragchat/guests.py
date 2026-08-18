@@ -218,7 +218,14 @@ def ensure_demo_template(db: Session, cfg) -> User:
     """
     from pathlib import Path
 
+    from . import demo_vectors
     from .pipeline import ingest_document_text
+
+    # Vectors that ship with the repo, when they match this exact model and
+    # fingerprint. Without them the FIRST visitor on a fresh database pays for
+    # embedding the whole corpus inside their own 60s guest-login request, and
+    # it does not fit — that request 504'd at 63s. None means embed live.
+    precomputed = demo_vectors.load(cfg)
 
     template = _demo_template(db)
     if template is None:
@@ -253,9 +260,18 @@ def ensure_demo_template(db: Session, cfg) -> User:
         # would do so again on every subsequent visit, because the failed file
         # is retried first thing each time.
         try:
-            n = ingest_document_text(template.id, doc.id, doc.title, text, cfg)
+            vectors = (precomputed or {}).get(filename)
+            if vectors:
+                n = demo_vectors.seed_document(
+                    template.id, doc.id, doc.title, text, cfg, vectors
+                )
+            else:
+                n = ingest_document_text(template.id, doc.id, doc.title, text, cfg)
         except Exception:
-            log.exception("demo corpus: embedding %s failed", filename)
+            # Covers a stale vector file as well as a provider failure. Both mean
+            # "this file is not ready", and the next visit retries it — by which
+            # time the live path will have embedded it anyway.
+            log.exception("demo corpus: preparing %s failed", filename)
             doc.status = "failed"
             db.commit()
             continue
