@@ -1314,6 +1314,33 @@ class ConfigUpdateIn(BaseModel):
     eval_show: bool | None = None
 
 
+@app.post("/api/eval/config/reset")
+def reset_config(user: User = Depends(require_account)):
+    """Discard the stored config so config.yaml is the source of truth again.
+
+    Saving Settings writes a single row that FULLY REPLACES config.yaml, and
+    until this endpoint existed nothing could remove it. A deployment could sit
+    on a top_k or a model chosen months earlier while the repo said something
+    different, and the only symptom was GET /api/health disagreeing with the
+    file — which you would only look at if you already suspected it.
+
+    Account-gated like every other config write: the row is shared by the whole
+    deployment, so this changes retrieval for everyone.
+
+    Returns the config that is now live, so the caller can show what changed
+    rather than saying "done" and leaving them to go and look.
+    """
+    from .db import clear_config_override
+
+    had_override = clear_config_override("pipeline")
+    cfg = load_config()
+    return {
+        "reset": had_override,
+        "config": eval_config(),
+        "needs_reindex": False,
+    }
+
+
 @app.put("/api/eval/config")
 def update_config(body: ConfigUpdateIn, _: User = Depends(require_account)):
     """Persist tuning knobs to the DB-backed config store (config.yaml is

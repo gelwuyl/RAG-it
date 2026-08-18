@@ -47,7 +47,7 @@
         }
       })();
     </script>
-    <link rel="stylesheet" href="/styles.css?v=37" />
+    <link rel="stylesheet" href="/styles.css?v=38" />
     <script>
       // Boot diagnostics: collect load/runtime errors so a broken app.js
       // shows a visible message instead of a silently dead UI.
@@ -591,11 +591,19 @@
         </div>
         <div class="modal-footer">
           <p id="settings-note" class="muted small hidden"></p>
+          <!-- Saving here writes ONE row that fully replaces config.yaml, for
+               the whole deployment. Until this button existed there was no way
+               back: a deployment could sit on a setting chosen months earlier
+               while the repo said something different, and the only symptom was
+               /api/health disagreeing with the file. -->
+          <button id="settings-reset" class="btn btn-small" type="button"
+            title="Discard saved settings and use the values shipped with the app">
+            Reset to shipped defaults</button>
           <button id="settings-save" class="btn btn-primary">Save</button>
         </div>
       </div>
     </div>
 
-    <script type="module" src="/app.js?v=45"></script>
+    <script type="module" src="/app.js?v=46"></script>
   </body>
 </html>

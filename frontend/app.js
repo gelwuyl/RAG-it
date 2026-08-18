@@ -1333,6 +1333,25 @@ $("advanced-toggle").onclick = () => {
 
 setAdvanced(false);
 
+$("settings-reset").onclick = async () => {
+  if (guestBlocked("settings-save")) return;
+  try {
+    const r = await api("/api/eval/config/reset", { method: "POST" });
+    // Says which of the two things happened. "Reset" when nothing was stored
+    // would be a lie, and the reader would go looking for a change that never
+    // needed to happen.
+    toast(
+      r.reset
+        ? "Saved settings discarded — the app is using its shipped defaults again"
+        : "Nothing was overridden; the shipped defaults were already live",
+    );
+    await refreshLiveConfig();
+    loadSettingsIntoForm();
+  } catch (e) {
+    toast(e.message, true);
+  }
+};
+
 // One delegated listener rather than fifteen: any edit inside the advanced
 // fields re-derives which preset (if any) the form now describes.
 $("advanced-fields").addEventListener("input", updatePresetSelection);

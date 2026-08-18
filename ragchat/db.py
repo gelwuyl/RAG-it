@@ -210,6 +210,30 @@ def get_config_override(key: str):
         s.close()
 
 
+def clear_config_override(key: str) -> bool:
+    """Drop the stored config so config.yaml is the source again.
+
+    Until this existed there was no way to undo a Settings save. A row here
+    fully replaces config.yaml, so once saved it masked the shipped defaults
+    FOREVER — a deployment could sit on a top_k or a model from months ago
+    while the repo said something else, and the only symptom was
+    /api/health disagreeing with the file.
+
+    Returns whether a row was actually removed, so the caller can tell "reset"
+    from "there was nothing to reset".
+    """
+    s = SessionLocal()
+    try:
+        row = s.get(ConfigOverride, key)
+        if row is None:
+            return False
+        s.delete(row)
+        s.commit()
+        return True
+    finally:
+        s.close()
+
+
 def set_config_override(key: str, value: str) -> None:
     s = SessionLocal()
     try:

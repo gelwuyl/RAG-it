@@ -255,3 +255,36 @@ def test_is_known_fallback_does_not_reject_default():
     # config save never gets locked out.
     assert _cfg.is_known_model(_cfg.settings.default_llm_model, "chat") is True
     assert _cfg.is_known_model(_cfg.settings.default_embedding_model, "embedding") is True
+
+
+# --------------------------------------------------------------------------
+# Undoing a Settings save
+# --------------------------------------------------------------------------
+
+
+def test_reset_returns_config_yaml_to_being_the_source():
+    """A stored override FULLY replaces config.yaml, and nothing could remove
+    it — so a deployment could sit on a top_k chosen months earlier while the
+    repo said something else, with GET /api/health the only symptom.
+    """
+    from dataclasses import replace
+
+    from ragchat.config import load_config, save_config_override
+    from ragchat.db import clear_config_override, get_config_override
+
+    # Start from a known state: other test modules in this suite save overrides,
+    # and reading "shipped" through one would compare the override to itself.
+    clear_config_override("pipeline")
+    shipped = load_config()
+    try:
+        save_config_override(replace(shipped, top_k=shipped.top_k + 3))
+        assert load_config().top_k == shipped.top_k + 3, "override did not take"
+
+        assert clear_config_override("pipeline") is True
+        assert get_config_override("pipeline") is None
+        assert load_config().top_k == shipped.top_k, "config.yaml did not come back"
+
+        # Clearing nothing reports nothing, rather than claiming a reset.
+        assert clear_config_override("pipeline") is False
+    finally:
+        clear_config_override("pipeline")
