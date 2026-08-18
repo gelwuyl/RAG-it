@@ -346,6 +346,34 @@ def reassign_user_chunks(old_user_id: str, new_user_id: str) -> int:
     return moved
 
 
+def delete_users_chunks(user_ids: list[str]) -> int:
+    """Drop every collection belonging to any of these users. Returns the count.
+
+    The Chroma twin of the Neon bulk delete. Chroma encodes the owner in the
+    collection NAME rather than a column, so "delete this user's vectors" is
+    dropping their collections — which also disposes of the HNSW index, where
+    a per-row delete would leave it behind.
+    """
+    prefixes = tuple(_user_collection_prefix(u) for u in user_ids if u)
+    if not prefixes:
+        return 0
+    client = get_client()
+    dropped = 0
+    for col in client.list_collections():
+        name = col.name if hasattr(col, "name") else str(col)
+        if not name.startswith(prefixes):
+            continue
+        client.delete_collection(name)
+        dropped += 1
+    if dropped:
+        # Per-instance scratch keyed by collection name. Rebuilt lazily, so
+        # clearing is always safe and is cheaper than pruning by key.
+        for cache in (_BM25_DOCS, _BM25_FLAT, _BM25_OBJ):
+            cache.clear()
+        _BM25_TITLE.clear()
+    return dropped
+
+
 def copy_user_chunks(
     src_user_id: str, src_doc_id: str, dst_user_id: str, dst_doc_id: str
 ) -> int:

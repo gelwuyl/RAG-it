@@ -351,7 +351,7 @@ async function initAuth() {
     const params = new URLSearchParams(window.location.search);
     if (params.get("signin") && (!status.authenticated || status.is_guest)) {
       if (status.google_oauth) {
-        window.location.href = "/api/auth/google/login";
+        goToOAuth();
         return;
       }
       renderAuthGate(status);
@@ -570,7 +570,9 @@ function renderSignedOut(slot, configured) {
     // /api/auth/login is POST-only (username+password). Navigating to it issued
     // a GET, which 405'd and never reached Google — this is why the button
     // "did nothing". The OAuth entry point is /api/auth/google/login.
-    window.location.href = "/api/auth/google/login";
+    // Through goToOAuth(), which suppresses the close beacon: this navigation
+    // is a round trip, not a departure, and the workspace must survive it.
+    goToOAuth();
   };
 }
 
@@ -2853,6 +2855,67 @@ $("slash-btn").title = `Commands — type / here, or press ${IS_MAC ? "⌘K" : "
 // resize should not leave a dialog on screen that the layout no longer offers.
 PALETTE_DESKTOP.addEventListener("change", (e) => { if (!e.matches) closePalette(); });
 
+// ---------- guest workspace lifecycle ----------
+//
+// A guest workspace is destroyed after 30 minutes idle (ragchat/guests.py).
+// "Idle" has to mean idle, not "open but quiet": reading a long answer for
+// forty minutes must not race a sweeper. These two handlers are what make the
+// server's `last_seen_at` mean what the TTL assumes it means.
+
+// Comfortably inside both the TTL and the server's own 5-minute write throttle,
+// so an open tab is always fresh without writing on every ping.
+const KEEPALIVE_MS = 4 * 60 * 1000;
+
+// Set immediately before any navigation we KNOW is coming back to us as the
+// same person — the OAuth hop above all. `pagehide` cannot tell that departure
+// apart from a close, and back-dating during sign-in would hand the sweeper a
+// workspace the promotion is in the middle of preserving.
+let leavingForAuth = false;
+
+function goToOAuth() {
+  leavingForAuth = true;
+  window.location.href = "/api/auth/google/login";
+}
+
+let keepaliveTimer = null;
+
+function startGuestKeepalive() {
+  const ping = () => {
+    // Only while the tab is actually on screen. A backgrounded tab left open
+    // for a week is not someone reading, and pinging from it would make the
+    // TTL unenforceable — the one workspace that never expires is the one
+    // nobody is looking at.
+    if (document.visibilityState !== "visible" || !state.isGuest) return;
+    // /api/auth/status calls touch() server-side. The response is deliberately
+    // ignored: re-rendering identity every four minutes is how the badge ended
+    // up repainting mid-session, and nothing here needs the payload.
+    api("/api/auth/status").catch(() => {});
+  };
+  if (keepaliveTimer) clearInterval(keepaliveTimer);
+  keepaliveTimer = setInterval(ping, KEEPALIVE_MS);
+  // Coming back to a tab that has been hidden a while is exactly when the
+  // workspace is closest to expiry, so ping on the way in rather than waiting
+  // out the rest of the interval.
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") ping();
+  });
+}
+
+// `pagehide`, not `beforeunload`: mobile Safari and Chrome frequently discard a
+// backgrounded tab without ever firing beforeunload, and that is the single
+// most common way a guest workspace is abandoned.
+window.addEventListener("pagehide", () => {
+  if (!state.isGuest || leavingForAuth) return;
+  // sendBeacon, because a normal fetch is cancelled when the page goes away.
+  // The server BACK-DATES on this rather than deleting: pagehide fires on a
+  // reload too, and a visitor who reloads has to find their work still there.
+  try {
+    navigator.sendBeacon("/api/auth/leaving");
+  } catch (e) {
+    // Nothing to do and nobody to tell — the page is already going.
+  }
+});
+
 // ---------- boot ----------
 
 // Surface any script-load or runtime error captured by the inline collector
@@ -2873,5 +2936,7 @@ PALETTE_DESKTOP.addEventListener("change", (e) => { if (!e.matches) closePalette
     // boot itself failed — a failed boot is exactly when a sign-in button is
     // most useful. Its own failure stays non-fatal: sign-in is optional.
     .then(() => initGoogleAuth())
+    // After identity resolves, because it only runs for guests.
+    .then(() => startGuestKeepalive())
     .catch((e) => console.warn("google auth init failed:", e));
 })();

@@ -439,6 +439,31 @@ def reassign_user_chunks(old_user_id: str, new_user_id: str) -> int:
         return int(res.rowcount or 0)
 
 
+def delete_users_chunks(user_ids: list[str]) -> int:
+    """Delete every chunk owned by any of these users, in ONE statement.
+
+    The reaper used to remove chunks one document at a time, so clearing a
+    guest workspace with the demo corpus plus two uploads cost four round trips
+    to Neon before the relational rows were even touched. A sweep of twenty
+    such workspaces spent most of its time waiting on the network.
+
+    Deliberately NOT a no-op guard like prune_chunks has: there the empty set
+    means "this user has no documents, so do not treat all their chunks as
+    orphans", which is a real hazard. Here an empty list means there are no
+    users to delete, and the early return says exactly that.
+    """
+    ids = [u for u in user_ids if u]
+    if not ids:
+        return 0
+    eng = _get_engine()
+    with eng.begin() as conn:
+        _ensure_table(conn)
+        res = conn.execute(
+            chunks_table.delete().where(chunks_table.c.user_id.in_(ids))
+        )
+        return int(res.rowcount or 0)
+
+
 def copy_user_chunks(
     src_user_id: str, src_doc_id: str, dst_user_id: str, dst_doc_id: str
 ) -> int:

@@ -9,10 +9,12 @@ Guests are capped (they spend real embedding quota) and reaped after a period of
 inactivity. Signing in with Google promotes the guest's work into the permanent
 account instead of discarding it.
 
-Reaping is opportunistic rather than scheduled: Vercel gives no cron on the
-Hobby plan, and a background thread would be frozen the moment the response is
-sent (see CLAUDE.md). Doing it on guest creation costs one indexed DELETE on an
-event that is already infrequent.
+Reaping is SCHEDULED, driven from outside the deployment. A background thread
+would be frozen the moment the response is sent (CLAUDE.md), and Vercel's Hobby
+cron — which does exist, contrary to what this docstring used to say — fires
+once per DAY, which cannot honour a thirty-minute promise. So a GitHub Actions
+schedule calls POST /api/admin/sweep-guests every 15 minutes, and create_guest()
+keeps a two-workspace inline backstop for the day that schedule stops.
 """
 from __future__ import annotations
 
@@ -29,7 +31,36 @@ GUEST_PROVIDER = "guest"
 
 # Idle window before a guest's workspace is destroyed. Deliberately measured
 # from last activity, not creation, so someone mid-session is never wiped.
-GUEST_IDLE_TTL_SECONDS = 2 * 60 * 60  # 2 hours
+#
+# 30 minutes, down from 2 hours. Two hours only made sense while reaping was
+# opportunistic — the TTL was really "whenever the next visitor happens to
+# arrive", and a long window hid that. With a scheduled sweep every 15 minutes
+# the promise is now real, so it can be a promise worth making: a workspace
+# nobody has touched for half an hour is abandoned, and keeping it costs
+# storage and leaves anonymous uploads sitting on disk longer than they need to.
+#
+# An OPEN TAB is not idle. The frontend pings /api/auth/status every few minutes
+# while the page is visible, which calls touch(), so reading a long answer never
+# races the reaper. Signed-in workspaces are permanent and are excluded by the
+# provider filter, not by this number.
+GUEST_IDLE_TTL_SECONDS = 30 * 60  # 30 minutes
+
+# How many abandoned workspaces create_guest() clears on the way past.
+#
+# This is a BACKSTOP, not the mechanism: the scheduled sweeper does the real
+# work. It was 20, which put up to twenty full workspace deletions in front of
+# a visitor waiting for their first page — measured at 39.7s against 11.1s
+# warm. Two keeps cleanup alive if the sweeper is ever disabled (a GitHub
+# Actions schedule stops on a repo with no pushes for 60 days) without ever
+# putting more than a moment in a visitor's path.
+INLINE_REAP_LIMIT = 2
+
+# How far back the close beacon dates a departing guest, as a fraction of the
+# TTL. Not a delete: close-and-reopen has to survive, and a browser fires
+# pagehide on a reload as readily as on a close. Back-dating to just inside the
+# TTL means an abandoned workspace is collected by the next sweep, while a
+# visitor who comes straight back finds their work and touch() restores them.
+_BEACON_BACKDATE_FRACTION = 0.9
 
 # What a guest may upload before being asked to sign in.
 #
@@ -66,54 +97,108 @@ def touch(db: Session, user: User) -> None:
     db.commit()
 
 
-def purge_user_data(db: Session, user: User, *, drop_user: bool) -> dict:
-    """Delete everything belonging to `user`: chunks, documents, folders, chats.
+def purge_users(db: Session, users: list[User], *, drop_users: bool) -> dict:
+    """Delete everything belonging to every user in `users`, set at a time.
 
     Shared by guest reaping and account deletion so the two can never drift —
     a forgotten table in one path would silently leave orphaned rows behind.
-    Vector chunks are removed per document id: prune_chunks() deliberately
-    no-ops on an empty valid-doc set, so it cannot be used to clear a user.
+
+    Five statements regardless of how many workspaces or documents are
+    involved, where the previous shape was six to eight round trips PER
+    workspace: a vector delete per document, a message delete per conversation,
+    and an ORM delete per row after that. On Neon every one of those is a
+    network hop, and it is why an inline reap of twenty workspaces measured
+    39.7s in front of a visitor's first page load.
+
+    Vector chunks go through delete_users_chunks() rather than prune_chunks(),
+    which deliberately no-ops on an empty valid-doc set and so cannot be used
+    to clear anyone (CLAUDE.md).
     """
-    from .vectordb import delete_document_chunks
+    from .vectordb import delete_users_chunks
 
-    docs = db.query(Document).filter(Document.user_id == user.id).all()
-    for doc in docs:
-        try:
-            delete_document_chunks(user.id, doc.id)
-        except Exception:
-            # A vector-store hiccup must not strand the relational rows; the
-            # orphan-prune endpoint exists to mop up anything left behind.
-            pass
+    ids = [u.id for u in users]
+    if not ids:
+        return {"users": 0, "documents": 0, "folders": 0,
+                "conversations": 0, "messages": 0}
 
-    convs = db.query(Conversation).filter(Conversation.user_id == user.id).all()
+    try:
+        delete_users_chunks(ids)
+    except Exception:
+        # A vector-store hiccup must not strand the relational rows; the
+        # orphan-prune endpoint exists to mop up anything left behind.
+        log.exception("purge: clearing vectors for %d user(s) failed", len(ids))
+
+    conv_ids = [
+        c.id for c in
+        db.query(Conversation.id).filter(Conversation.user_id.in_(ids)).all()
+    ]
     n_msgs = 0
-    for conv in convs:
-        n_msgs += (
-            db.query(Message).filter(Message.conversation_id == conv.id).delete()
+    if conv_ids:
+        n_msgs = (
+            db.query(Message)
+            .filter(Message.conversation_id.in_(conv_ids))
+            .delete(synchronize_session=False)
         )
-        db.delete(conv)
+    n_convs = (
+        db.query(Conversation)
+        .filter(Conversation.user_id.in_(ids))
+        .delete(synchronize_session=False)
+    )
+    n_folders = (
+        db.query(FolderSource)
+        .filter(FolderSource.user_id.in_(ids))
+        .delete(synchronize_session=False)
+    )
+    n_docs = (
+        db.query(Document)
+        .filter(Document.user_id.in_(ids))
+        .delete(synchronize_session=False)
+    )
 
-    n_folders = db.query(FolderSource).filter(FolderSource.user_id == user.id).delete()
-    for doc in docs:
-        db.delete(doc)
-
-    summary = {
-        "documents": len(docs),
+    if drop_users:
+        db.query(User).filter(User.id.in_(ids)).delete(synchronize_session=False)
+    db.commit()
+    if drop_users:
+        # A bulk DELETE goes straight to the database and leaves the session's
+        # identity map untouched, and SessionLocal sets expire_on_commit=False,
+        # so db.get(User, id) would keep handing back a live-looking object for
+        # a row that no longer exists. The per-row db.delete() this replaced
+        # removed them for us.
+        #
+        # expunge, not expire: an expired instance re-SELECTs on the next
+        # attribute access and raises when the row is gone, which would make
+        # reading `guest.id` off the returned list an error. Expunged instances
+        # keep the values they already hold — a snapshot, which is all a caller
+        # wants from something it just deleted — while db.get() correctly misses.
+        for u in users:
+            try:
+                db.expunge(u)
+            except Exception:
+                pass
+    return {
+        "users": len(ids),
+        "documents": int(n_docs),
         "folders": int(n_folders),
-        "conversations": len(convs),
+        "conversations": int(n_convs),
         "messages": int(n_msgs),
     }
-    if drop_user:
-        db.delete(user)
-    db.commit()
+
+
+def purge_user_data(db: Session, user: User, *, drop_user: bool) -> dict:
+    """Delete everything belonging to one user. Wraps the set-based path so the
+    single-user case (account deletion) cannot drift from the sweep."""
+    summary = purge_users(db, [user], drop_users=drop_user)
+    summary.pop("users", None)
     return summary
 
 
-def reap_stale_guests(db: Session, *, limit: int = 20) -> int:
+def reap_stale_guests(db: Session, *, limit: int = 200) -> int:
     """Destroy guest workspaces idle longer than the TTL.
 
     `limit` bounds the work so a backlog cannot blow the serverless time limit;
-    the next call simply picks up where this one stopped.
+    the next call simply picks up where this one stopped. The default suits the
+    scheduled sweep, which has the request to itself; create_guest() passes
+    INLINE_REAP_LIMIT instead, because there a visitor is waiting.
     """
     cutoff = time.time() - GUEST_IDLE_TTL_SECONDS
     stale = (
@@ -134,14 +219,35 @@ def reap_stale_guests(db: Session, *, limit: int = 20) -> int:
         .limit(limit)
         .all()
     )
-    for guest in stale:
-        purge_user_data(db, guest, drop_user=True)
+    if not stale:
+        return 0
+    purge_users(db, stale, drop_users=True)
     return len(stale)
+
+
+def back_date(db: Session, user: User) -> None:
+    """Mark a departing guest as nearly-expired, without deleting anything.
+
+    Called from the close beacon. It must NOT delete: `pagehide` fires on a
+    reload and on a background-tab discard exactly as it does on a close, so
+    deleting here would destroy a workspace the visitor is about to return to.
+
+    Back-dating instead lets the next scheduled sweep collect it if they really
+    did leave, while a visitor who comes back within the remaining window finds
+    their work and touch() puts them back to full life.
+    """
+    if not is_guest(user):
+        return
+    user.last_seen_at = now() - GUEST_IDLE_TTL_SECONDS * _BEACON_BACKDATE_FRACTION
+    db.commit()
 
 
 def create_guest(db: Session) -> User:
     """Provision a fresh, private guest workspace."""
-    reap_stale_guests(db)
+    # A visitor is waiting on this request, so the inline reap is a backstop
+    # kept deliberately tiny — see INLINE_REAP_LIMIT. The scheduled sweeper is
+    # what actually keeps the table clean.
+    reap_stale_guests(db, limit=INLINE_REAP_LIMIT)
     guest = User(
         provider=GUEST_PROVIDER,
         sub=f"guest-{new_id()}",

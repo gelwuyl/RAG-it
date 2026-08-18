@@ -1,0 +1,57 @@
+name: guest sweeper
+
+# Deletes guest workspaces idle past their TTL (30 minutes, ragchat/guests.py).
+#
+# Why a GitHub schedule and not the app itself: a Vercel function is frozen the
+# instant it sends its response, so it cannot run a timer, and a background
+# thread would be killed mid-delete (CLAUDE.md). Vercel's Hobby cron does exist
+# but fires once per DAY, which cannot honour a thirty-minute promise.
+#
+# GitHub disables schedules on a repository with no pushes for 60 days. That is
+# why create_guest() still clears two workspaces inline: if this stops, cleanup
+# degrades to slower, not to never.
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {}
+
+concurrency:
+  # Two sweeps at once would both SELECT the same stale rows and one would
+  # delete rows the other is holding. The endpoint bounds its own work, so a
+  # skipped tick simply means the next one collects a little more.
+  group: guest-sweeper
+  cancel-in-progress: false
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Sweep
+        env:
+          APP_URL: ${{ vars.APP_URL || 'https://rag-gel.vercel.app' }}
+          SWEEP_SECRET: ${{ secrets.GUEST_SWEEP_SECRET }}
+        run: |
+          if [ -z "$SWEEP_SECRET" ]; then
+            echo "GUEST_SWEEP_SECRET is not set — nothing to call."
+            echo "The endpoint is DISABLED without it, so this is a no-op, not a hole."
+            exit 0
+          fi
+
+          code=$(curl -sS -o body.txt -w '%{http_code}' --max-time 60 \
+            -X POST "$APP_URL/api/admin/sweep-guests" \
+            -H "x-sweep-secret: $SWEEP_SECRET")
+          echo "HTTP $code"
+          cat body.txt; echo
+
+          case "$code" in
+            200) exit 0 ;;
+            # Ours to fix, and silence would mean guest data outliving its TTL:
+            # 403 is a secret mismatch, 404 means the deployment has no secret
+            # configured at all.
+            403|404) echo "::error::sweeper rejected — check GUEST_SWEEP_SECRET on both sides"; exit 1 ;;
+            # A cold function, a Neon hiccup, a deploy in progress. The next
+            # tick is 15 minutes away and will collect the same rows; failing
+            # here would only train everyone to ignore a red schedule.
+            *) echo "::warning::sweeper got $code — transient, next tick retries"; exit 0 ;;
+          esac

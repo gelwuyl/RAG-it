@@ -78,6 +78,12 @@ class Settings:
             or os.environ.get("DATABASE_URL", "")
         )
         self.session_secret = os.environ.get("SESSION_SECRET", "dev-session-secret")
+        # Shared secret for POST /api/admin/sweep-guests, called on a schedule
+        # from outside the deployment (GitHub Actions) because a serverless
+        # function cannot run its own timer and Vercel's Hobby cron only fires
+        # daily. Empty means the route is DISABLED, not open: an unset secret
+        # must never degrade into an unauthenticated deletion endpoint.
+        self.sweep_secret = os.environ.get("GUEST_SWEEP_SECRET", "")
         self.allowed_root = Path(
             os.environ.get("RAG_ALLOWED_ROOT", str(Path.home()))
         ).resolve()

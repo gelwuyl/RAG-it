@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import logging
 import os
@@ -493,6 +494,66 @@ def guest_login(request: Request, response: Response, db: Session = Depends(get_
         db.rollback()
     set_session_cookie(response, guest.id)
     return {"id": guest.id, "name": guest.name, "guest": True}
+
+
+@app.post("/api/auth/leaving")
+def guest_leaving(request: Request, db: Session = Depends(get_session)):
+    """The page is going away. Mark a guest workspace as nearly-expired.
+
+    Sent with navigator.sendBeacon on `pagehide`, so it must stay cheap and
+    must answer even as the tab dies — no body, no auth header, just the
+    session cookie the beacon carries.
+
+    It does NOT delete. `pagehide` fires on a reload and on a background-tab
+    discard exactly as it does on a close, and the OAuth sign-in flow is itself
+    a navigation away — deleting here would destroy the workspace during the
+    promotion that is supposed to preserve it. Back-dating leaves the decision
+    to the sweeper, which is the only thing that knows the visitor never came
+    back. (The client also suppresses the beacon on the OAuth hop; this is the
+    second of the two guards, because the first one is in a page being torn
+    down and cannot be relied on alone.)
+
+    Answers 204 whatever happened. A beacon has no error handling on the other
+    end, and there is nothing a caller could do with a failure.
+    """
+    uid = authn.decode_session(request.cookies.get(authn.SESSION_COOKIE, ""))
+    user = get_user(db, uid) if uid else None
+    if user is not None:
+        guests.back_date(db, user)   # no-ops for a signed-in account
+    return Response(status_code=204)
+
+
+@app.post("/api/admin/sweep-guests")
+def sweep_guests(request: Request, db: Session = Depends(get_session)):
+    """Delete guest workspaces past their idle TTL. Called on a schedule.
+
+    Not a user route: it authenticates with a shared secret, because the caller
+    is a GitHub Actions schedule with no session. A serverless function cannot
+    run its own timer — it is frozen the instant the response is sent — and
+    Vercel's Hobby cron fires once a day, which cannot honour a 30-minute TTL.
+
+    An unset secret DISABLES the route rather than opening it. The failure mode
+    of the opposite choice is an unauthenticated endpoint that deletes data,
+    reachable by anyone who reads this file on a public repo.
+    """
+    expected = settings.sweep_secret
+    if not expected:
+        raise HTTPException(status_code=404, detail="Not found")
+    presented = request.headers.get("x-sweep-secret", "")
+    # Constant-time: a naive == leaks the secret's length and prefix to anyone
+    # who can time the response, and this route deletes things.
+    if not hmac.compare_digest(presented, expected):
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    limit = min(max(int(request.query_params.get("limit", 200)), 1), 1000)
+    n = guests.reap_stale_guests(db, limit=limit)
+    return {
+        "reaped": n,
+        # So the schedule's log answers "is one sweep keeping up?" without
+        # anyone opening the database.
+        "hit_limit": n >= limit,
+        "idle_ttl_seconds": guests.GUEST_IDLE_TTL_SECONDS,
+    }
 
 
 @app.delete("/api/auth/account")

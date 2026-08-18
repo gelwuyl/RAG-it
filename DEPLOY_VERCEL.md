@@ -97,6 +97,23 @@ at runtime by `os.environ.get(...)` (see `ragchat/config.py` / `embeddings.py`).
   the Settings UI overrides it at runtime (persisted to the DB).
 - `RERANKER_PROVIDER` — `gemini` (default, LLM cross-encoder) or `openrouter`
   (Cohere `rerank-v3.5`, fast/cheap). Same switching rules as above.
+- `GUEST_SWEEP_SECRET` — enables `POST /api/admin/sweep-guests`, which deletes
+  guest workspaces idle past their 30-minute TTL. **Unset means the route is
+  disabled (404), not open.**
+
+  It has to be driven from outside: a serverless function is frozen the instant
+  it responds so it cannot run a timer, and Vercel's Hobby cron fires once per
+  DAY, which cannot honour a 30-minute TTL. `.github/workflows/guest-sweeper.yml`
+  calls it every 15 minutes, so the same value goes in **two** places:
+
+  ```
+  vercel env add GUEST_SWEEP_SECRET          # the deployment
+  gh secret set GUEST_SWEEP_SECRET           # the caller
+  ```
+
+  Optionally set the repo variable `APP_URL` if the deployment is not
+  `https://rag-gel.vercel.app`. Without the secret, cleanup still happens — but
+  only two workspaces at a time, on guest sign-in (`guests.INLINE_REAP_LIMIT`).
 
 ## Frontend
 - `vercel.json` runs `npm install && npm run build` in `frontend/` and

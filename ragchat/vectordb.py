@@ -100,6 +100,16 @@ def reassign_user_chunks(old_user_id: str, new_user_id: str) -> int:
     return _impl().reassign_user_chunks(old_user_id, new_user_id)
 
 
+def delete_users_chunks(user_ids: list[str]) -> int:
+    """Delete every chunk owned by any of these users, in one operation.
+
+    The guest sweeper's hot path. Per-document deletes made clearing one
+    workspace several round trips and a sweep of twenty into a serverless
+    timeout risk; this is a single statement on Neon.
+    """
+    return _impl().delete_users_chunks(user_ids)
+
+
 def copy_user_chunks(
     src_user_id: str, src_doc_id: str, dst_user_id: str, dst_doc_id: str
 ) -> int:

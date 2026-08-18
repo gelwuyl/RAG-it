@@ -69,6 +69,12 @@ Therefore:
 - **Long jobs must be sliced.** The benchmark is the reference pattern: a client
   loop calls `POST /api/eval/step`, each step does one bounded unit and commits
   to the `eval_runs` table. See `DEPLOY_VERCEL.md`.
+- **Anything periodic is driven from outside.** Vercel Hobby cron exists but
+  fires once per *day*, which cannot honour a 30-minute guest TTL, so
+  `.github/workflows/guest-sweeper.yml` calls `POST /api/admin/sweep-guests`
+  every 15 minutes with a shared secret. Work done in front of a waiting
+  visitor is a backstop only and stays tiny — `guests.INLINE_REAP_LIMIT` is 2,
+  and it was 20, which put 39.7s in the path of a first page load.
 - `maxDuration` is 60s (set in `vercel.json`). The Hobby default of 10s is not
   enough for a single scored question.
 
