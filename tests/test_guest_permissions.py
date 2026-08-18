@@ -40,7 +40,6 @@ for _k in ("PG_DATABASE_URL", "rag_gel_DATABASE_URL"):
 # would otherwise succeed. Kept as data so adding a route to require_account
 # without adding it here is visible as a gap.
 GLOBAL_WRITE_ROUTES = [
-    ("POST", "/api/eval/web-augmentation", None),
     ("PUT", "/api/eval/config", {"top_k": 5}),
     ("POST", "/api/eval/run", {"retrieval_only": True}),
     ("POST", "/api/eval/step", {"retrieval_only": True}),
@@ -147,12 +146,14 @@ def test_signed_in_accounts_keep_full_access(client):
     If this fails the app has quietly become single-user again.
     """
     _as_account(client)
-    # Any global-write route serves as the probe; web-augmentation is the
-    # cheapest one that changes state and reports it back. (This used to use
-    # /api/eval/hybrid-search, which is gone — keyword fusion is unconditional.)
-    r = client.post("/api/eval/web-augmentation")
+    # Any global-write route serves as the probe; a config write is the cheapest
+    # one that changes state and reports it back. (This used to use
+    # /api/eval/hybrid-search, then /api/eval/web-augmentation — both gone:
+    # keyword fusion is unconditional, and web augmentation was replaced by deep
+    # search, which is a per-request flag rather than deployment config.)
+    r = client.put("/api/eval/config", json={"top_k": 5})
     assert r.status_code == 200, r.text
-    assert "web_augmentation" in r.json()
+    assert r.json()["config"]["top_k"] == 5
 
 
 # --------------------------------------------------------------------------

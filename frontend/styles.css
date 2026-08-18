@@ -332,15 +332,10 @@ input:disabled, textarea:disabled, select:disabled {
 }
 .user-chip-signout:hover { background: var(--hover-soft); color: var(--text); }
 
-/* pill switches (keyword fusion / web fallback) */
-.switch {
-  display: inline-flex; align-items: center; gap: 7px;
-  border: 1px solid var(--border);
-  background: var(--panel-sunken);
-  border-radius: var(--r-pill);
-  padding: 3px 5px 3px 11px;
-}
-.switch-label { font-size: 13px; color: var(--muted); white-space: nowrap; }
+/* Pill toggle. Both topbar switches it was written for are gone — keyword
+   fusion is unconditional, web fallback was deleted with the feature — and the
+   one survivor is Deep search in the composer. The class name is kept because
+   the shape is the same and .switch-btn:focus-visible is wired at the top. */
 .switch-btn {
   font: inherit; font-size: 12px; font-weight: 700; letter-spacing: 0.02em;
   text-transform: uppercase;
@@ -354,10 +349,20 @@ input:disabled, textarea:disabled, select:disabled {
   transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
 }
 .switch-btn:hover { background: var(--hover-soft); }
-#hybrid-toggle.on, #web-toggle.on {
+#deep-toggle.on {
   background: var(--primary); color: var(--on-primary); border-color: var(--primary);
 }
-#hybrid-toggle.on:hover, #web-toggle.on:hover { background: var(--primary-hover); }
+#deep-toggle.on:hover { background: var(--primary-hover); }
+
+/* Deep search sits in the composer, on the baseline of the Ask button rather
+   than of the textarea — .ask-form aligns to flex-end, and a pill that grew
+   with a multi-line question would drift up the box away from the control it
+   belongs beside. */
+.deep-pair {
+  display: inline-flex; align-items: center; gap: 4px;
+  flex-shrink: 0; align-self: flex-end; padding-bottom: 1px;
+}
+#deep-toggle { min-width: 0; white-space: nowrap; }
 
 /* ---------- panes grid ----------
 
@@ -1125,9 +1130,10 @@ input:disabled, textarea:disabled, select:disabled {
   border-bottom: 1px dotted currentColor;
 }
 .term:hover { color: var(--text); }
-/* `font: inherit` above would otherwise pull these up to body size, because here
-   the term IS the label rather than sitting inside one. */
-.switch-label.term { font-size: var(--text-xs); color: var(--muted); }
+/* The last `.switch-label.term` rule went with the web-fallback switch — that
+   was the only place a glossary term WAS the label rather than sitting inside
+   one. Deep search uses the `?` mark (.term-mark) instead, which carries its
+   own size. */
 /* The affordance where the label itself cannot be a button — beside another
    button, or beside a pane heading. */
 .term-mark {
@@ -1527,7 +1533,6 @@ fieldset legend {
      they actually need:
 
         ◆ RAG-it       GUEST 0/3 FILES   [G Sign in]
-        [Keyword fusion OFF]   [Web fallback OFF]
         [⚙ Settings]  [☾]
 
      A GRID, not a wrapping flex row, and `display: contents` on .topbar-right is
@@ -1559,19 +1564,6 @@ fieldset legend {
   .brand-name { font-size: 15px; }
   .user-name { font-size: 13px; }
   .user-chip { max-width: 190px; }
-  /* Two switches to a row rather than one each. They are the tallest things in
-     the bar, so this is where the vertical estate actually comes back. The
-     overflow guard is for 320px screens, where the pair genuinely cannot fit and
-     a nowrap label would otherwise spill across its neighbour. */
-  .switch {
-    flex: 1 1 calc(50% - 3px); min-width: 0; overflow: hidden;
-    justify-content: space-between;
-    padding: 2px 4px 2px 9px;
-  }
-  .switch-label, .switch-label.term {
-    font-size: 12px; min-width: 0;
-    overflow: hidden; text-overflow: ellipsis;
-  }
   .switch-btn { padding: 4px 8px; min-width: 40px; }
 
   /* ONE PANE AT A TIME, chosen from the tab bar (PRODUCT_UX_PLAN.md §9).
@@ -1613,12 +1605,11 @@ fieldset legend {
      not a question aimed at a document, and each was spending topbar rows on a
      screen with none to spare.
 
-     Web fallback goes for the same reason: deployment-wide config a guest cannot
-     change at all, and a decision no reader makes mid-answer. It remains on
-     desktop; fusion is simply on everywhere now. (Prune ghosts used to be hidden
-     here too. It is not hidden on phones any more — it is gone from the topbar
-     on every width, and lives in the "/" palette.) */
-  .switch { display: none; }
+     Two things that used to be hidden here are not hidden any more, because
+     they are not in the topbar at all: Prune ghosts moved to the "/" palette,
+     and Web fallback was deleted with its feature. Deep search REPLACES the
+     latter and stays on every width — it is a decision about the question being
+     typed, which is the one decision a phone reader does make. */
   #eval-run-btn { display: none; }
   .eval-desktop-note { display: block; }
   /* Folder sources need a server-side path — not something typed on a phone. */

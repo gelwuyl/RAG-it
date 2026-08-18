@@ -107,7 +107,6 @@ def _make_cfg(**over):
         llm_model="stub",
         temperature=0.0,
         embedding_model="text-embedding-005",
-        web_augmentation=False,
         embedding_provider="gemini",
         reranker_provider="gemini",
         eval_show=True,
@@ -217,22 +216,27 @@ def test_unrelated_query_returns_not_found():
     assert res["answer"] == _pl.NOT_FOUND_ANSWER
 
 
-def test_web_augmentation_off_keeps_grounding_default():
+def test_nothing_external_can_reach_an_answer():
+    """Web augmentation is gone; deep search replaced it. Every citation now
+    comes from a document the caller owns, and there is no code path left that
+    can put anything else in front of the model."""
     u = "user-F"
-    _index_corpus(u, _make_cfg(web_augmentation=False))
-    # Stub generation so we can inspect the citation gate without a live LLM.
+    _index_corpus(u, _make_cfg())
+
     def _fake_chat(model, messages, temperature):
-        # Cite the first retrieved chunk regardless of content.
         return "Per [1] the answer is in your documents."
 
     import ragchat.pipeline as P
+    assert not hasattr(P, "_web_search")
     orig = P._chat
     P._chat = _fake_chat
     try:
-        res = _pl.ask(u, "latest stock market news", [], _make_cfg(web_augmentation=False))
+        res = _pl.ask(u, "latest stock market news", [], _make_cfg())
     finally:
         P._chat = orig
-    assert not any(c.get("is_web") for c in res.get("citations", []))
+    for c in res.get("citations", []):
+        assert not str(c.get("doc_id", "")).startswith("web:")
+        assert not c.get("is_web")
 
 
 def test_bm25_index_param_forces_fusion_path():
@@ -285,3 +289,126 @@ def test_fallback_score_keeps_a_legitimate_zero():
     assert _pl._fallback_score({"similarity": 0.0}) == 0.0
     assert _pl._fallback_score({"similarity": None}) == 0.5
     assert _pl._fallback_score({}) == 0.5
+
+
+# --- deep search reaches the model ----------------------------------------
+#
+# These stub retrieve() rather than indexing a corpus. The stub embedder at the
+# top of this file is a module-level monkeypatch, and by the time the whole
+# suite has run, other modules have re-imported ragchat.embeddings and put the
+# real one back — so a test here that depends on live retrieval quietly starts
+# measuring whether an API key works. Fixing the pool makes these tests about
+# the one thing they are named for.
+
+_POOL = [{
+    "text": "Riverside store has Probat roaster.",
+    "similarity": 0.62,
+    "doc_id": "m",
+    "title": "meridian_coffee_ops.md",
+    "ref": "~40% of document",
+    "chunk_id": "m:0",
+}]
+
+
+def _with_stubs(monkeypatch, pool=None, chat=None):
+    monkeypatch.setattr(_pl, "retrieve", lambda *a, **k: list(pool if pool is not None else _POOL))
+    monkeypatch.setattr(_pl, "_chat", chat or (lambda m, msgs, t: "Per [1] that is right."))
+    # ask() ends by grading its own answer with the LLM judge. Left live, each
+    # of these tests made a real API call and spent ~15s retrying against a
+    # provider that is not part of what they test. `eval_show` is the real
+    # switch for it, so this is the config a caller would use, not a patch.
+    monkeypatch.setattr(_pl, "_eval_answer", lambda *a, **k: None)
+
+
+def test_a_deep_hit_reaches_the_context_even_when_ranking_would_miss_it(monkeypatch):
+    """The whole claim of the feature, end to end: a literal hit has to arrive
+    in the text handed to the model, not merely be found."""
+    seen = {}
+
+    def _chat(model, messages, temperature):
+        seen["prompt"] = messages[-1]["content"]
+        return "Per [1] that is right."
+
+    _with_stubs(monkeypatch, chat=_chat)
+
+    def _deep(_query):
+        return [{
+            "text": "The Probat roaster at Riverside is serviced every 400 hours.",
+            "similarity": None,
+            "doc_id": "m",
+            "title": "meridian_coffee_ops.md",
+            "ref": "~40% of document",
+            "deep": True,
+        }]
+
+    res = _pl.ask("user-DS", "servicing interval", [], _make_cfg(), deep_search=_deep)
+    assert "serviced every 400 hours" in seen["prompt"], (
+        "a literal hit was found and then dropped before generation"
+    )
+    assert "deep" in (res.get("eval_line") or ""), res.get("eval_line")
+
+
+def test_a_failing_deep_search_does_not_cost_the_answer(monkeypatch):
+    """Ranked retrieval already has an answer; a scan blowing up must not throw
+    it away."""
+    called = {}
+
+    def _chat(model, messages, temperature):
+        called["yes"] = True
+        return "Per [1] the answer is in your documents."
+
+    _with_stubs(monkeypatch, chat=_chat)
+
+    def _boom(_query):
+        raise RuntimeError("source_text column vanished")
+
+    res = _pl.ask("user-DS2", "roaster", [], _make_cfg(), deep_search=_boom)
+    assert called.get("yes"), "the raise escaped and generation never ran"
+    assert not res["not_found"], res
+
+
+def test_without_the_flag_nothing_extra_is_searched(monkeypatch):
+    """Deep search is opt-in per question. Passing nothing behaves as before."""
+    _with_stubs(monkeypatch)
+    res = _pl.ask("user-DS3", "roaster", [], _make_cfg())
+    assert "deep" not in (res.get("eval_line") or "")
+
+
+def test_a_bm25_only_pool_is_not_treated_as_irrelevant(monkeypatch):
+    """No cosine is the absence of evidence, not evidence of absence.
+
+    Keyword fusion marks BM25-only chunks `similarity: None`, and that happens
+    on exactly the queries fusion exists for — part numbers, form codes. An
+    earlier version of the not-found guard refused whenever no chunk carried a
+    cosine, which would have broken the case hybrid retrieval was added to fix.
+    """
+    called = {}
+
+    def _chat(model, messages, temperature):
+        called["yes"] = True
+        return "Per [1] form HE-104 is required."
+
+    bm25_only = [dict(_POOL[0], similarity=None, text="Warranty form HE-104 required.")]
+    _with_stubs(monkeypatch, pool=bm25_only, chat=_chat)
+
+    res = _pl.ask("user-DS4", "HE-104", [], _make_cfg())
+    assert called.get("yes"), "a BM25-only pool was refused before generation"
+    assert not res["not_found"], res
+
+
+def test_a_pool_below_the_threshold_refuses_without_generating(monkeypatch):
+    """similarity_threshold is a live setting again. Its only previous use was
+    gating web augmentation, so deleting that would have left it decorating a
+    meter and changing nothing."""
+    called = {}
+
+    def _chat(model, messages, temperature):
+        called["yes"] = True
+        return "should never be reached"
+
+    weak = [dict(_POOL[0], similarity=0.01)]
+    _with_stubs(monkeypatch, pool=weak, chat=_chat)
+
+    res = _pl.ask("user-DS5", "unrelated question", [], _make_cfg())
+    assert res["not_found"]
+    assert not called, "spent a generation call on a pool that cleared nothing"

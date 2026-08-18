@@ -352,14 +352,27 @@ def ensure_demo_template(db: Session, cfg) -> User:
             .filter(Document.user_id == template.id, Document.title == filename)
             .first()
         )
-        if doc is not None and doc.config_fingerprint == fp and doc.status == "ready":
-            continue
         text = path.read_text(encoding="utf-8", errors="replace")
         if doc is None:
             doc = Document(user_id=template.id, source_type="upload", title=filename,
                            size_bytes=len(text.encode("utf-8")))
             db.add(doc)
+        # Deep search reads source_text, and this path never went through
+        # _stage_for_indexing (which is what sets it for uploads). Without this
+        # the demo corpus is the one thing in a guest workspace deep search
+        # cannot see — the exact documents a first-time visitor tries it on.
+        #
+        # Set BEFORE the up-to-date check, deliberately. Every deployment
+        # already has a ready template at the current fingerprint, so a backfill
+        # placed after the `continue` below would never run: the demo corpus
+        # would stay un-deep-searchable until the next chunking change. Reading
+        # a small file from disk on each call is the cheaper half of that trade.
+        if doc.source_text != text:
+            doc.source_text = text
             db.commit()
+        if doc.config_fingerprint == fp and doc.status == "ready":
+            continue
+        db.commit()
         # One file's embedding failure must not deny the visitor the others. An
         # unhandled raise here used to propagate out of seed_demo_corpus and
         # leave the arriving guest with an entirely empty workspace, and it
@@ -430,14 +443,14 @@ def seed_demo_corpus(db: Session, guest: User) -> int:
     # chunkless document this function exists to prevent.
     sources = [
         (d.id, d.source_type, d.title, d.content_hash, d.config_fingerprint,
-         d.n_chunks, d.size_bytes)
+         d.n_chunks, d.size_bytes, d.source_text)
         for d in db.query(Document).filter(Document.user_id == template.id).all()
         if d.status == "ready"
     ]
     template_id, guest_id = template.id, guest.id
 
     copied = 0
-    for src_id, source_type, title, content_hash, fingerprint, n_chunks, size in sources:
+    for src_id, source_type, title, content_hash, fingerprint, n_chunks, size, source_text in sources:
         clone = Document(
             user_id=guest_id,
             source_type=source_type,
@@ -448,6 +461,11 @@ def seed_demo_corpus(db: Session, guest: User) -> int:
             n_chunks=n_chunks,
             size_bytes=size,
             is_demo=True,
+            # Copied, not shared: deep search scans the CALLER'S documents, so a
+            # guest whose clone has no source_text can vector-search the demo
+            # corpus but not deep-search it — which reads as the feature being
+            # broken on exactly the documents it is first tried on.
+            source_text=source_text,
         )
         db.add(clone)
         db.flush()  # assigns clone.id without committing the row

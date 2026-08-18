@@ -26,7 +26,7 @@
         }
       })();
     </script>
-    <link rel="stylesheet" href="/styles.css?v=31" />
+    <link rel="stylesheet" href="/styles.css?v=32" />
     <script>
       // Boot diagnostics: collect load/runtime errors so a broken app.js
       // shows a visible message instead of a silently dead UI.
@@ -81,18 +81,16 @@
                topbar toggle it was dead chrome for the guests who cannot change
                deployment-wide config at all. See config.py's load_config.
 
-               The remaining switch label is a glossary TERM, not text. Its
-               explanation used to live in a `title` attribute on the container,
-               which does not exist on touch (PRODUCT_UX_PLAN.md §5). The toggle
-               keeps an aria-label so the control is still named without
-               re-introducing a hover-only tooltip. -->
+               Nothing toggles retrieval from up here any more. What is left is
+               chrome that acts on the app itself — settings and theme — and the
+               identity block beside it. -->
           <div class="topbar-actions">
-            <div class="switch">
-              <button class="switch-label term" type="button" data-term="web-fallback"
-                aria-expanded="false">Web fallback</button>
-              <button id="web-toggle" class="switch-btn" type="button"
-                aria-label="Toggle web fallback">Off</button>
-            </div>
+            <!-- The "Web fallback" switch used to sit here. It is gone with the
+                 feature: deep search replaced it, and lives in the composer
+                 because it is a choice about one question rather than about the
+                 deployment. This switch wrote config_overrides — a single
+                 shared row — so turning it on turned it on for every visitor.
+              -->
             <!-- "Prune ghosts" used to sit here and no longer does. It deletes
                  vector rows whose document was already removed — real, but only
                  ever in an abnormal state, and the visitor has no way to tell
@@ -240,6 +238,20 @@
               aria-label="Show commands" title="Commands — or type / here">/</button>
             <textarea id="question-input" rows="1" placeholder="Ask about your documents…"
               autocomplete="off"></textarea>
+            <!-- Deep search belongs to THIS question, not to the app. It sits
+                 in the composer for that reason, beside the thing it modifies,
+                 and it is sent on the ask request rather than saved. The web
+                 fallback switch it replaces lived in the topbar and wrote
+                 deployment-wide config, so one visitor's switch moved everyone
+                 else's retrieval. -->
+            <span class="deep-pair">
+              <button id="deep-toggle" class="switch-btn" type="button"
+                aria-pressed="false"
+                title="Also scan every document word-for-word for this question">
+                Deep search</button>
+              <button class="term-mark" type="button" data-term="deep-search"
+                aria-expanded="false" aria-label="What does Deep search do?">?</button>
+            </span>
             <button id="ask-btn" class="btn btn-primary" type="submit">Ask</button>
           </form>
         </main>
@@ -544,6 +556,6 @@
       </div>
     </div>
 
-    <script type="module" src="/app.js?v=40"></script>
+    <script type="module" src="/app.js?v=41"></script>
   </body>
 </html>

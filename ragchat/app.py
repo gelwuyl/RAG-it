@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from . import auth as authn
+from . import deepsearch
 from . import guests
 from .config import (
     CONFIG_PATH,
@@ -997,6 +998,15 @@ def get_chat(
 
 class AskIn(BaseModel):
     question: str = Field(min_length=1, max_length=4000)
+    # Deep search rides on the QUESTION, not on config.
+    #
+    # config_overrides is a single row shared by the whole deployment (db.py),
+    # so a stored toggle would mean one visitor's choice changing retrieval for
+    # everyone — which is exactly the bug the web-augmentation toggle this
+    # replaces actually had. Per-request also matches what it is: a decision
+    # about one question ("I know this is in there, look properly"), not a
+    # preference about the app.
+    deep_search: bool = False
 
 
 @app.post("/api/chats/{chat_id}/ask")
@@ -1019,7 +1029,13 @@ def ask_chat(
         conv.title = body.question[:60] or "New chat"
     db.commit()
 
-    result = ask(user.id, body.question, history, cfg)
+    # The searcher is built here, where the session lives, and handed to the
+    # pipeline as a plain callable — pipeline.py stays free of the ORM, and the
+    # scan runs against the REWRITTEN query, which ask() computes.
+    result = ask(
+        user.id, body.question, history, cfg,
+        deep_search=deepsearch.searcher(db, user.id) if body.deep_search else None,
+    )
 
     db.add(
         Message(
@@ -1095,7 +1111,6 @@ def eval_config():
         "embedding_provider": cfg.embedding_provider,
         "reranker_provider": cfg.reranker_provider,
         "openrouter_configured": bool(os.environ.get("OPENROUTER_API_KEY")),
-        "web_augmentation": cfg.web_augmentation,
         "eval_show": cfg.eval_show,
         "fingerprint": cfg.fingerprint(),
     }
@@ -1107,22 +1122,13 @@ def eval_config():
 # still visible in GET /api/health, which reports the effective retrieval shape.
 
 
-@app.post("/api/eval/web-augmentation")
-def toggle_web_augmentation(_: User = Depends(require_account)):
-    """Toggle web_augmentation (DuckDuckGo fallback) on/off.
-
-    This is a fallback ONLY — when on, web results are appended as labeled
-    [web] chunks only when the user's own documents do not clear the
-    relevance threshold (pipeline.py:ask). It never overrides grounded
-    answers. Default off to preserve strict document grounding (PRD F13).
-    Persisted to the DB (writable) because config.yaml is read-only on Vercel.
-    """
-    from dataclasses import replace
-
-    cfg = load_config()
-    cfg = replace(cfg, web_augmentation=not cfg.web_augmentation)
-    save_config_override(cfg)
-    return {"web_augmentation": cfg.web_augmentation}
+# POST /api/eval/web-augmentation is gone with the feature it toggled.
+#
+# It was also the clearest example of why deep search is a per-request flag:
+# that route called save_config_override, and config_overrides is a SINGLE row
+# shared by the whole deployment (db.py). One visitor turning "their" web
+# fallback on turned it on for everybody, which is not what a toggle beside
+# your own chat box means. Deep search is sent with the question instead.
 
 
 class ConfigUpdateIn(BaseModel):
@@ -1153,7 +1159,8 @@ class ConfigUpdateIn(BaseModel):
     embedding_provider: str | None = None
     # reranker_provider is gone: load_config() hardcodes Cohere via OpenRouter,
     # so accepting one here would 200 on a change that does not happen.
-    web_augmentation: bool | None = None
+    # web_augmentation is gone with the feature; deep search replaced it and is
+    # a per-request flag on the ask body, never stored config.
     eval_show: bool | None = None
 
 
@@ -1231,7 +1238,6 @@ def update_config(body: ConfigUpdateIn, _: User = Depends(require_account)):
             "embedding_provider": cfg.embedding_provider,
             "reranker_provider": cfg.reranker_provider,
             "openrouter_configured": bool(os.environ.get("OPENROUTER_API_KEY")),
-            "web_augmentation": cfg.web_augmentation,
             "eval_show": cfg.eval_show,
             "fingerprint": cfg.fingerprint(),
         },

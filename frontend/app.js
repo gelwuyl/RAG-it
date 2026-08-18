@@ -15,6 +15,7 @@ const state = {
   evalData: null,     // last /api/eval payload, so an answer can place itself against the run
   evalBaseline: null, // eval/baseline.json — what a bar is measured against
   simThreshold: 0,    // live retrieval threshold, marked on the per-answer meter
+  deepSearch: false,  // per-QUESTION literal scan; sent with ask, never stored
   // Documents + folders currently in the workspace. Only the COUNT is kept:
   // it is what the empty conversation needs to say something true, and holding
   // the full lists here would be a second copy of the DOM's own state.
@@ -202,11 +203,14 @@ function paintReadoutNudge() {
 // attribute, which does not exist on touch. A tap target with a real popover
 // works for everyone; the trade is one shared element and a click-away handler.
 const GLOSSARY = {
-  "web-fallback": [
-    "Web fallback",
-    "When on, web results are appended as labelled [web] chunks — but only when " +
-    "your own documents fail to clear the relevance threshold. It never " +
-    "overrides a grounded answer, and it is off by default.",
+  "deep-search": [
+    "Deep search",
+    "Normal search RANKS: it picks the passages that look most like your " +
+    "question, and a passage that ranks 21st out of 20 is simply not there. " +
+    "Deep search does not rank. It reads every document you own word for " +
+    "word and pulls out every literal occurrence of your terms, so if the " +
+    "words are in your documents they reach the answer. Slower, and only for " +
+    "the question you send it with — it is not a setting.",
   ],
   "re-index": [
     "Re-index",
@@ -461,7 +465,6 @@ const GUEST_LOCKED = {
   "eval-run-btn": "run the benchmark",
   "reindex-btn": "re-index every source",
   "add-folder-btn": "add a folder source",
-  "web-toggle": "change the web fallback",
   "settings-save": "save tuning settings",
 };
 
@@ -1003,25 +1006,30 @@ async function refreshLiveConfig() {
   }
 }
 
-// Web augmentation fallback (DuckDuckGo [web] chunks only when documents don't answer).
-$("web-toggle").onclick = async () => {
-  if (guestBlocked("web-toggle")) return;
-  try {
-    const r = await api("/api/eval/web-augmentation", { method: "POST" });
-    const btn = $("web-toggle");
-    if (r.web_augmentation) {
-      btn.textContent = "On";
-      btn.classList.add("on");
-      toast("Web fallback ON — web text used only when docs don't answer");
-    } else {
-      btn.textContent = "Off";
-      btn.classList.remove("on");
-      toast("Web fallback OFF — strictly grounded in your documents");
-    }
-  } catch (e) {
-    toast(e.message, true);
-  }
+// Deep search: a property of the NEXT QUESTION, held in the page and sent with
+// the ask request. Not persisted anywhere, which is the point — the web toggle
+// it replaces wrote config_overrides, a single row shared by the deployment, so
+// one visitor flipping "their" switch flipped everyone's retrieval.
+//
+// It stays on once turned on, because someone who needed it for one question
+// usually needs it for the follow-up too, and the button says so at a glance.
+// Guests may use it: it reads their own documents and spends no model call.
+$("deep-toggle").onclick = () => {
+  state.deepSearch = !state.deepSearch;
+  syncDeepToggle();
+  toast(
+    state.deepSearch
+      ? "Deep search ON — every document scanned word-for-word, alongside ranked search"
+      : "Deep search OFF — ranked search only",
+  );
 };
+
+function syncDeepToggle() {
+  const btn = $("deep-toggle");
+  if (!btn) return;
+  btn.classList.toggle("on", state.deepSearch);
+  btn.setAttribute("aria-pressed", String(state.deepSearch));
+}
 
 // Delete vector rows whose document is gone, plus any left under a superseded
 // chunking/embedding config. Reached only from the "/" palette — it had a
@@ -1963,7 +1971,7 @@ $("ask-form").onsubmit = async (e) => {
   try {
     const result = await api(`/api/chats/${state.currentChatId}/ask`, {
       method: "POST",
-      body: JSON.stringify({ question }),
+      body: JSON.stringify({ question, deep_search: state.deepSearch }),
     });
     pending.remove();
     appendMessage("assistant", result.answer, result.citations, false, result.eval_line || "", result.eval || null);
@@ -2686,7 +2694,7 @@ function paletteCommands() {
     { group: "Action", label: "New chat", run: clickThrough("new-chat-btn") },
     { group: "Action", label: "Open settings", run: () => openSettings() },
     { group: "Action", label: "Toggle theme (dark / light)", run: clickThrough("theme-toggle") },
-    { group: "Action", label: "Toggle web fallback", run: clickThrough("web-toggle"), lock: "web-toggle" },
+    { group: "Action", label: "Toggle deep search (word-for-word scan)", run: clickThrough("deep-toggle") },
     { group: "Action", label: "Re-index all sources", run: clickThrough("reindex-btn"), lock: "reindex-btn" },
     { group: "Action", label: "Run benchmark", run: clickThrough("eval-run-btn"), lock: "eval-run-btn" },
     // No `lock`: this one is NOT in GUEST_LOCKED and the endpoint answers 200

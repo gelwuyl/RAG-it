@@ -12,9 +12,10 @@ ragchat/app.py      FastAPI routes (auth, sources, chats, config, eval)
 ragchat/config.py   Settings (env) + PipelineConfig (hot-reloaded) + model discovery
 ragchat/pipeline.py ingest + ask (rewrite → retrieve → rerank → generate → judge)
 ragchat/embeddings.py  Provider-aware embedding/rerank clients (gemini | openrouter)
+ragchat/deepsearch.py  Deep search — literal scan of Document.source_text, no embeddings
 ragchat/vectordb.py Dispatch to store.py (Chroma, local) or store_neon.py (pgvector)
 ragchat/db.py       SQLAlchemy models + self-healing schema init
-eval/               Golden set (46 Q), corpus (10 files), LLM judges, harness
+eval/               Golden set (56 Q, 53 answerable), corpus (27 files), judges, harness, CI gate
 frontend/           Vite, TWO entry points:
                       index.html  + landing.css  → the landing page at "/"
                       app.html    + styles.css + app.js → the workspace at "/app"
@@ -143,6 +144,24 @@ counts them in `n_ungraded`.
 
 Also: judges are thinking-model-sensitive. Keep `max_tokens` generous (reasoning
 tokens are billed against it) and strip `<thinking>` wrappers before parsing.
+
+### Deep search is per-request, and that is not an implementation detail
+
+`config_overrides` is ONE row shared by the whole deployment, so anything stored
+there is a deployment-wide switch wearing the costume of a personal preference.
+The web-augmentation toggle it replaced had exactly that bug: one visitor
+flipping it changed retrieval for everyone.
+
+So deep search rides on the ask request (`AskIn.deep_search`) and nothing about
+it is ever written. It is also not in `PipelineConfig.fingerprint()` and cannot
+be — it embeds nothing, reading `Document.source_text` directly.
+
+That column is only populated by `_stage_for_indexing` (the upload path), so any
+OTHER way a document is created has to set it too, or deep search is silently
+blind to those documents. `ensure_demo_template` sets it before its
+already-up-to-date check for that reason, and `seed_demo_corpus` copies it to
+each guest clone — otherwise the demo corpus, which is what a first-time visitor
+tries the feature on, is the one thing it cannot see.
 
 ### Two vector backends
 

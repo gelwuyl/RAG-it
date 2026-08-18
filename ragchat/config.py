@@ -386,15 +386,14 @@ class PipelineConfig:
     embedding_model: str
     embedding_provider: str
     reranker_provider: str
-    web_augmentation: bool
     eval_show: bool
 
     def fingerprint(self) -> str:
         """Hash of the index-affecting settings (PRD F18).
 
-        Note: web_augmentation is NOT in the fingerprint — web results are
-        never embedded into the vector store, so they do not affect chunk
-        storage or retrieval from a user's own documents.
+        Note deep search is not here and cannot be: it is a per-request flag,
+        not config, and it embeds nothing — it reads Document.source_text
+        directly. Nothing about it can invalidate a chunk.
         """
         raw = f"{self.chunk_size}|{self.chunk_overlap}|{self.splitter}|{self.embedding_model}"
         return hashlib.sha1(raw.encode()).hexdigest()[:12]
@@ -483,7 +482,6 @@ def load_config() -> PipelineConfig:
         # until someone re-saved. `reranker` (on/off) above stays honoured from
         # the row, because that one really is the user's call.
         reranker_provider="openrouter",
-        web_augmentation=bool(g.get("web_augmentation", False)),
         eval_show=bool(data.get("evaluation", {}).get("show", True)),
     )
 
@@ -512,7 +510,6 @@ def save_config_override(cfg: "PipelineConfig") -> None:
         "generation": {
             "llm_model": cfg.llm_model,
             "temperature": cfg.temperature,
-            "web_augmentation": cfg.web_augmentation,
         },
         "embedding": {"model": cfg.embedding_model, "provider": cfg.embedding_provider},
         # `reranker.provider` is deliberately NOT persisted, for the same reason

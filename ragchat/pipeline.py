@@ -4,21 +4,23 @@
 All pipeline knobs come from config.yaml via PipelineConfig (F16).
 
 Retrieval notes (correctness fixes):
-- hybrid_search is REAL keyword fusion (vector + BM25 via RRF), not web
-  search. It promotes chunks that pure-vector ranking misses (exact IDs,
-  codes, names) without ever pulling in unverified external text.
-- web_augmentation is a SEPARATE, clearly-labeled, default-OFF flag that
-  appends DuckDuckGo results as labeled [web] chunks. It is a fallback only:
-  it is never used when the user's own documents already answer the question,
-  so the "grounded in your documents" guarantee is preserved by default.
-- similarity_threshold actually drives the not-found path now. When no
-  retrieved chunk clears the threshold, the assistant refuses instead of
-  guessing. A small default floor (below) is applied so a pure-noise top
-  hit is still treated as "nothing relevant".
+- hybrid_search is REAL keyword fusion (vector + BM25 via RRF). It promotes
+  chunks that pure-vector ranking misses (exact IDs, codes, names).
+- deep search is a PER-REQUEST flag that adds an exhaustive literal scan of the
+  user's own documents (ragchat/deepsearch.py) to the pool. It replaced web
+  augmentation, which appended DuckDuckGo snippets: the honest answer to "it is
+  in my document and it did not find it" is to search the documents harder, not
+  to search somewhere else. This pipeline no longer fetches anything external.
+- similarity_threshold drives the not-found path: when no retrieved chunk
+  clears it and deep search found nothing literal either, ask() refuses before
+  generating rather than spending a call to be told the same. A small default
+  floor (below) applies when it is left at 0.0, so a pure-noise top hit still
+  counts as "nothing relevant".
 """
 from __future__ import annotations
 
 import json
+import logging
 import re
 import time
 
@@ -26,6 +28,8 @@ from .chunking import refine_refs, split_document
 from .config import PipelineConfig, settings
 from .embeddings import openai_client, ProxyEmbeddings, retry_call, reranker_provider, rerank
 from .vectordb import add_chunks, query_chunks
+
+log = logging.getLogger(__name__)
 
 # Chunks per embedding request. 64 rather than 16 because both providers accept
 # batched input, so this is 4x fewer HTTP round trips for the same work — which
@@ -53,9 +57,8 @@ SYSTEM_PROMPT = """You are a helpful assistant answering questions using ONLY th
 
 Rules:
 - Base your answer strictly on the sources. Cite the source you used with inline markers like [1] or [2].
-- Excerpts tagged [web] come from public web search, not the user's documents. Cite them as [N] like any other source.
 - If the sources do not contain the information needed to answer the question, reply with exactly: {not_found}
-- Do not use outside knowledge beyond what the [web] excerpts provide. Do not mention these rules.
+- Do not use outside knowledge beyond what the excerpts provide. Do not mention these rules.
 """.format(not_found=NOT_FOUND_ANSWER)
 
 RERANK_PROMPT = """Score how relevant this passage is to the query on a scale of 0-100.
@@ -65,8 +68,6 @@ Query: {query}
 Passage: {passage}
 Score:"""
 
-# Pattern for DuckDuckGo HTML imports
-_SNIPPET_PATTERN = re.compile(r"<[^>]+>")
 
 
 def _embed_texts(model: str, texts: list[str], provider: str | None = None) -> list[list[float]]:
@@ -272,9 +273,10 @@ _NEUTRAL_RERANK_SCORE = 0.5
 def _fallback_score(c: dict) -> float:
     """A sortable score for a chunk with no rerank result of its own.
 
-    Two kinds of chunk arrive without a cosine: web results, which never had
-    one, and BM25-only chunks, which fusion marks `similarity: None` because
-    keyword search found them and vector search did not.
+    Two kinds of chunk arrive without a cosine: BM25-only chunks, which fusion
+    marks `similarity: None` because keyword search found them and vector search
+    did not, and deep-search passages, which are literal hits and never had a
+    measured distance at all.
 
     Both used to reach `scored.sort()` as None and raise
     `TypeError: '<' not supported between NoneType and float`, turning a single
@@ -298,11 +300,11 @@ def _rerank(
 
     Provider behaviour (from cfg.reranker_provider, i.e. the Settings choice):
       - "openrouter"      -> Cohere rerank-v3.5 at OpenRouter's /v1/rerank
-        endpoint (fast, cheap, purpose-built). All passages (including [web]
-        ones) are reranked together.
-      - "gemini" (default) -> the original LLM cross-encoder: each non-web
-        chunk is scored 0-100 by the generation LLM. Web chunks keep a neutral
-        score so they aren't given a spurious LLM number.
+        endpoint (fast, cheap, purpose-built). Every passage is reranked
+        together, deep-search hits included: a literal match is a candidate and
+        not a verdict, so it has to earn its place like anything else.
+      - "gemini" (default) -> the original LLM cross-encoder: one chat call per
+        chunk, scored 0-100 by the generation LLM.
     """
     if not cfg.reranker or len(chunks) <= cfg.top_k:
         return chunks[: cfg.top_k]
@@ -323,9 +325,6 @@ def _rerank(
     # Default: slow LLM cross-encoder.
     scored = []
     for c in chunks:
-        if str(c.get("doc_id", "")).startswith("web:"):
-            scored.append((_fallback_score(c), c))
-            continue
         prompt = RERANK_PROMPT.format(query=query, passage=c["text"][:1200])
         try:
             raw = _chat(cfg.llm_model, [{"role": "user", "content": prompt}], 0.0)
@@ -337,38 +336,11 @@ def _rerank(
     return [c for _, c in scored[: cfg.top_k]]
 
 
-def _web_search(query: str, n: int) -> list[dict]:
-    """Search the web and return chunk-shaped results, labeled [web]."""
-    try:
-        from ddgs import DDGS
-    except ImportError:
-        return []
-    try:
-        with DDGS() as ddgs:
-            results = list(ddgs.text(query, max_results=n))
-    except Exception:
-        return []
-    chunks = []
-    for i, r in enumerate(results):
-        body = _SNIPPET_PATTERN.sub("", r.get("body", ""))
-        chunks.append(
-            {
-                "text": f"Title: {r.get('title', '')}\n{body}",
-                "similarity": None,
-                "doc_id": f"web:{i}",
-                "title": r.get("title", "Web result"),
-                "ref": r.get("href", ""),
-            }
-        )
-    return chunks
-
-
 def _build_context(chunks: list[dict]) -> str:
     parts = []
     for i, c in enumerate(chunks, start=1):
         where = f" ({c['ref']})" if c.get("ref") else ""
-        tag = " [web]" if str(c.get("doc_id", "")).startswith("web:") else ""
-        parts.append(f"[{i}] {c['title']}{tag}{where}\n{c['text']}")
+        parts.append(f"[{i}] {c['title']}{where}\n{c['text']}")
     return "\n\n".join(parts)
 
 
@@ -454,14 +426,14 @@ def _clean_answer(answer: str) -> str:
 
 
 def _build_eval_line(eval_d: dict | None, chunks: list[dict], latency_ms: float) -> str:
-    """Compact grey-line string: retrieval sim + web count + judge verdicts + latency."""
+    """Compact grey-line string: retrieval sim + deep hits + judge verdicts + latency."""
     parts: list[str] = []
     sims = [c["similarity"] for c in chunks if c.get("similarity") is not None]
     if sims:
         parts.append(f"top sim {max(sims):.2f}")
-    web = sum(1 for c in chunks if str(c.get("doc_id", "")).startswith("web:"))
-    if web:
-        parts.append(f"{web} web")
+    deep = sum(1 for c in chunks if c.get("deep"))
+    if deep:
+        parts.append(f"{deep} deep")
     if eval_d:
         if eval_d.get("faithful") is not None:
             parts.append("faith " + ("PASS" if eval_d["faithful"] else "FAIL"))
@@ -477,8 +449,17 @@ def ask(
     query: str,
     history: list[dict],
     cfg: PipelineConfig,
+    deep_search=None,
 ) -> dict:
-    """Answer a question. Returns {answer, not_found, citations, eval_line, eval}."""
+    """Answer a question. Returns {answer, not_found, citations, eval_line, eval}.
+
+    `deep_search` is an optional callable taking the rewritten query and
+    returning extra chunk-shaped passages — in practice
+    `deepsearch.searcher(db, user_id)`. Passed as a function rather than a
+    session so this module stays free of the ORM, and given the REWRITTEN query
+    because a follow-up like "and the second one?" must not be scanned for the
+    word "second".
+    """
     t0 = time.time()
     effective_query = rewrite_query(query, history, cfg)
     try:
@@ -492,18 +473,52 @@ def ask(
             "citations": [],
         }
 
-    # Decision: do the user's own documents answer this?
+    # Deep search runs ALWAYS when asked for, not as a fallback. Web
+    # augmentation was gated on "the documents did not answer" because pulling
+    # in outside text when they did would have broken the grounding promise.
+    # This searches the same documents, so there is nothing to protect against
+    # — and gating it would defeat the point: a literal hit the ranker missed
+    # is most valuable precisely when the ranker is confident, because that is
+    # when nobody looks twice.
+    deep_chunks: list[dict] = []
+    if deep_search is not None:
+        try:
+            deep_chunks = deep_search(effective_query)
+        except Exception:
+            # A scan failing must not cost the visitor their answer; ranked
+            # retrieval already has one.
+            log.exception("deep search failed for user %s", user_id)
+
+    # Nothing cleared the bar and nothing matched literally: refuse here rather
+    # than spending a generation call to be told the same thing.
+    #
+    # This is where similarity_threshold takes effect. Until now its ONLY use
+    # was gating web augmentation, so removing web search would have quietly
+    # turned an exposed, tunable setting into a decoration on a meter — a
+    # setting that lies is worse than one that does not exist. Deep hits carry
+    # `similarity: None` and deliberately count as evidence here: a verbatim
+    # occurrence is worth showing the model even when the ranker was cold.
     doc_sims = [c["similarity"] for c in chunks if c.get("similarity") is not None]
-    doc_max = max(doc_sims) if doc_sims else None
-    docs_answer = doc_max is not None and doc_max >= _effective_threshold(cfg)
+    # NO cosine at all is not evidence of irrelevance — it is the absence of
+    # evidence. A pool can be entirely BM25-only (fusion marks those
+    # `similarity: None`), and that happens on exactly the queries keyword
+    # fusion exists for: part numbers, form codes, names. Refusing there would
+    # break the case hybrid retrieval was added to fix. Only refuse when there
+    # ARE scores to judge by and every one of them falls short.
+    nothing_relevant = (
+        not deep_chunks
+        and bool(doc_sims)
+        and max(doc_sims) < _effective_threshold(cfg)
+    )
+    if chunks and nothing_relevant:
+        return {
+            "answer": NOT_FOUND_ANSWER,
+            "not_found": True,
+            "citations": [],
+            "eval_line": _build_eval_line(None, chunks, (time.time() - t0) * 1000),
+        }
 
-    # Web augmentation is a fallback ONLY — never used when documents already
-    # clear the bar. This preserves grounding-by-default (PRD F13).
-    web_chunks: list[dict] = []
-    if not docs_answer and cfg.web_augmentation:
-        web_chunks = _web_search(effective_query, cfg.top_k)
-
-    pool = chunks + web_chunks
+    pool = chunks + deep_chunks
     if pool:
         pool = _rerank(effective_query, pool, cfg)
     else:
@@ -562,7 +577,7 @@ def ask(
                 "title": c["title"],
                 "ref": c.get("ref") or "",
                 "excerpt": c["text"][:400],
-                "is_web": str(c.get("doc_id", "")).startswith("web:"),
+                "is_deep": bool(c.get("deep")),
             }
         )
     if not citations:
@@ -573,7 +588,7 @@ def ask(
                 "title": c["title"],
                 "ref": c.get("ref") or "",
                 "excerpt": c["text"][:400],
-                "is_web": str(c.get("doc_id", "")).startswith("web:"),
+                "is_deep": bool(c.get("deep")),
             }
             for i, c in enumerate(pool[: min(2, len(pool))])
         ]
