@@ -2358,9 +2358,13 @@ function renderEval(data) {
   // Whose numbers these are is the first thing a reader needs. Presenting a
   // shipped result as "your benchmark" would be a quiet lie, and the reader's
   // very next thought would be "when did I run this?".
+  // No "run your own" any more — nothing in the app starts a benchmark. The
+  // model that produced these is named because the scores depend on it, and it
+  // is the one number here that is NOT a property of the retrieval pipeline.
+  const model = (data.config || {}).llm_model;
   const whose = data.published
     ? `Published run${ts} · ${data.n_corpus_files || "?"} sample documents` +
-      (canRun ? " · run your own to replace it" : "")
+      (model ? ` · ${model.replace(/^models\//, "")}` : "")
     : "Latest benchmark" + ts;
   statusEl.textContent =
     whose + (ungraded ? ` · ⚠ ${ungraded} ungraded (judge unavailable)` : "");

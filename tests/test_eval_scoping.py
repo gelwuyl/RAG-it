@@ -114,8 +114,13 @@ def test_guest_never_sees_an_account_holders_run(client):
 
     assert SECRET_Q not in body, "golden-set question leaked into a guest response"
     payload = json.loads(body)
-    assert payload["status"] == "none"
-    assert not payload.get("metrics")
+    # A guest now sees the PUBLISHED run rather than an empty pane — the app's
+    # own evidence for its claims should not sit behind a login. What must never
+    # happen is seeing the OWNER'S run, which is what the assertion above pins.
+    assert payload.get("published") is True or payload["status"] == "none"
+    assert not payload.get("results") or all(
+        SECRET_Q not in (r.get("question") or "") for r in payload["results"]
+    )
 
 
 def test_one_account_never_sees_another_accounts_run(client):
@@ -127,8 +132,12 @@ def test_one_account_never_sees_another_accounts_run(client):
     _as_account(client)  # a different registration -> a different user
     body = _body(client)
 
-    assert "account A private question" not in body
-    assert json.loads(body)["status"] == "none"
+    assert "account A private question" not in body, (
+        "one account's benchmark leaked into another's"
+    )
+    payload = json.loads(body)
+    # Falls through to the published run, which belongs to nobody in particular.
+    assert payload.get("published") is True or payload["status"] == "none"
 
 
 def test_rows_predating_the_owner_column_belong_to_nobody(client):
