@@ -1640,19 +1640,35 @@ fieldset legend {
      close button is not optional here the way it is beside a desktop column. */
   #excerpt-close { display: inline-flex; }
 
-  /* Touch-friendly targets — but sized by ROLE, not uniformly. Ask and Sign in
-     are the two things a thumb reaches for and stay large; the topbar's
-     secondary chrome (settings, theme) is tuned down so it fits on one row, which
-     is worth more on a 375px screen than four more pixels of padding on a button
-     pressed once a session. */
-  .btn { padding: 10px 14px; }
-  .btn-small { padding: 8px 12px; font-size: 14px; }
-  .topbar-actions .btn-small { padding: 6px 10px; font-size: 13px; }
-  .icon-btn { padding: 8px 10px; font-size: 16px; }
-  .pane-toggle { width: 38px; height: 38px; }
+  /* Touch targets: 44x44 minimum, which this now actually meets.
+
+     It used to say "sized by ROLE, not uniformly", and shrank the topbar chrome
+     to 30px so that prune + settings + theme fit one row. Two of those three are
+     gone — prune moved to the "/" palette, the web switch left with its feature
+     — so the row has the space back and the compromise has nothing left to buy.
+     Measured on a 375px viewport: six controls were under 44px, and every one
+     of them is a thing a thumb reaches for. */
+  .btn { padding: 10px 14px; min-height: 44px; }
+  .btn-small { padding: 8px 12px; font-size: 14px; min-height: 44px; }
+  .topbar-actions .btn-small { padding: 8px 12px; font-size: 14px; }
+  .icon-btn { padding: 8px 10px; font-size: 16px; min-height: 44px; min-width: 44px; }
+  #theme-toggle { min-width: 44px; }
+  .switch-btn { min-height: 44px; }
+  .pane-toggle { width: 44px; height: 44px; }
   /* The glossary is the one help affordance that MUST be tappable — it exists
-     because the old `title` tooltips were unreachable on touch. */
-  .term-mark { width: 28px; height: 28px; font-size: var(--text-micro); }
+     because the old `title` tooltips were unreachable on touch. The DOT stays
+     small (a 44px circle beside a label reads as a button, not a footnote); the
+     hit area is expanded with a pseudo-element instead, which costs no layout
+     space and so cannot push anything to a second row. */
+  .term-mark {
+    width: 28px; height: 28px; font-size: var(--text-micro);
+    position: relative;
+  }
+  .term-mark::after {
+    content: ""; position: absolute;
+    top: 50%; left: 50%; transform: translate(-50%, -50%);
+    width: 44px; height: 44px;
+  }
   .chat-item { padding: 9px 10px; }
   .chat-item .chat-delete { opacity: 1; }
   .cite-chip { padding: 6px 12px; }
