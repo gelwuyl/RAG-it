@@ -1,10 +1,11 @@
 # Handoff — agentic-RAG
 
-Written 2026-08-18. Replaces the earlier frontend/backend handoff, which described
-phases 0–4 and is now fully landed (see `git log`).
+Written 2026-08-18. The queue this document used to carry is cleared — see §2
+for where each item landed.
 
-**Next session's first job is §1.** Everything else is queued work with decisions
-already made.
+**What is left is §1: the identity-blank timing bug**, plus two pieces of
+configuration that live outside the repo (§2). Everything else is done and
+pushed.
 
 ---
 
@@ -23,16 +24,15 @@ git log --oneline -12
 
 | commit | what |
 |---|---|
+| `38bd468` | touch targets meet 44px |
+| `a1c20cd` | **Deep search** replaces web fallback (web search deleted) |
+| `0cad203` | guest TTL 30 min, sweeper, set-based deletes |
+| `69ca56a` | CI gate + scorecard reading the same baseline |
+| `df6cbfb` | confusable corpus, 39 -> 59 chunks, re-baselined |
+| `26112b9` | Prune ghosts retired to the "/" palette |
 | `3619d4d` | deterministic exact-containment metrics; gate baseline |
-| `2f8a1f4` | eight distractor documents, 21 → 39 chunks |
-| `665b8a6` | MATCH_THRESHOLD calibrated 0.6 → 0.45; baseline mechanism |
-| `e2b2ecb` | synthetic corpus + golden set (then history-purged) |
-| `215c064` | plain-language metric names + benchmark percentile |
-| `f79f875` | demo vectors ship with the repo (cold-start 504 fix) |
+| `665b8a6` | MATCH_THRESHOLD calibrated 0.6 -> 0.45 |
 | `c002445` | harness scores the passages the model is actually handed |
-| `8e46ab2` | guest seeding: a document either has its vectors or is not there |
-| `53cf838` | command palette moved to "/" in the composer |
-| `acd599e` | Cohere reranks by default; two embedders instead of six |
 
 Deployment: `https://rag-gel.vercel.app` · `GET /api/health` reports effective
 config. Repo is **public**.
@@ -83,7 +83,13 @@ The session cookie is `httponly=True` (`ragchat/app.py` ~line 84, set centrally
 by one helper — good). So the page has no synchronous way to know who it is and
 must wait for a round trip.
 
-### Suggested fix (not yet implemented, not yet agreed with the user)
+### Status
+
+**Still open, and still unfixed.** The user has seen it, has said it can wait
+until everything else is deployed, and has asked to revisit it then. Do not
+treat it as agreed work until they say so.
+
+### Suggested fix
 
 Set a **second, non-httpOnly hint cookie** beside the session cookie carrying
 only the identity *kind* — e.g. `ragchat-kind=guest` or `=account`. The boot
@@ -103,69 +109,54 @@ Also worth doing in the same pass:
   (currently it collapses, which is why the layout appears to shift).
 
 **Confirm the cookie approach with the user before building it** — they raised
-it as a question, not an instruction.
+it as a question, not an instruction, and later observed that it "does not seem
+to improve it drastically". Worth knowing why that observation cannot be about
+this fix: the hint cookie was never built. `grep -r ragchat-kind` finds nothing
+outside this file. Whatever they were measuring, it was not this.
 
 ---
 
-## 2. Remaining queue, in order
+## 2. Queue — all cleared
 
-All decisions below are already settled with the user. Do not re-ask.
+Everything §2 listed is landed. Kept here as a map of where each decision lives.
 
-### 2.1 Finish the corpus (~20 more chunks)
-39 chunks today; the original haystack was ~59. Approved to continue *now that
-the gate metric is deterministic*. Write same-domain **confusable** documents —
-unrelated filler is separated trivially by embeddings and adds bulk without
-difficulty. Regenerate the golden set and baseline afterwards (§4).
+| was | landed in | where it lives |
+|---|---|---|
+| 2.1 finish the corpus | `df6cbfb` | `eval/corpus/` (27 files, 59 chunks), `eval/build_golden_set.py` |
+| 2.2 CI gate | `69ca56a` | `eval/gate.py`, `.github/workflows/retrieval-gate.yml` |
+| 2.3 scorecard reads baseline | `69ca56a` | `GET /api/eval/baseline`, `frontend/app.js:scoreReference` |
+| 2.4 guest lifecycle | `0cad203` | `ragchat/guests.py`, `.github/workflows/guest-sweeper.yml` |
+| 2.5 phase 5 sweep | `38bd468` | `frontend/styles.css`, `frontend/landing.css` |
+| 2.6 deep search | `a1c20cd` | `ragchat/deepsearch.py` |
 
-### 2.2 CI gate
-GitHub Actions, **push to main only**, retrieval-only, fails on regression
-against `eval/baseline.json`. Fork PRs never receive secrets on a public repo,
-so PRs are skipped by design. Gate compares the `exact_*` metrics only — see
-`eval/baseline.py:GATED_METRICS` and the test that pins it.
+### Two things that need doing OUTSIDE the repo
 
-### 2.3 Scorecard reads the baseline
-`frontend/app.js:EVAL_TARGETS` still hardcodes aspirational targets (0.80 etc.).
-It must read `eval/baseline.json` so "red means regression" is true in the UI as
-well as in CI. Both consume the same file — do it with §2.2.
+1. **`GUEST_SWEEP_SECRET`** must be set in *both* places or the sweeper is a
+   no-op and guest workspaces outlive their TTL:
 
-### 2.4 Guest lifecycle — **fully designed, confirmed, not started**
-- Idle TTL 2h → **30 min** (guests only; signed-in workspaces are permanent and
-  already excluded by `provider == "guest"`, with a test).
-- **Keepalive** while the tab is visible (~5 min) so an open tab is never reaped
-  mid-read. Reuse `/api/auth/status`, which already calls `touch()`.
-- **Close beacon**: `pagehide` → `sendBeacon` that *back-dates* `last_seen_at`
-  so the next sweep collects it. It must **not** delete inline — close-and-reopen
-  has to survive. **The OAuth redirect must suppress the beacon**, or signing in
-  destroys the workspace during promotion.
-- **Sweeper**: GitHub Actions every 15 min against an authenticated sweep
-  endpoint (shared secret, constant-time compare). Vercel Hobby cron exists but
-  is **once per day**, which cannot honour a 30-minute promise — verified, and
-  the code comment in `ragchat/guests.py` saying Hobby has no cron is out of date.
-- **Inline backstop**: `create_guest` clears at most **2** workspaces as one bulk
-  statement, so cleanup never stops dead if Actions is disabled at 60 days.
-- **Bulk set-based deletes**: `purge_user_data` currently costs ~6–8 round-trips
-  per workspace and `create_guest` reaps 20 inline — that measured **39.7s** on a
-  guest-login against 11.1s warm. Acceptance criterion: **guest-login under 10s**.
+   ```
+   vercel env add GUEST_SWEEP_SECRET
+   gh secret set GUEST_SWEEP_SECRET
+   ```
 
-### 2.5 Phase 5 sweep
-Tap-target audit (44×44 minimum) and a light-theme pass over the surfaces added
-in phases 4–5. No decisions outstanding.
+   The endpoint is DISABLED (404) without it, which is the safe failure — but it
+   IS a failure. `DEPLOY_VERCEL.md` has the detail.
 
-### 2.6 Deep search — planned, named, not started
-Replaces web search entirely. Full design is in this conversation's history; the
-essentials:
-- `documents.source_text` (`ragchat/db.py` ~line 93) already stores full document
-  text durably, so grep needs no new storage and no vector-backend dispatch.
-- **Per-request flag, never a persisted config.** `config_overrides` is ONE row
-  shared by the whole deployment — a persisted toggle would change retrieval for
-  every user. The existing web-augmentation toggle has exactly this bug
-  (`ragchat/app.py` ~line 1050 writes `save_config_override`).
-- `seed_demo_corpus` does **not** copy `source_text` to guest clones — one line,
-  and a prerequisite for guests to use deep search at all.
-- UI name: **"Deep search"**. Delete web search in the same commit so there is
-  never a build with two fallbacks.
+2. **`OPENROUTER_API_KEY` is over its spend limit.** Every embedding call answers
+   403 "Key limit exceeded". That is why the re-baseline was written with
+   `python -m eval.baseline --from-run latest` rather than a fresh scoring run,
+   and why deep search has not been exercised against the live LLM path — its
+   own scan needs no API and was verified end to end. The CI gate treats a 403 as
+   "gate skipped", so it will pass, loudly, until the key is topped up.
 
----
+### Behaviour change worth knowing about
+
+`similarity_threshold` is live again. Its only previous use was gating web
+augmentation, so deleting that feature would have left an exposed setting
+decorating a meter. `ask()` now refuses before generating when the pool clears
+nothing — and deliberately does NOT refuse when no chunk carries a cosine at
+all, because a BM25-only pool is the absence of evidence rather than evidence of
+absence (that is exactly the part-number case fusion exists for).
 
 ## 3. Non-obvious things learned this session
 
@@ -205,10 +196,31 @@ enforces this; keep it that way.
 
 ---
 
+**A bulk DELETE leaves the session's identity map intact.** `SessionLocal` sets
+`expire_on_commit=False`, so after `query(...).delete()` a `db.get(User, id)`
+still returns a live-looking object for a row that is gone. `purge_users`
+expunges them — expunge and not expire, because an expired instance re-SELECTs
+on the next attribute read and raises, which would make reading `guest.id` off
+the returned list an error.
+
+**Python's `\w` matches CJK.** A plain tokenizer turns a whole Chinese clause
+into one "word" that appears verbatim in no document, so a literal search finds
+nothing and looks like a correct "not in the corpus" rather than a bug.
+`deepsearch` uses character bigrams.
+
+**Tests can silently start hitting the network.** `test_retrieval_fixes.py`
+monkeypatches `ProxyEmbeddings` at module level, and by the time the whole suite
+has run, other modules have re-imported `ragchat.embeddings` and put the real one
+back. A test there that depends on live retrieval quietly becomes a test of
+whether an API key works — and `ask()` also calls the LLM judge at the end, which
+cost ~15s per test in retries. Stub `retrieve` and `_eval_answer` rather than
+indexing a corpus. The suite is 178 tests in ~12s with no network; if it takes a
+minute, something is calling out.
+
 ## 4. Verification
 
 ```bash
-# Tests — 122 passing at time of writing
+# Tests — 178 passing, ~12s, no network
 .venv\Scripts\python -m pytest tests/ -v
 
 # Free retrieval benchmark (no LLM call). --with-rerank costs one Cohere
@@ -218,7 +230,14 @@ enforces this; keep it that way.
 
 # Regenerate the baseline after ANY corpus / golden set / chunking / model change.
 # Read the diff before committing — regenerating blindly launders a regression.
+# --from-run writes it from a run that already completed, instead of paying for
+# the same measurement twice.
 .venv\Scripts\python -m eval.baseline
+.venv\Scripts\python -m eval.baseline --from-run latest
+
+# What CI runs. Passes loudly when the provider is down; fails on a regression,
+# and on a baseline that no longer describes the pipeline.
+.venv\Scripts\python -m eval.gate
 
 # Demo vectors, after an embedding-model or chunking change (else guest-login 504s)
 .venv\Scripts\python -m ragchat.demo_vectors
@@ -228,9 +247,11 @@ node shot.mjs http://localhost:5173
 node layout_check.mjs http://localhost:5173
 ```
 
-The golden-set generator lives outside the repo (it was a scratchpad script). If
-the corpus changes, it must be rewritten or recovered — it is what guarantees the
-verbatim invariant. **Consider committing it under `eval/` as part of §2.1.**
+The golden-set generator is committed at `eval/build_golden_set.py`. It refuses
+to write unless every golden passage is verbatim in a source document AND absent
+from every distractor — a passage present in two places gives the corpus two
+right answers, and the exact metrics then score the same retrieval as a hit or a
+miss depending on which copy came back.
 
 ---
 
@@ -239,12 +260,12 @@ verbatim invariant. **Consider committing it under `eval/` as part of §2.1.**
 Call these via the `Skill` tool:
 
 - **`anthropic-skills:grilling`** — for any multi-decision design work. This user
-  responds very well to it; the guest-lifecycle design in §2.4 came out of it
-  cleanly.
-- **`code-review`** — before shipping §2.2 and §2.4. Both touch auth, deletion
-  and CI, where a mistake is expensive and not obvious from tests.
-- **`security-review`** — specifically for §1 (a new cookie) and §2.4 (a sweep
-  endpoint with a shared secret and a deletion path). Worth one deliberate pass.
+  responds very well to it; the guest-lifecycle design came out of it cleanly.
+- **`code-review`** — the guest sweeper and deep search both shipped without
+  one. The sweeper deletes data behind a shared secret; deep search reads every
+  document a user owns and puts the text in a model prompt. Both are worth a
+  deliberate pass now that they are written rather than before the next change.
+- **`security-review`** — for the same two, plus §1 if the hint cookie is built.
 
 ---
 
