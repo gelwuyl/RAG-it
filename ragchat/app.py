@@ -122,6 +122,25 @@ def set_session_cookie(response: Response, user_id: str, *, kind: str) -> None:
     )
 
 
+def _secret_matches(presented: str, expected: str) -> bool:
+    """Constant-time secret comparison that cannot be made to raise.
+
+    Constant-time because a naive == leaks the secret's length and prefix to
+    anyone who can time the response, and the one route using this deletes data.
+
+    Compared as BYTES because compare_digest on str raises TypeError the moment
+    either side is non-ASCII — and `presented` comes from a header an
+    unauthenticated caller controls. Starlette decodes header bytes as latin-1,
+    so a raw client (curl, netcat) can put é in there and turn the auth
+    check into an unhandled 500. It never granted access, but a security check
+    that errors on input the attacker chooses is not a check.
+    """
+    return hmac.compare_digest(
+        presented.encode("utf-8", "surrogateescape"),
+        expected.encode("utf-8", "surrogateescape"),
+    )
+
+
 def clear_session_cookies(response: Response) -> None:
     """Drop both cookies together. Leaving the hint behind paints a signed-in
     top bar over a signed-out session until the first request comes back."""
@@ -598,13 +617,15 @@ def sweep_guests(request: Request, db: Session = Depends(get_session)):
     expected = settings.sweep_secret
     if not expected:
         raise HTTPException(status_code=404, detail="Not found")
-    presented = request.headers.get("x-sweep-secret", "")
-    # Constant-time: a naive == leaks the secret's length and prefix to anyone
-    # who can time the response, and this route deletes things.
-    if not hmac.compare_digest(presented, expected):
+    if not _secret_matches(request.headers.get("x-sweep-secret", ""), expected):
         raise HTTPException(status_code=403, detail="Forbidden")
 
-    limit = min(max(int(request.query_params.get("limit", 200)), 1), 1000)
+    # Same reasoning, lower stakes: ?limit=abc raised ValueError -> 500.
+    try:
+        requested = int(request.query_params.get("limit", 200))
+    except (TypeError, ValueError):
+        requested = 200
+    limit = min(max(requested, 1), 1000)
     n = guests.reap_stale_guests(db, limit=limit)
     return {
         "reaped": n,

@@ -172,12 +172,18 @@ def _hydrate_bm25(col) -> None:
     name = col.name
     if name in _BM25_HYDRATED:
         return
-    _BM25_HYDRATED.add(name)
     try:
         got = col.get(include=["documents", "metadatas"])
     except Exception:
+        # NOT marked hydrated: a transient read failure would otherwise disable
+        # keyword fusion for this collection for the whole life of the process,
+        # silently, with the next query having no way to notice.
         log.exception("bm25: could not hydrate %s from disk", name)
         return
+    # Marked only once the read succeeded. An EMPTY collection still counts as
+    # hydrated — there is nothing to find, and re-reading it on every query is
+    # the cost this flag exists to avoid.
+    _BM25_HYDRATED.add(name)
     docs = got.get("documents") or []
     metas = got.get("metadatas") or []
     if not docs:

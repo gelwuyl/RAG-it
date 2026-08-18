@@ -301,3 +301,27 @@ def test_single_user_purge_goes_through_the_same_path(db, monkeypatch):
     assert calls == [[g.id]]
     assert summary["documents"] == 1
     assert "users" not in summary, "single-user callers read a per-table summary"
+
+
+def test_the_secret_check_refuses_non_ascii_rather_than_raising():
+    """`presented` is a header an unauthenticated caller controls, and
+    hmac.compare_digest on str raises TypeError the moment either side is
+    non-ASCII. Starlette decodes header bytes as latin-1, so a raw client can
+    put é there; a security check that errors on input the attacker chooses
+    is not a check.
+
+    Tested below the HTTP layer on purpose: httpx refuses to SEND a non-ASCII
+    header, so a request-level test cannot reach the code it is aiming at.
+    """
+    from ragchat.app import _secret_matches
+
+    assert _secret_matches("s3cret", "s3cret") is True
+    assert _secret_matches("café-not-the-secret", "s3cret") is False
+    assert _secret_matches("s3cret", "café") is False
+    assert _secret_matches("", "s3cret") is False
+
+
+def test_sweep_ignores_a_junk_limit_instead_of_erroring(client):
+    r = client.post("/api/admin/sweep-guests?limit=abc",
+                    headers={"x-sweep-secret": SWEEP_SECRET})
+    assert r.status_code == 200, r.text

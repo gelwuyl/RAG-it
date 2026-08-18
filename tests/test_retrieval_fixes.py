@@ -458,3 +458,30 @@ def test_keyword_fusion_survives_a_process_restart():
     )
     assert _store._BM25_OBJ, "the keyword index did not rebuild itself"
     assert any(c["doc_id"] == "h" for c in out), [c["doc_id"] for c in out]
+
+
+def test_a_failed_hydration_is_retried_rather_than_disabling_fusion():
+    """Marking a collection hydrated BEFORE the read means one transient
+    failure disables keyword fusion for that collection for the life of the
+    process — silently, with no later query able to notice."""
+    u = "user-HY2"
+    cfg = _make_cfg(hybrid_search=True)
+    _index_corpus(u, cfg)
+    col = _store.collection_for(u, "text-embedding-005")
+
+    for cache in (_store._BM25_DOCS, _store._BM25_FLAT, _store._BM25_OBJ):
+        cache.clear()
+    _store._BM25_HYDRATED.clear()
+
+    class _Boom:
+        name = col.name
+
+        def get(self, **_kw):
+            raise RuntimeError("disk hiccup")
+
+    _store._hydrate_bm25(_Boom())
+    assert col.name not in _store._BM25_HYDRATED, "a failed read was cached as done"
+
+    # The next attempt, against the real collection, still works.
+    _store._hydrate_bm25(col)
+    assert _store._BM25_OBJ, "fusion never recovered"
