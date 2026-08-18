@@ -118,6 +118,21 @@ def _live_embedding_dim(conn) -> int | None:
     return None if row[0] == -1 else int(row[0])
 
 
+# Which embedding dimension this PROCESS has already prepared the schema for.
+#
+# _ensure_table is called from all eight store operations and does six round
+# trips every time: CREATE EXTENSION, a catalog query for the live dimension,
+# SQLAlchemy's create_all (which reflects), and two CREATE INDEX statements.
+# Every one is a network hop to Neon. A guest sign-in performs three store
+# operations, so it was paying eighteen — measured as the bulk of a 14.3s
+# seed_demo_corpus inside a request with a 10s budget.
+#
+# The DDL is idempotent and the docstring below always claimed "once"; it just
+# was not true. Keyed by target dimension rather than a plain bool, so the
+# dimension-drift check still re-runs if the target ever changes.
+_SCHEMA_READY_FOR_DIM: int | None = None
+
+
 def _ensure_table(conn) -> None:
     """Create the table, the pgvector extension, and the HNSW index once.
 
@@ -125,9 +140,15 @@ def _ensure_table(conn) -> None:
     must NOT commit/rollback here — the context manager does that on exit. A
     manual commit inside the begin() context closes the transaction and makes
     the surrounding `with` block raise "Can't operate on closed transaction".
+
+    Once per PROCESS, not once per call. On a serverless function a process is
+    one warm instance, so a cold start still verifies the schema, and any
+    instance that has already done so skips straight to the real work.
     """
-    global chunks_table
+    global chunks_table, _SCHEMA_READY_FOR_DIM
     target = _target_dim()
+    if _SCHEMA_READY_FOR_DIM == target:
+        return
     conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
     live_dim = _live_embedding_dim(conn)
     if live_dim is not None and live_dim != target:
@@ -160,6 +181,10 @@ def _ensure_table(conn) -> None:
             "ON chunks (user_id, embedding_model, fingerprint)"
         )
     )
+    # Last: only mark it done once every statement above has succeeded, or a
+    # failure part-way would leave the process believing in a schema it never
+    # finished building.
+    _SCHEMA_READY_FOR_DIM = target
 
 
 # ---------------------------------------------------------------------------
