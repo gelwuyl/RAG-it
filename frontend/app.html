@@ -47,7 +47,7 @@
         }
       })();
     </script>
-    <link rel="stylesheet" href="/styles.css?v=36" />
+    <link rel="stylesheet" href="/styles.css?v=37" />
     <script>
       // Boot diagnostics: collect load/runtime errors so a broken app.js
       // shows a visible message instead of a silently dead UI.
@@ -295,8 +295,13 @@
         <aside class="pane eval-pane" id="eval-pane">
           <div class="pane-head">
             <h2 class="pane-title">Evaluation</h2>
-            <button id="eval-run-btn" class="btn btn-small btn-accent" type="button"
-              title="Run the RAGAS-style benchmark on the golden set">Run benchmark</button>
+            <!-- "Run benchmark" used to sit here. The corpus is fixed, the
+                 questions are fixed and the pipeline is the same for everyone,
+                 so the result is identical for every visitor — and each one was
+                 paying for it: the browser driving ~56 sliced requests through
+                 the live pipeline, minutes of waiting, real model spend. The
+                 result ships with the app instead (eval/published_run.json).
+                 The CLI still runs it when the numbers need re-measuring. -->
             <button id="eval-toggle" class="pane-toggle" type="button"
               aria-expanded="true" title="Show or hide the evaluation scorecard">⌃</button>
           </div>
@@ -591,6 +596,6 @@
       </div>
     </div>
 
-    <script type="module" src="/app.js?v=43"></script>
+    <script type="module" src="/app.js?v=44"></script>
   </body>
 </html>

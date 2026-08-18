@@ -96,7 +96,10 @@ def _get_engine() -> Engine:
                 "VECTOR_BACKEND=neon requires PG_DATABASE_URL (or DATABASE_URL) "
                 "to be set, but it is empty."
             )
-        _engine = create_engine(url, pool_pre_ping=True)
+        # Same trade as the app database (see ragchat/db.py): pre_ping costs a
+        # network round trip on every checkout, and pool_recycle achieves what
+        # it was guarding against without one.
+        _engine = create_engine(url, pool_pre_ping=False, pool_recycle=240)
     return _engine
 
 

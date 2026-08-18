@@ -23,9 +23,25 @@ from .config import DATA_DIR, settings
 
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
+# pool_pre_ping sends a SELECT 1 before EVERY checkout to prove the connection
+# is alive. Against a local SQLite file that costs nothing. Against Neon it is a
+# network round trip on every request — measured at roughly 250-300ms, which is
+# most of why a single INSERT took 1.5 seconds of server time.
+#
+# pool_recycle replaces what it was there for. Connections older than the window
+# are discarded before use, so a serverless instance that has been frozen for
+# minutes (or hours) never hands out a connection Neon has since closed at its
+# end. Age is wall-clock, so freezing does not hide a stale connection.
+#
+# 240s is under Neon's idle cutoff with room to spare. The trade is that a
+# connection which dies INSIDE the window surfaces as an error rather than being
+# swapped silently; that is rare, and paying a round trip on every request to
+# avoid it is the wrong side of the trade for a request a visitor waits on.
+_IS_PG = "postgres" in settings.db_url
 engine = create_engine(
     settings.db_url,
-    pool_pre_ping=True,
+    pool_pre_ping=not _IS_PG,
+    pool_recycle=240 if _IS_PG else -1,
     connect_args={"check_same_thread": False} if "sqlite" in settings.db_url else {},
 )
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)

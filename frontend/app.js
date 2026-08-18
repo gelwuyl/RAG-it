@@ -16,6 +16,7 @@ const state = {
   evalBaseline: null, // eval/baseline.json — what a bar is measured against
   simThreshold: 0,    // live retrieval threshold, marked on the per-answer meter
   seeding: null,      // in-flight sample-document copy, so the sources pane can say so
+  answerEval: null,   // the answer currently drawn on the benchmark bars
   bootUsageSkipped: false, // consumes the one duplicate status fetch at boot
   deepSearch: false,  // per-QUESTION literal scan; sent with ask, never stored
   // Documents + folders currently in the workspace. Only the COUNT is kept:
@@ -477,7 +478,6 @@ function renderAuthGate(status) {
 // ask, new chat, prune, theme — a guest can do, because a guest workspace is a
 // real workspace, not a display case.
 const GUEST_LOCKED = {
-  "eval-run-btn": "run the benchmark",
   "reindex-btn": "re-index every source",
   "add-folder-btn": "add a folder source",
   "settings-save": "save tuning settings",
@@ -1888,109 +1888,49 @@ function benchmarkPercentile(topSim) {
 // two-register rule exists to prevent (§1). The detail is not deleted, only
 // folded: it is genuinely useful, just not on every answer by default.
 function buildEvalBlock(evalData, evalLine) {
+  // One line under the answer, and the numbers themselves in the Evaluation
+  // pane.
+  //
+  // Every answer used to carry its own expandable table of scores, and the pane
+  // separately showed benchmark averages. Two sets of numbers, no relationship
+  // drawn between them, and the reader left to hold both in their head. The
+  // scores now sit on the benchmark's own bars, where "is this answer normal?"
+  // is a glance rather than an inference.
+  //
+  // What stays here is a verdict and a way back: clicking any answer's chip
+  // puts THAT answer's readings on the bars, so scrolling up through a
+  // conversation still works. Without it the pane would only ever describe the
+  // most recent answer and older ones would lose their scores entirely.
   const wrap = document.createElement("div");
   wrap.className = "eval-block";
 
   if (evalData && typeof evalData === "object") {
-    const rows = [];
-    if (evalData.top_sim != null) {
-      rows.push(["Top similarity", evalData.top_sim.toFixed(2), "how closely the best retrieved chunk matched your question (1.00 = exact)"]);
-      const place = benchmarkPercentile(evalData.top_sim);
-      if (place) {
-        rows.push([
-          "vs benchmark",
-          `${place.pct}%`,
-          `this answer retrieved better than ${place.pct}% of the ${place.n} benchmarked questions`,
-        ]);
-      }
-    }
-    // PASS is a CHECKMARK in neutral foreground, not a green pill. Acid lime is
-    // the accent, and lime beside green is unreadable as two distinct meanings,
-    // so the verdict is carried by glyph and position. FAIL stays red — red is
-    // reserved exclusively for failure and destructive actions.
-    if (evalData.faithful != null) {
-      rows.push(["Faithfulness", evalData.faithful ? "✓" : "FAIL", evalData.faithful_reason || "every claim is supported by the sources"]);
-    }
-    if (evalData.relevant != null) {
-      rows.push(["Relevancy", evalData.relevant ? "✓" : "FAIL", evalData.relevant_reason || "the answer addresses your question"]);
-    }
-    // Grading unavailable is NOT a failure — say so explicitly rather than
-    // leaving the row out (or, as before, rendering it as a confident FAIL).
-    if (evalData.judge_error && (evalData.faithful == null || evalData.relevant == null)) {
-      rows.push(["Grading", "unavailable", String(evalData.judge_error).slice(0, 160)]);
-    }
-    if (evalData.latency_ms != null) {
-      rows.push(["Latency", `${(evalData.latency_ms / 1000).toFixed(1)} s`, "time to generate this answer"]);
-    }
-    if (rows.length) {
-      const { state, word } = evalVerdict(evalData);
-      const sim = evalData.top_sim;
+    const { state: verdict, word } = evalVerdict(evalData);
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "eval-chip";
+    chip.title = "Show this answer's scores against the benchmark";
 
-      const summary = document.createElement("button");
-      summary.type = "button";
-      summary.className = "eval-chip";
-      summary.setAttribute("aria-expanded", "false");
+    const nudge = currentBeat() === 4
+      ? `<span class="eval-nudge">what is this?</span>`
+      : "";
+    const sim = evalData.top_sim;
+    const simText = sim != null
+      ? `<span class="eval-meter-val">${sim.toFixed(2)}</span>`
+      : "";
+    chip.innerHTML = `<span class="eval-dot" data-state="${verdict}" aria-hidden="true"></span>
+      <span class="eval-state">${escapeHtml(word)}</span>${simText}${nudge}
+      <span class="eval-chip-cta">compare</span>`;
 
-      let meter = "";
-      if (sim != null) {
-        // The bar is top similarity on 0–1, which is a real per-answer value.
-        //
-        // Plan §6 asked for a tick at "the benchmark baseline", citing the
-        // published faithfulness ≥ 0.90 / relevancy ≥ 0.85 targets. Those are
-        // PASS RATES ACROSS A RUN, not similarities — drawing one as a tick on
-        // this axis would look precise and mean nothing. The retrieval
-        // threshold is the real reference on this axis, so it is marked when
-        // the config sets one above zero, and simply omitted otherwise rather
-        // than invented.
-        const pct = Math.max(0, Math.min(1, sim)) * 100;
-        const thr = state.simThreshold;
-        const tick = thr > 0 && thr < 1
-          ? `<span class="eval-meter-tick" style="left:${(thr * 100).toFixed(1)}%"
-               title="retrieval threshold ${thr.toFixed(2)}"></span>`
-          : "";
-        meter = `<span class="eval-meter" role="img"
-            aria-label="top similarity ${sim.toFixed(2)} out of 1">
-            <span class="eval-meter-fill" style="width:${pct.toFixed(1)}%"></span>${tick}
-          </span><span class="eval-meter-val">${sim.toFixed(2)}</span>`;
-      }
-      // Beat 4 of the loop lives here rather than in an empty state, because by
-      // the time it is reachable there is no empty state left on screen: the
-      // readout only exists under an answer. The nudge disappears for good the
-      // first time the detail is opened.
-      const nudge = currentBeat() === 4
-        ? `<span class="eval-nudge">what is this?</span>`
-        : "";
-      summary.innerHTML = `<span class="eval-dot" data-state="${state}" aria-hidden="true"></span>
-        <span class="eval-state">${escapeHtml(word)}</span>${meter}${nudge}
-        <span class="eval-caret" aria-hidden="true">›</span>`;
-
-      const detail = document.createElement("div");
-      detail.className = "eval-detail hidden";
-      for (const [label, value, gloss] of rows) {
-        const row = document.createElement("div");
-        row.className = "eval-row";
-        const vClass = value === "✓" ? "pass" : value === "FAIL" ? "fail" : "";
-        // Two of these labels are the app's central jargon. Definitions reach a
-        // touch user here; a `title` attribute would not.
-        const term = EVAL_LABEL_TERMS[label];
-        const labelHtml = term ? termHtml(term, label) : label;
-        row.innerHTML = `<span class="eval-label">${labelHtml}</span>` +
-          `<span class="eval-value ${vClass}">${escapeHtml(String(value))}</span>` +
-          `<span class="eval-gloss">${escapeHtml(gloss)}</span>`;
-        detail.appendChild(row);
-      }
-      summary.onclick = () => {
-        const open = detail.classList.toggle("hidden");
-        summary.setAttribute("aria-expanded", String(!open));
-        markBeat("readout");                       // beat 4 — the loop is complete
-        summary.querySelector(".eval-nudge")?.remove();
-      };
-      wrap.appendChild(summary);
-      wrap.appendChild(detail);
-      return wrap;
-    }
+    chip.onclick = () => {
+      showAnswerOnScorecard(evalData, chip);
+      markBeat("readout");                       // beat 4 — the loop is complete
+      chip.querySelector(".eval-nudge")?.remove();
+    };
+    wrap.appendChild(chip);
+    return wrap;
   }
-  // Fallback: show the terse line as-is (legacy messages before eval_data existed).
+  // Fallback: the terse line as-is, for messages stored before eval data existed.
   if (evalLine) {
     const row = document.createElement("div");
     row.className = "eval-row";
@@ -1999,6 +1939,23 @@ function buildEvalBlock(evalData, evalLine) {
     wrap.appendChild(row);
   }
   return wrap;
+}
+
+// Put one answer's readings on the benchmark bars and mark which chip they came
+// from, so the pane is never ambiguous about whose numbers are on screen.
+function showAnswerOnScorecard(evalData, chip) {
+  state.answerEval = evalData;
+  // Exactly one chip is marked, so it is never ambiguous which answer the bars
+  // belong to once a conversation has several.
+  for (const c of document.querySelectorAll(".eval-chip.is-shown")) {
+    c.classList.remove("is-shown");
+  }
+  chip?.classList.add("is-shown");
+  const data = state.evalData;
+  if (data) renderScorecard(data.metrics || {}, data.mode);
+  // On a phone the panes are tabs, so the bars this just updated are on a
+  // screen the reader cannot see. Bring them to it.
+  if (MOBILE.matches) setMobileTab("eval");
 }
 
 function appendMessage(role, content, citations = [], isPending = false, evalLine = "", evalData = null) {
@@ -2052,7 +2009,17 @@ $("ask-form").onsubmit = async (e) => {
       body: JSON.stringify({ question, deep_search: state.deepSearch }),
     });
     pending.remove();
-    appendMessage("assistant", result.answer, result.citations, false, result.eval_line || "", result.eval || null);
+    const msg = appendMessage(
+      "assistant", result.answer, result.citations, false,
+      result.eval_line || "", result.eval || null,
+    );
+    // The newest answer takes the bars without being asked. Watching them move
+    // as each answer lands is the comparison; making the reader click first
+    // would leave the pane describing an answer they have scrolled past.
+    //
+    // The chip comes from the element just appended rather than a :last-child
+    // lookup, which would break the moment anything else is appended after it.
+    if (result.eval) showAnswerOnScorecard(result.eval, msg?.querySelector(".eval-chip"));
     markBeat("asked");                             // beat 2 — an answer exists
     chatStatusOverride.delete(state.currentChatId); // answered -> green dot
     // keep the chat list titles/statuses in sync
@@ -2151,86 +2118,114 @@ function fmtPct(v) {
   return `${Math.round(v * 100)}%`;
 }
 
-// What a bar is measured against, and what red therefore means.
+// Which per-answer reading belongs on which benchmark bar.
 //
-// Preference order is baseline, then the shipped target. A baseline is what
-// this pipeline scored on a known-good run (eval/baseline.json, the same file
-// the CI gate reads), so falling below it means "worse than we were" — a fact
-// you can act on. The targets are aspirations nothing has met, so a bar
-// measured against one is red on the first run and stays red forever, and a
-// panel that is always failing says nothing on the day it fails for a reason.
+// The Evaluation pane used to show benchmark averages, and every answer
+// repeated its own scores underneath itself, and the two never met — so a
+// reader had two sets of numbers and no way to relate them. They now share one
+// axis: the benchmark is the reference tick, the answer just given is the bar.
 //
-// The mode check is not a formality. A baseline measured pre-rerank against a
-// full run is two different retrievals reported as one number — the exact
-// mistake the harness made for months (see eval/run_eval.py, c002445). When the
-// modes disagree the row falls back to its target and SAYS "target", rather
-// than showing a comparison that is not one.
-function scoreReference(key, runMode) {
-  const b = state.evalBaseline;
-  const t = EVAL_TARGETS[key];
-  const baseVal = b && b.mode === runMode ? b.metrics?.[key] : null;
-  if (baseVal != null) {
-    return {
-      value: baseVal,
-      kind: "baseline",
-      // Tolerance, not equality: the cosine metrics move a little with
-      // embedding jitter, and a bar that goes red on 0.4% noise trains people
-      // to ignore it.
-      meets: (v) => v >= baseVal - (b.tolerance ?? 0.05),
-      note: `baseline ${Math.round(baseVal * 100)}%`,
-    };
-  }
-  return {
-    value: t.target,
-    kind: "target",
-    meets: (v) => v >= t.target,
-    note: `target ${Math.round(t.target * 100)}%`,
-  };
+// Only three of the readings have an honest counterpart. `latency` has none —
+// it is a speed, not a quality — so it is reported on its own rather than
+// drawn against a bar it has no relationship with. Inventing a fourth pairing
+// to make the layout tidy would be the dishonest option.
+const LIVE_TO_BENCHMARK = {
+  top_sim: "context_recall",
+  faithful: "faithfulness",
+  relevant: "answer_relevancy",
+};
+
+// What the per-answer field means on a 0-1 axis. The judges answer yes/no for
+// one answer while the benchmark reports a RATE across 53 questions, so the two
+// are not the same statistic and the row says so in words: "this answer" vs
+// "benchmark". Drawing a single pass at 100% against a 94% rate is only
+// misleading if the labels pretend they are the same measurement.
+function liveValue(evalData, field) {
+  if (!evalData) return null;
+  const raw = evalData[field];
+  if (raw == null) return null;
+  if (field === "top_sim") return Math.max(0, Math.min(1, raw));
+  return raw ? 1 : 0;
+}
+
+function liveLabel(evalData, field) {
+  const raw = evalData?.[field];
+  if (raw == null) return null;
+  if (field === "top_sim") return raw.toFixed(2);
+  return raw ? "passed" : "failed";
 }
 
 function renderScorecard(metrics, runMode) {
   const el = $("eval-scorecard");
   el.innerHTML = "";
-  const keys = Object.keys(EVAL_TARGETS);
+  const live = state.answerEval;
   let shown = 0;
-  let anyBaseline = false;
-  for (const k of keys) {
-    const t = EVAL_TARGETS[k];
-    const v = metrics[k];
-    if (v == null) continue;
+  let anyLive = false;
+
+  for (const [key, t] of Object.entries(EVAL_TARGETS)) {
+    const bench = metrics ? metrics[key] : null;
+    if (bench == null) continue;
     shown++;
-    const ref = scoreReference(k, runMode);
-    if (ref.kind === "baseline") anyBaseline = true;
-    const pct = Math.round(v * 100);
-    const refPct = Math.round(ref.value * 100);
-    const meets = ref.meets(v);
+
+    const field = Object.keys(LIVE_TO_BENCHMARK).find(
+      (f) => LIVE_TO_BENCHMARK[f] === key,
+    );
+    const v = field ? liveValue(live, field) : null;
+    const hasLive = v != null;
+    if (hasLive) anyLive = true;
+
+    const benchPct = Math.round(bench * 100);
+    const livePct = hasLive ? Math.round(v * 100) : 0;
+    // Below the benchmark is not a failure — one answer against an average of
+    // 53 is a comparison, not a verdict — so the bar is the accent when there
+    // is a live reading and muted when it is only showing the benchmark.
+    const below = hasLive && v < bench;
+
     const row = document.createElement("div");
-    row.className = "score-row";
+    row.className = "score-row" + (hasLive ? " has-live" : "");
     row.innerHTML = `
       <div class="score-head">
         <span class="score-name">${t.label}<span class="score-sub">${t.sub}</span></span>
-        <span class="score-val ${meets ? "pass" : "fail"}">${pct}%</span>
+        <span class="score-val ${hasLive ? (below ? "under" : "over") : "quiet"}">${
+          hasLive ? escapeHtml(liveLabel(live, field)) : `${benchPct}%`
+        }</span>
       </div>
       <div class="score-bar">
-        <div class="score-fill ${meets ? "pass" : "fail"}" style="width:${Math.min(100, pct)}%"></div>
-        <div class="score-target" style="left:${Math.min(100, refPct)}%" title="${escapeHtml(ref.note)}"></div>
+        <div class="score-fill ${hasLive ? "live" : "bench"}"
+             style="width:${Math.min(100, hasLive ? livePct : benchPct)}%"></div>
+        <div class="score-target" style="left:${Math.min(100, benchPct)}%"
+             title="benchmark ${benchPct}%"></div>
       </div>
-      <div class="score-foot">${escapeHtml(ref.note)}</div>`;
+      <div class="score-foot">${
+        hasLive
+          ? `this answer ${livePct}% · benchmark ${benchPct}%`
+          : `benchmark ${benchPct}%`
+      }</div>`;
     el.appendChild(row);
   }
+
   if (!shown) {
-    el.innerHTML = emptyState("◔", "", "No generation metrics in this run yet.");
+    el.innerHTML = emptyState("◔", "", "No benchmark metrics available.");
     return;
   }
-  // Say which of the two things "red" means here, once, rather than leaving the
-  // reader to infer it from the word under each bar.
+
+  // Latency has no bar because it has no counterpart in the benchmark. Given a
+  // row of its own rather than squeezed onto an axis it does not belong on.
+  if (live && live.latency_ms != null) {
+    const t = document.createElement("div");
+    t.className = "score-aside";
+    t.innerHTML = `<span>Answered in</span><strong>${(live.latency_ms / 1000).toFixed(1)}s</strong>`;
+    el.appendChild(t);
+  }
+
   const legend = document.createElement("p");
   legend.className = "score-legend";
-  legend.textContent = anyBaseline
-    ? "Red means below the last known-good run — a regression, not a missed ambition."
-    : "No comparable baseline for this run, so bars are measured against the shipped targets.";
+  legend.textContent = anyLive
+    ? "Bars show the answer just given. The tick is the benchmark across the sample corpus — a reference, not a pass mark."
+    : "Benchmark across the sample corpus. Ask a question and these bars show that answer against it.";
   el.appendChild(legend);
 }
+
 
 function renderEvalQuestions(results) {
   const el = $("eval-questions");
@@ -2295,17 +2290,8 @@ function renderEval(data) {
   // read as unrelated.
   state.evalData = data;
   const statusEl = $("eval-status");
-  const runBtn = $("eval-run-btn");
-  // Running the benchmark needs an account — it spends real model calls
-  // against a shared quota. Showing the RESULTS does not, and the pane used to
-  // conflate the two: a guest got a sign-in prompt where the numbers go, which
-  // hid the app's whole evidence for its own claims behind a login.
-  const canRun = data ? data.can_run !== false : true;
-  runBtn.disabled = !canRun;
-  runBtn.classList.toggle("guest-locked", !canRun);
   if (!data || data.status === "none") {
     statusEl.textContent = "";
-    runBtn.disabled = !canRun;
     // The pane used to say only "no run yet", which explained neither what a
     // benchmark is, how long it takes, nor that it spends real model calls —
     // a button with unstated cost behind it (plan §5).
@@ -2319,7 +2305,6 @@ function renderEval(data) {
       `<p class="glossary-strip">${termHtml("golden-set")} · ${termHtml("faithfulness")} · ${termHtml("relevancy")}</p>`
     );
     $("eval-questions").innerHTML = "";
-    runBtn.disabled = false;
     return;
   }
   if (data.status === "running") {
@@ -2331,7 +2316,6 @@ function renderEval(data) {
     } else {
       statusEl.textContent = `Scoring golden questions… ${data.completed}/${data.total}`;
     }
-    runBtn.disabled = true;
     // Partial results stream in as slices complete.
     renderScorecard(data.metrics || {}, data.mode);
     renderEvalQuestions(data.results || []);
@@ -2339,18 +2323,15 @@ function renderEval(data) {
   }
   if (data.status === "error") {
     statusEl.textContent = "Benchmark failed: " + (data.error || "unknown error");
-    runBtn.disabled = false;
     renderScorecard(data.metrics || {}, data.mode);
     renderEvalQuestions(data.results || []);
     return;
   }
   if (data.status === "cancelled") {
     statusEl.textContent = "Benchmark cancelled.";
-    runBtn.disabled = false;
     return;
   }
   // done
-  runBtn.disabled = !canRun;
   const ts = data.timestamp ? ` · ${data.timestamp}` : "";
   const ungraded = (data.metrics || {}).n_ungraded;
   // Whose numbers these are is the first thing a reader needs. Presenting a
@@ -2418,39 +2399,16 @@ async function driveEvalRun() {
       if (!state.evalRunning) break; // cancelled by a new run starting
     }
   } catch (e) {
-    // Reopening the Evaluation tab resumes: loadEval() sees a run still marked
-    // "running" and restarts the driver from the last committed slice. The Run
-    // button deliberately does NOT resume — it supersedes the row and starts a
-    // fresh run — so don't point the user at it here.
+    // A run can still be driven to completion when one exists — started from
+    // the CLI or the API — but nothing in the UI starts one any more, so there
+    // is no button to re-enable here.
     $("eval-status").textContent =
       "Benchmark paused: " + e.message +
       " — progress is saved; reopen the Evaluation tab to resume.";
-    $("eval-run-btn").disabled = false;
   } finally {
     state.evalRunning = false;
   }
 }
-
-$("eval-run-btn").onclick = async () => {
-  // Guests still SEE the last run's scorecard — it is the most portfolio-legible
-  // thing in the app — they just cannot spend 46 scored questions triggering a
-  // new one.
-  if (guestBlocked("eval-run-btn")) return;
-  try {
-    $("eval-run-btn").disabled = true;
-    $("eval-status").textContent = "Starting benchmark…";
-    state.evalRunning = false; // supersede any in-flight loop
-    const r = await api("/api/eval/run", {
-      method: "POST",
-      body: JSON.stringify({ retrieval_only: false }),
-    });
-    renderEval(r);
-    await driveEvalRun();
-  } catch (e) {
-    toast("Benchmark failed: " + e.message, true);
-    $("eval-run-btn").disabled = false;
-  }
-};
 
 // ---------- collapsible panes (tablet / mobile) ----------
 
@@ -2772,7 +2730,6 @@ function paletteCommands() {
     { group: "Action", label: "Toggle theme (dark / light)", run: clickThrough("theme-toggle") },
     { group: "Action", label: "Toggle deep search (word-for-word scan)", run: clickThrough("deep-toggle") },
     { group: "Action", label: "Re-index all sources", run: clickThrough("reindex-btn"), lock: "reindex-btn" },
-    { group: "Action", label: "Run benchmark", run: clickThrough("eval-run-btn"), lock: "eval-run-btn" },
     // No `lock`: this one is NOT in GUEST_LOCKED and the endpoint answers 200
     // for a guest (tests/test_guest_permissions.py). It carried lock:
     // "prune-btn" and so advertised "needs an account" for something a guest

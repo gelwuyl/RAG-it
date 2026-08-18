@@ -261,7 +261,10 @@ def create_guest(db: Session, *, reap: bool = True) -> User:
     )
     db.add(guest)
     db.commit()
-    db.refresh(guest)
+    # No db.refresh(). SessionLocal sets expire_on_commit=False, so every
+    # attribute set above is still readable after the commit, and the id was
+    # assigned on flush — refresh was a SELECT that re-fetched values already in
+    # hand. One round trip is worth removing from the request a visitor waits on.
     return guest
 
 
