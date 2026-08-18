@@ -111,32 +111,99 @@ def render(result: dict) -> str:
     return "\n".join(lines)
 
 
-def build(limit: int | None = None) -> Path:
-    """Run the free retrieval-only benchmark and write baseline.json."""
-    from eval.run_eval import run_benchmark
-
-    report = run_benchmark(limit=limit, retrieval_only=True)
-    cfg = report["config"]
-    blob = {
+def _blob_from_report(report: dict) -> dict:
+    cfg = report.get("config", {})
+    metrics = report.get("metrics", {})
+    return {
         "generated": time.strftime("%Y-%m-%d %H:%M:%S"),
         # Everything that legitimately moves the numbers. A baseline compared
         # across a different fingerprint or a different golden set is comparing
         # two different questions, so record enough to notice.
+        #
+        # `mode` is load-bearing, not documentation: a pre-rerank run and a full
+        # run measure different lists (eval/run_eval.py says so where it is set),
+        # so anything reading this file must check the mode matches before
+        # calling a difference a regression.
         "mode": report.get("mode"),
         "fingerprint": cfg.get("fingerprint"),
         "embedding_model": cfg.get("embedding_model"),
         "top_k": cfg.get("top_k"),
         "candidate_k": cfg.get("candidate_k"),
         "reranker": cfg.get("reranker"),
-        "n_questions": report["metrics"].get("n_answerable"),
+        "n_questions": metrics.get("n_answerable"),
         "tolerance": TOLERANCE,
-        "metrics": {k: report["metrics"].get(k) for k in GATED_METRICS},
+        # Which of the metrics below CI actually fails on. The rest are recorded
+        # for the scorecard, which shows the RAGAS-comparable cosine numbers and
+        # needs something truthful to draw its marker at — it used to draw an
+        # aspiration nothing had ever met, so every bar was red and the panel
+        # said nothing on the day a bar went red for a real reason.
+        "gated": list(GATED_METRICS),
+        # Every metric the run produced, not just the gated four. n_* counts are
+        # excluded: they are run shape, not scores, and a "baseline" marker on
+        # "53 questions" would be meaningless.
+        "metrics": {
+            k: v for k, v in metrics.items()
+            if isinstance(v, (int, float)) and not k.startswith("n_")
+        },
     }
+
+
+def build(limit: int | None = None, from_run: str | Path | None = None) -> Path:
+    """Write baseline.json from a retrieval-only benchmark.
+
+    `from_run` reuses a run that already completed (a run directory, or
+    "latest") instead of scoring everything again. The measurement is identical
+    — same corpus, same golden set, same config — and re-running it costs a full
+    pass of embedding calls to arrive at numbers already sitting on disk.
+    """
+    if from_run:
+        run_dir = _resolve_run(from_run)
+        report = json.loads((run_dir / "report.json").read_text(encoding="utf-8"))
+        print(f"baseline from existing run: {run_dir.name}  (mode={report.get('mode')})")
+        if report.get("mode") != "retrieval-pre-rerank":
+            raise SystemExit(
+                f"refusing: that run is mode={report.get('mode')!r}. The baseline "
+                "is the pre-rerank retrieval measurement, because that is what CI "
+                "can afford to reproduce on every push."
+            )
+    else:
+        from eval.run_eval import run_benchmark
+
+        report = run_benchmark(limit=limit, retrieval_only=True)
+
+    blob = _blob_from_report(report)
     BASELINE_FILE.write_text(json.dumps(blob, indent=2) + "\n", encoding="utf-8")
     print(f"\nwrote {BASELINE_FILE}")
     print(json.dumps(blob, indent=2))
     return BASELINE_FILE
 
 
+def _resolve_run(which: str | Path) -> Path:
+    runs = Path(__file__).resolve().parent / "runs"
+    if str(which) == "latest":
+        dirs = sorted(d for d in runs.iterdir() if (d / "report.json").exists())
+        if not dirs:
+            raise SystemExit(f"no completed runs under {runs}")
+        return dirs[-1]
+    p = Path(which)
+    if not p.is_absolute():
+        p = runs / which
+    if not (p / "report.json").exists():
+        raise SystemExit(f"no report.json in {p}")
+    return p
+
+
 if __name__ == "__main__":
-    build()
+    import argparse
+
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--limit", type=int, default=None)
+    ap.add_argument(
+        "--from-run",
+        default=None,
+        metavar="DIR|latest",
+        help="write the baseline from a run that already completed, instead of "
+             "scoring the golden set again",
+    )
+    a = ap.parse_args()
+    build(limit=a.limit, from_run=a.from_run)

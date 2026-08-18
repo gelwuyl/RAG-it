@@ -17,7 +17,13 @@ CHECK = "transaction_checklist.txt"
 PORT = "launch_portfolio.txt"
 BLUE = "outreach_blueprint.txt"
 SOPH = "on_Sophia_pptx.txt"
-ALL_DOCS = (METHOD, PATH_, MEDIA, CALL, CHECK, PORT, BLUE, SOPH)
+COMM = "commercial_checklist.txt"
+# Documents a golden passage may legitimately come from. Every OTHER file in
+# eval/corpus is a distractor, and the validator below now proves no golden
+# passage is quotable from one — a passage present in two documents makes the
+# exact metrics ambiguous, and the metric would score a correct retrieval as a
+# miss depending on which copy came back.
+ALL_DOCS = (METHOD, PATH_, MEDIA, CALL, CHECK, PORT, BLUE, SOPH, COMM)
 
 
 def q(question, expected, passages, doc, needs=("single_passage",),
@@ -57,7 +63,7 @@ R += [
       ["平均年成交目标: 全职 >18 单，兼职 >6 单。",
        "Annual transaction targets: more than 18 cases per year for full-timers, more"],
       METHOD),
-    q("What is the target average commission per case, and what happens if an agent falls below it?",
+    q("What average commission per case does the Havenmark Method set for residential agents, and what happens to one who falls below it?",
       "Not less than S$9,800. An agent hitting the case count while below it has their pipeline reviewed rather than praised.",
       ["3.3 单均佣金目标不低于 S$9,800。",
        "Target average commission per case: not less than S$9,800."],
@@ -269,7 +275,7 @@ R += [
 
 # ---- multi-document ----
 R += [
-    q("Which two documents both mention Kestrel Bay, and do their psf figures agree?",
+    q("Two documents give a psf figure for Kestrel Bay. Which are they, and do the figures agree?",
       "The launch portfolio lists Kestrel Bay at S$2,380 to S$2,520 psf and the July Market Call gives a starting psf of S$2,380. They agree at the lower bound.",
       ["Kestrel Bay | D15 | 99-year leasehold | 336 | Q4 2027 | S$2,380 - S$2,520",
        "Kestrel Bay is POM 2. Preview opens 19 July 2026, with starting psf of"],
@@ -310,9 +316,11 @@ R += [
       "One Sophia offers a right entry price of $2846 psf up, with high rental of $10 psf in 2029 equalling a 4.2% rental yield.",
       ["Right Entry Price (safe entry $2846psf up)", "High Rental ($10psf in 2029 = 4.2% RY)"],
       SOPH),
-    q("What is the exact commission rate Havenmark agents charge for a One Sophia commercial sale?",
-      "The briefing shows a buyer-side commission of 2.5% for one specific closed deal, but the documents do not state a standard commission rate for commercial sales generally.",
-      ["Comm : 2.5%"], SOPH, type_=["negation"]),
+    q("The One Sophia briefing shows a commission of 2.5%. Is that Havenmark's standard rate for a commercial sale?",
+      "No. 2.5% is what was recorded on that one closed deal. The standard commercial sale rate is 1.5% where the vendor is represented and 1% where the purchaser is.",
+      ["Comm : 2.5%",
+       "Commercial sale, vendor represented | Vendor | 1.5% of transacted price | Payable on completion"],
+      SOPH, needs=["multi_doc"], type_=["negation"]),
 ]
 
 # ---- genuinely unanswerable ----
@@ -338,24 +346,45 @@ def text_of(doc):
     return cache[doc]
 
 
-bad = []
+DISTRACTORS = sorted(f.name for f in CORPUS.iterdir() if f.name not in ALL_DOCS)
+
+missing = []    # passage in NO source document — the metric measures nothing
+leaked = []     # passage ALSO in a distractor — the metric becomes ambiguous
 for r in R:
     if r["unanswerable"]:
         continue
     for p in r["golden_passages"]:
         # A multi_doc passage legitimately lives in the partner document, so a
-        # hit anywhere in the corpus counts. What must never pass is a passage
+        # hit anywhere in ALL_DOCS counts. What must never pass is a passage
         # that exists in NO document.
-        if any(p in text_of(d) for d in ALL_DOCS):
+        if not any(p in text_of(d) for d in ALL_DOCS):
+            missing.append((r["question"][:58], p[:72]))
             continue
-        bad.append((r["question"][:58], p[:72]))
+        # And it must be quotable from the source documents ONLY. A distractor
+        # that restates a golden sentence gives the corpus two right answers,
+        # and exact_context_recall then scores the same retrieval as a hit or a
+        # miss depending on which copy came back — which is not a measurement.
+        for d in DISTRACTORS:
+            if p in text_of(d):
+                leaked.append((r["question"][:58], p[:56], d))
 
 n_ans = sum(1 for r in R if not r["unanswerable"])
 print(f"entries: {len(R)}  answerable: {n_ans}  unanswerable: {len(R) - n_ans}")
-if bad:
-    print(f"\n!! {len(bad)} PASSAGE(S) NOT FOUND VERBATIM:")
-    for qq, p in bad:
-        print(f"   Q={qq}\n     passage={p!r}")
+print(f"source documents: {len(ALL_DOCS)}   distractors: {len(DISTRACTORS)}")
+if missing:
+    print()
+    print(f"!! {len(missing)} PASSAGE(S) NOT FOUND VERBATIM:")
+    for qq, txt in missing:
+        print(f"   Q={qq}")
+        print(f"     passage={txt!r}")
+if leaked:
+    print()
+    print(f"!! {len(leaked)} PASSAGE(S) ALSO PRESENT IN A DISTRACTOR:")
+    for qq, txt, d in leaked:
+        print(f"   Q={qq}")
+        print(f"     passage={txt!r}")
+        print(f"     also in={d}")
+if missing or leaked:
     raise SystemExit(1)
 
 out = Path("eval/golden_set.jsonl")

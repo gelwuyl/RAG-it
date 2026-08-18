@@ -1,0 +1,78 @@
+Havenmark Practice Committee — Charter 实务委员会章程
+
+This charter governs how the Committee is composed and how it works. What
+counts as a finding, and how findings are graded, is set out in the Pathway; the
+Committee applies those grades rather than defining them here.
+本章程只规定委员会的组成与程序，违规分级以进阶体系文件为准。
+
+1. COMPOSITION 组成
+
+1.1 The Committee has five members: two team leaders, one Keystone agent, the
+practice administrator, and one member from outside the transacting desks.
+
+1.2 The outside member exists so that at least one person in the room carries no
+transaction volume of their own. A committee made only of producers will
+eventually find in favour of production.
+委员会必须有一名不承担成交指标的成员。
+
+1.3 Members serve two years. Terms are staggered so that no more than two seats
+change in the same year.
+
+2. QUORUM AND DECISION 法定人数与决议
+
+2.1 Quorum is three members, one of whom must be the outside member.
+
+2.2 Decisions are by simple majority. A tie stands as no finding, because the
+Committee should not record against an agent on a split room.
+
+2.3 The decision is final internally and is recorded in the case file with its
+date, the members present, and the reasoning in no more than five lines.
+决议记入案卷，注明日期、出席人员与理由。
+
+3. RECUSAL 回避
+
+3.1 A member recuses from any matter involving their own team, their own case,
+or an agent they mentored through Ground.
+
+3.2 Recusal is recorded. An unrecorded recusal looks identical to an absence,
+and the two mean very different things when the file is read two years later.
+
+3.3 If recusals take the room below quorum, the matter is heard by the remaining
+members plus a substitute drawn from a Keystone agent on another desk.
+
+4. TIMING 时限
+
+4.1 A matter referred to the Committee is acknowledged the same working day.
+
+4.2 Where a case has been suspended, the Committee convenes on the timeline the
+Pathway sets for that grade of finding. Where nothing is suspended, the
+Committee hears the matter at its next scheduled sitting, which is monthly.
+
+4.3 An agent may respond in writing before the sitting, and is told the date at
+least two working days beforehand.
+顾问有权在会前提交书面说明。
+
+5. APPEAL 申诉
+
+5.1 An agent may appeal a finding once, within 10 working days, and only on one
+of two grounds: that a material fact was not before the Committee, or that a
+member who should have recused did not.
+
+5.2 Disagreeing with the conclusion is not a ground of appeal. If it were, every
+finding would be appealed and the process would stop meaning anything.
+对结论不满不构成申诉理由。
+
+5.3 An appeal is heard by three members who did not sit on the original matter.
+
+6. PUBLICATION 公布
+
+6.1 Findings are published internally, anonymised, once a quarter. The casebook
+is written from these.
+
+6.2 Names are not published internally or externally. The purpose is that the
+next agent recognises the situation, not that this agent is recognised.
+案例集不具名，目的在于让他人认出情境，而非认出当事人。
+
+6.3 A pattern of the same finding across three or more agents is reported to the
+partners as a system problem, not as three individual problems. Where a rule is
+broken the same way repeatedly, the rule or the training is usually the fault.

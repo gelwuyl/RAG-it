@@ -1,0 +1,88 @@
+Havenmark Client Data Policy 客户资料政策
+
+This is the policy the outreach blueprint defers to on client data handling. It
+covers consent, storage, sharing and disposal of personal data. It does not
+cover the case file, whose contents and retention period are set by the Pathway.
+本政策不涉及案卷内容与保存期限，另见进阶体系文件。
+
+1. WHAT WE COLLECT 收集范围
+
+1.1 Collect what the transaction needs and nothing else. A grading sheet needs a
+budget, a timeline and a decision maker. It does not need an employer, a salary
+figure or a marital status, and an agent who records them has created an
+obligation without creating any value.
+只收集交易所需资料。
+
+1.2 Financial documents are sighted, recorded as sighted with the date, and
+returned. They are not retained by the agent. Where a lender or a lawyer needs
+them, the client sends them to that party directly.
+财务文件只作查验记录，不由顾问留存。
+
+2. CONSENT 同意
+
+2.1 Marketing consent is separate from transaction consent. A client who gives
+us their number to arrange a viewing has not agreed to receive a monthly market
+post, and treating the two as one is the most common complaint we receive.
+看房联络方式不等于营销同意。
+
+2.2 Marketing consent records are retained for 3 years from the date given, or
+until withdrawn, whichever is earlier. The record states what was consented to,
+on what date, and through which channel.
+
+2.3 A withdrawal is actioned within 2 working days, across every list, and is
+confirmed back to the client. Partial withdrawal — off one list, still on
+another — is the failure this clause exists to prevent.
+撤回同意须在2个工作日内在所有名单上执行并回复确认。
+
+3. WHERE DATA MAY LIVE 存放位置
+
+3.1 Client data lives in the case system. That is the record.
+
+3.2 A messaging app may carry a conversation. It may not carry the only copy of
+anything: any figure, date or instruction that matters is entered into the case
+system the same working day.
+聊天记录不得作为唯一记录。
+
+3.3 Personal devices may access the case system. They may not store exports of
+it. A spreadsheet of clients on a personal laptop is the single most common way
+a firm loses control of its data, and it is usually created with good intentions
+during a busy week.
+
+3.4 Client data is never sent to a third party for analysis, enrichment or
+scoring.
+客户资料不得交由第三方分析或评分。
+
+4. SHARING 分享
+
+4.1 Within Havenmark, access follows the case. An agent who is not on the case
+does not open the file.
+
+4.2 Outside Havenmark, data goes only to the parties the transaction requires —
+the lawyer, the lender, the developer's marketing agency — and only the fields
+that party needs.
+
+4.3 A referral partner receives the introduction, not the file.
+
+5. DISPOSAL 处理
+
+5.1 Where a client did not transact and consent has lapsed, their personal data
+is deleted at the next quarterly disposal run. Grading history is retained in
+aggregate form with the identifying fields removed.
+
+5.2 Deletion means deletion, including from exports and from any list built for
+a campaign. A record that survives in a spreadsheet was not deleted.
+删除必须彻底，包括各类导出与名单。
+
+6. WHEN SOMETHING GOES WRONG 事故处理
+
+6.1 A suspected loss or exposure of client data is reported to the practice
+administrator within 24 hours of being noticed, whatever the hour and whatever
+the day.
+
+6.2 Reporting is not a finding. Concealing is. An agent who reports promptly is
+treated as having done the right thing, and the record says so.
+及时上报不构成违规，隐瞒才是。
+
+6.3 The client is told what happened, what data was involved, and what has been
+done about it. They are told by a partner, not by the agent, so that the agent's
+working relationship survives the conversation.
