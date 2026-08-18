@@ -146,7 +146,7 @@
               <div class="trace-box">
                 <span class="trace-id">Stage 03</span>
                 <span class="trace-label">Rerank
-                  <span class="trace-sub">LLM cross-encoder</span></span>
+                  <span class="trace-sub">cross-encoder rescore</span></span>
               </div>
             </div>
             <div class="trace-step is-live">
@@ -229,7 +229,7 @@
           <span class="section-num">02</span>
           <span class="section-name">By the numbers</span>
         </div>
-        <!-- Structural facts, verifiable from the repo: eval/golden.jsonl has 46
+        <!-- Structural facts, verifiable from the repo: eval/golden_set.jsonl has 56
              lines, eval/corpus/ has 10 files, the Neon `chunks` table has one
              fixed vector(768) column, and api/index.py is the only function.
              Deliberately NOT benchmark scores — those need a published run
@@ -237,7 +237,7 @@
         <div class="tiles">
           <div class="tile">
             <span class="tile-id">A1</span>
-            <span class="tile-num">46</span>
+            <span class="tile-num">56</span>
             <span class="tile-label">Golden questions</span>
           </div>
           <div class="tile">
@@ -288,7 +288,7 @@
           </div>
           <div class="card">
             <h3 class="card-title">A benchmark you can run</h3>
-            <p class="card-text">46 golden questions over a 10-document corpus,
+            <p class="card-text">56 golden questions over a 10-document corpus,
               including unanswerable ones — because refusing to answer is a
               behaviour worth measuring too.</p>
           </div>

@@ -1,0 +1,63 @@
+# Sheet: NEW RESIDENTIAL
+Stage | Rental Case Documents | Sales Case Documents
+Before Viewing | - Viewing List (shortlist of units)
+- Landlord unit info (floor plan, key collection form if needed) | - Viewing List (shortlist of units)
+- Seller unit info (floor plan, recent caveats, key collection form if needed)
+Offer Stage | - Letter of Intent (LOI)
+- Good faith deposit receipt (one month rent) | - Option to Purchase (OTP)
+- Option fee receipt (1% of purchase price)
+Acceptance | - Tenancy Agreement (TA), two originals
+- Stamp duty computation sheet | - Exercise of Option, signed within 21 days
+- Sale and Purchase Agreement where applicable
+Completion | - Handover Inventory List, signed by both parties
+- Meter readings, photographed and dated
+- Key handover acknowledgement | - Completion Account from conveyancing lawyer
+- Keys released on confirmation of completion
+- Final caveat lodged
+
+# Sheet: COMMISSION
+Case Type | Payable By | Standard Rate | Notes
+Residential rental, lease 12 months or more | Landlord | Half month rent | Payable on TA signing
+Residential rental, lease under 12 months | Landlord | Pro-rated, minimum S$800 | Approval required below minimum
+Residential sale, seller represented | Seller | 2% of transacted price | Payable on completion
+Residential sale, buyer represented | Buyer | 1% of transacted price | Waived where co-broke applies
+Commercial lease | Landlord | One month rent per year of lease term | Capped at three months
+
+# Sheet: TIMELINE
+Milestone | Rental | Sale
+Offer to acceptance | 3 working days | 21 calendar days (option period)
+Acceptance to completion | 14 to 30 days | 8 to 12 weeks
+Document retention after completion | 7 years | 7 years
+
+# Sheet: DISCLOSURES
+Trigger | Disclosure Required | Timing
+Agent or immediate family has an interest in the unit | Written, to all parties | Before first viewing
+Agent represents both sides | Written, signed by both | Before offer is made
+Known defect affecting habitability | Written, to buyer or tenant | Before offer is made
+Unit has been tenanted within the last 30 days | Verbal, minimum | At first viewing
+Agent receives referral fee from a third party | Written, to the client | Before the referral is made
+
+# Sheet: FINANCING CHECKPOINTS
+Checkpoint | When | Owner | Blocking
+In-principle approval sighted | Before OTP is issued | Buyer agent | Yes
+Loan-to-value confirmed against property type | Before OTP is issued | Buyer agent | Yes
+Cash-over-valuation gap acknowledged in writing | Before exercise | Buyer agent | Yes
+Valuation report received | Before exercise | Conveyancing lawyer | Yes
+CPF usage confirmed where applicable | Before completion | Buyer agent | No
+
+# Sheet: HANDOVER INVENTORY
+Category | Items Checked | Photograph Required
+Structural | Walls, ceiling, flooring, windows | Yes
+Wet areas | Taps, drainage, water heater, seals | Yes
+Fixtures | Built-in wardrobes, kitchen cabinetry, lighting | Yes
+Appliances | Each appliance switched on and confirmed working | Yes
+Keys and access | Unit keys, letterbox, access cards, remote controls | No, count recorded
+Meters | Electricity, water, gas readings | Yes
+
+# Sheet: ESCALATION
+Situation | Escalate To | Within
+Three viewings with no signed document | Team Leader | Same week
+Co-broke split disputed | Practice Committee | 2 working days
+Client requests unverified price be quoted | Team Leader | Immediately
+Critical compliance finding | Practice Committee | 1 working day
+Client complaint received in writing | Practice Committee | 1 working day

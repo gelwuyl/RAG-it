@@ -46,7 +46,7 @@ from eval import judges  # noqa: E402
 
 EVAL_USER = "__eval__"
 CORPUS_DIR = EVAL_DIR / "corpus"
-GOLDEN = EVAL_DIR / "golden.jsonl"
+GOLDEN = EVAL_DIR / "golden_set.jsonl"
 
 
 def corpus_files() -> list[Path]:
@@ -86,7 +86,7 @@ def load_corpus(cfg) -> int:
 
 
 def load_golden(limit: int | None = None) -> list[dict]:
-    """Parse golden.jsonl (optionally truncated to `limit` questions)."""
+    """Parse golden_set.jsonl (optionally truncated to `limit` questions)."""
     items = [
         json.loads(line) for line in GOLDEN.read_text().splitlines() if line.strip()
     ]
