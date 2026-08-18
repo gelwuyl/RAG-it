@@ -245,8 +245,22 @@ def score_item(
     res = ask(EVAL_USER, question, [], cfg)
     entry["answer"] = res["answer"]
     entry["not_found"] = res["not_found"]
-    context_text = "\n\n".join(
-        f"[{j+1}] {c['title']}\n{c['text']}" for j, c in enumerate(chunks[:k])
+    # The context the model was ACTUALLY given, straight from ask().
+    #
+    # This line read `chunks[:k]`, and `chunks` has not existed since the
+    # retrieval refactor — so every full-mode run died here with a NameError,
+    # including the in-app "Run benchmark" button, which reaches this code as
+    # soon as it finishes indexing. Only --retrieval-only was ever exercised,
+    # so nothing caught it.
+    #
+    # Rebuilding from `final` would be a RECONSTRUCTION, and grading an answer
+    # against one is the same error c002445 fixed for the retrieval metrics:
+    # ask() calls rewrite_query, which is a model call, so a second retrieval
+    # can legitimately return a different list than the one behind the answer.
+    # The fallback covers the not-found path, which returns before building a
+    # context at all.
+    context_text = res.get("context") or "\n\n".join(
+        f"[{j+1}] {c['title']}\n{c['text']}" for j, c in enumerate(final[:k])
     )
     if item["unanswerable"]:
         # Correct iff the system refused (did not fabricate).

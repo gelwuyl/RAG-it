@@ -485,3 +485,46 @@ def test_a_failed_hydration_is_retried_rather_than_disabling_fusion():
     # The next attempt, against the real collection, still works.
     _store._hydrate_bm25(col)
     assert _store._BM25_OBJ, "fusion never recovered"
+
+
+def test_ask_returns_the_context_it_used(monkeypatch):
+    """The benchmark's faithfulness judge grades an answer against its sources.
+
+    It used to rebuild them by re-running retrieval, which is a RECONSTRUCTION:
+    ask() calls rewrite_query, a model call, so a second retrieval can return a
+    different list than the one behind the answer. Same class of error as
+    scoring a different list than the model was handed (c002445).
+    """
+    seen = {}
+
+    def _chat(model, messages, temperature):
+        seen["prompt"] = messages[-1]["content"]
+        return "Per [1] that is right."
+
+    _with_stubs(monkeypatch, chat=_chat)
+    res = _pl.ask("user-CTX", "roaster", [], _make_cfg())
+    assert res.get("context"), "ask() did not report the passages it used"
+    assert res["context"] in seen["prompt"], (
+        "the reported context is not what was sent to the model"
+    )
+    assert _POOL[0]["text"] in res["context"]
+
+
+def test_full_mode_scoring_does_not_reference_a_dead_variable():
+    """The NameError that broke every full benchmark run, including the in-app
+    button, lived on a line only full mode reaches — so the retrieval-only runs
+    used everywhere else never touched it."""
+    import inspect
+
+    from eval.run_eval import score_item
+
+    src = inspect.getsource(score_item)
+    after_ask = src.split("res = ask(")[1]
+    # Comments stripped: the fix left a comment explaining the old line, and a
+    # test that matched prose rather than code would fail on its own docs.
+    code = " ".join(
+        ln for ln in after_ask.splitlines() if not ln.strip().startswith("#")
+    )
+    assert "chunks[" not in code, (
+        "full-mode scoring references `chunks`, which does not exist there"
+    )

@@ -642,4 +642,11 @@ def ask(
         "citations": citations,
         "eval_line": _build_eval_line(eval_d, pool, (time.time() - t0) * 1000),
         "eval": eval_d,
+        # The passages this answer was ACTUALLY built from. The benchmark's
+        # faithfulness judge needs them, and reconstructing them by re-running
+        # retrieval is how you end up grading an answer against a different set
+        # of passages than the model saw — the same mistake c002445 fixed for
+        # the retrieval metrics. rewrite_query is a model call, so a second
+        # retrieval is not guaranteed to return the same list.
+        "context": context,
     }
