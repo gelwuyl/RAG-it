@@ -16,11 +16,14 @@ event that is already infrequent.
 """
 from __future__ import annotations
 
+import logging
 import time
 
 from sqlalchemy.orm import Session
 
 from .db import Conversation, Document, FolderSource, Message, User, new_id, now
+
+log = logging.getLogger(__name__)
 
 GUEST_PROVIDER = "guest"
 
@@ -117,6 +120,13 @@ def reap_stale_guests(db: Session, *, limit: int = 20) -> int:
         db.query(User)
         .filter(
             User.provider == GUEST_PROVIDER,
+            # The demo template is a guest-provider row too, and nothing ever
+            # calls touch() on it — it is never signed into — so it looks idle
+            # from the moment it is created and the reaper would destroy it two
+            # hours later, corpus and vectors alike. That silently deletes the
+            # content every visitor is seeded from and bills the next visitor
+            # for a re-embed. It is infrastructure, not a workspace: exempt it.
+            User.sub != DEMO_TEMPLATE_SUB,
             # created_at covers rows written before last_seen_at existed.
             User.last_seen_at.isnot(None),
             User.last_seen_at < cutoff,
@@ -237,37 +247,119 @@ def ensure_demo_template(db: Session, cfg) -> User:
                            size_bytes=len(text.encode("utf-8")))
             db.add(doc)
             db.commit()
-        n = ingest_document_text(template.id, doc.id, doc.title, text, cfg)
+        # One file's embedding failure must not deny the visitor the others. An
+        # unhandled raise here used to propagate out of seed_demo_corpus and
+        # leave the arriving guest with an entirely empty workspace, and it
+        # would do so again on every subsequent visit, because the failed file
+        # is retried first thing each time.
+        try:
+            n = ingest_document_text(template.id, doc.id, doc.title, text, cfg)
+        except Exception:
+            log.exception("demo corpus: embedding %s failed", filename)
+            doc.status = "failed"
+            db.commit()
+            continue
         doc.status = "ready"
         doc.n_chunks = n
         doc.config_fingerprint = fp
+        doc.error = None
         db.commit()
     return template
 
 
 def seed_demo_corpus(db: Session, guest: User) -> int:
-    """Give a new guest their own copy of the demo corpus — no embedding calls."""
+    """Give a new guest their own copy of the demo corpus — no embedding calls.
+
+    Seeding is atomic PER DOCUMENT, and that is the whole point of the shape
+    below. The clone row used to be committed BEFORE its vectors were copied,
+    so anything the copy threw left the guest owning a document with nothing
+    behind it — and aborted the loop, costing them every later file as well.
+    That is the "visitor lands with one of the two demo files, and it answers
+    nothing" bug: the row says ready with n_chunks set, while the vector store
+    holds not a single chunk for it.
+
+    So the row is only FLUSHED, and committed once the vectors are known to
+    have landed. A failure rolls that one document back and moves to the next.
+
+    A copy reporting ZERO chunks is a failure too, not a success. It means the
+    template's vectors were not there to copy — mid re-index, or a reap that
+    ran between the template being read and its chunks being fetched — and
+    committing the row anyway is exactly what produces a document the retriever
+    can never return. Both backends can report it: the Chroma path skips any
+    source collection it finds empty, and the pgvector path returns the INSERT
+    ... SELECT rowcount, which is 0 when the source rows are gone.
+    """
     from .config import load_config
-    from .vectordb import copy_user_chunks
+    from .vectordb import copy_user_chunks, delete_document_chunks
 
     cfg = load_config()
     template = ensure_demo_template(db, cfg)
+
+    # Snapshot the sources up front. SessionLocal sets expire_on_commit=False,
+    # so a commit alone would leave these usable — but a ROLLBACK expires every
+    # instance regardless of that flag, and this loop rolls back on failure.
+    # Iterating live ORM rows would therefore re-SELECT each remaining source
+    # after the first failure, and raise ObjectDeletedError if the template had
+    # been reaped underneath us. Plain tuples keep the loop independent of
+    # session state.
+    #
+    # Only READY documents are cloned: a template file whose embedding failed
+    # has no vectors to copy, and cloning it would hand the guest precisely the
+    # chunkless document this function exists to prevent.
+    sources = [
+        (d.id, d.source_type, d.title, d.content_hash, d.config_fingerprint,
+         d.n_chunks, d.size_bytes)
+        for d in db.query(Document).filter(Document.user_id == template.id).all()
+        if d.status == "ready"
+    ]
+    template_id, guest_id = template.id, guest.id
+
     copied = 0
-    for src in db.query(Document).filter(Document.user_id == template.id).all():
+    for src_id, source_type, title, content_hash, fingerprint, n_chunks, size in sources:
         clone = Document(
-            user_id=guest.id,
-            source_type=src.source_type,
-            title=src.title,
-            content_hash=src.content_hash,
-            config_fingerprint=src.config_fingerprint,
-            status=src.status,
-            n_chunks=src.n_chunks,
-            size_bytes=src.size_bytes,
+            user_id=guest_id,
+            source_type=source_type,
+            title=title,
+            content_hash=content_hash,
+            config_fingerprint=fingerprint,
+            status="ready",
+            n_chunks=n_chunks,
+            size_bytes=size,
             is_demo=True,
         )
         db.add(clone)
-        db.commit()
-        copy_user_chunks(template.id, src.id, guest.id, clone.id)
+        db.flush()  # assigns clone.id without committing the row
+        clone_id = clone.id
+        try:
+            n = copy_user_chunks(template_id, src_id, guest_id, clone_id)
+        except Exception:
+            db.rollback()
+            log.exception(
+                "demo seeding: copying %s to guest %s failed; skipping the row "
+                "rather than seeding a document with no vectors", title, guest_id
+            )
+            continue
+        if n <= 0:
+            db.rollback()
+            log.warning(
+                "demo seeding: %s copied 0 chunks to guest %s (template vectors "
+                "missing?); skipping the row", title, guest_id
+            )
+            continue
+        try:
+            db.commit()
+        except Exception:
+            # The vectors landed but the row did not. Orphan chunks are worse
+            # than none: query_chunks scopes by user and fingerprint, not by
+            # whether a document row still exists, so they would surface in
+            # answers citing a document the visitor does not have.
+            db.rollback()
+            log.exception("demo seeding: committing %s for guest %s failed", title, guest_id)
+            try:
+                delete_document_chunks(guest_id, clone_id)
+            except Exception:
+                log.exception("demo seeding: could not clean up orphan chunks for %s", title)
+            continue
         copied += 1
     return copied
 
