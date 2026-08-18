@@ -13,6 +13,7 @@ const state = {
   models: { chat: [], embedding: [] }, // proxy model catalog for the settings dropdowns
   evalRunning: false, // true while the chunked benchmark loop is driving
   evalData: null,     // last /api/eval payload, so an answer can place itself against the run
+  evalBaseline: null, // eval/baseline.json — what a bar is measured against
   simThreshold: 0,    // live retrieval threshold, marked on the per-answer meter
   // Documents + folders currently in the workspace. Only the COUNT is kept:
   // it is what the empty conversation needs to say something true, and holding
@@ -206,12 +207,6 @@ const GLOSSARY = {
     "When on, web results are appended as labelled [web] chunks — but only when " +
     "your own documents fail to clear the relevance threshold. It never " +
     "overrides a grounded answer, and it is off by default.",
-  ],
-  "prune-ghosts": [
-    "Ghost chunks",
-    "Vectors left in the store with no document behind them, usually after a " +
-    "failed delete. Pruning removes those and nothing else — every chunk that " +
-    "still belongs to one of your sources is kept.",
   ],
   "re-index": [
     "Re-index",
@@ -1026,15 +1021,26 @@ $("web-toggle").onclick = async () => {
   }
 };
 
-// Prune orphaned Neon vector chunks (no matching Document row) + stale fingerprints.
-$("prune-btn").onclick = async () => {
+// Delete vector rows whose document is gone, plus any left under a superseded
+// chunking/embedding config. Reached only from the "/" palette — it had a
+// topbar button, which promised a decision the visitor had no way to make:
+// nothing in the UI tells you whether orphans exist, so the usual outcome was
+// "0 removed" and the usual reading of that was "this button is broken".
+//
+// The wording avoids "prune" and "ghost". Both were glossary terms, which is
+// the tell: a command whose name needs a definition beside it is named wrong.
+async function cleanUpOrphanChunks() {
   try {
     const r = await api("/api/documents/prune", { method: "POST" });
-    toast(`Pruned ${r.removed} orphaned vector chunk(s)`);
+    toast(
+      r.removed
+        ? `Removed ${r.removed} leftover chunk(s) with no source behind them`
+        : "Nothing to clean up — every chunk still belongs to a source",
+    );
   } catch (e) {
     toast(e.message, true);
   }
-};
+}
 
 /* Tuning parameters modal */
 function openSettings() {
@@ -2057,19 +2063,59 @@ function fmtPct(v) {
   return `${Math.round(v * 100)}%`;
 }
 
-function renderScorecard(metrics) {
+// What a bar is measured against, and what red therefore means.
+//
+// Preference order is baseline, then the shipped target. A baseline is what
+// this pipeline scored on a known-good run (eval/baseline.json, the same file
+// the CI gate reads), so falling below it means "worse than we were" — a fact
+// you can act on. The targets are aspirations nothing has met, so a bar
+// measured against one is red on the first run and stays red forever, and a
+// panel that is always failing says nothing on the day it fails for a reason.
+//
+// The mode check is not a formality. A baseline measured pre-rerank against a
+// full run is two different retrievals reported as one number — the exact
+// mistake the harness made for months (see eval/run_eval.py, c002445). When the
+// modes disagree the row falls back to its target and SAYS "target", rather
+// than showing a comparison that is not one.
+function scoreReference(key, runMode) {
+  const b = state.evalBaseline;
+  const t = EVAL_TARGETS[key];
+  const baseVal = b && b.mode === runMode ? b.metrics?.[key] : null;
+  if (baseVal != null) {
+    return {
+      value: baseVal,
+      kind: "baseline",
+      // Tolerance, not equality: the cosine metrics move a little with
+      // embedding jitter, and a bar that goes red on 0.4% noise trains people
+      // to ignore it.
+      meets: (v) => v >= baseVal - (b.tolerance ?? 0.05),
+      note: `baseline ${Math.round(baseVal * 100)}%`,
+    };
+  }
+  return {
+    value: t.target,
+    kind: "target",
+    meets: (v) => v >= t.target,
+    note: `target ${Math.round(t.target * 100)}%`,
+  };
+}
+
+function renderScorecard(metrics, runMode) {
   const el = $("eval-scorecard");
   el.innerHTML = "";
   const keys = Object.keys(EVAL_TARGETS);
   let shown = 0;
+  let anyBaseline = false;
   for (const k of keys) {
     const t = EVAL_TARGETS[k];
     const v = metrics[k];
     if (v == null) continue;
     shown++;
+    const ref = scoreReference(k, runMode);
+    if (ref.kind === "baseline") anyBaseline = true;
     const pct = Math.round(v * 100);
-    const targetPct = Math.round(t.target * 100);
-    const meets = v >= t.target;
+    const refPct = Math.round(ref.value * 100);
+    const meets = ref.meets(v);
     const row = document.createElement("div");
     row.className = "score-row";
     row.innerHTML = `
@@ -2079,14 +2125,23 @@ function renderScorecard(metrics) {
       </div>
       <div class="score-bar">
         <div class="score-fill ${meets ? "pass" : "fail"}" style="width:${Math.min(100, pct)}%"></div>
-        <div class="score-target" style="left:${Math.min(100, targetPct)}%" title="Target ${targetPct}%"></div>
+        <div class="score-target" style="left:${Math.min(100, refPct)}%" title="${escapeHtml(ref.note)}"></div>
       </div>
-      <div class="score-foot">target ${targetPct}%</div>`;
+      <div class="score-foot">${escapeHtml(ref.note)}</div>`;
     el.appendChild(row);
   }
   if (!shown) {
     el.innerHTML = emptyState("◔", "", "No generation metrics in this run yet.");
+    return;
   }
+  // Say which of the two things "red" means here, once, rather than leaving the
+  // reader to infer it from the word under each bar.
+  const legend = document.createElement("p");
+  legend.className = "score-legend";
+  legend.textContent = anyBaseline
+    ? "Red means below the last known-good run — a regression, not a missed ambition."
+    : "No comparable baseline for this run, so bars are measured against the shipped targets.";
+  el.appendChild(legend);
 }
 
 function renderEvalQuestions(results) {
@@ -2122,7 +2177,20 @@ function renderEvalQuestions(results) {
 
 async function loadEval() {
   try {
-    const data = await api("/api/eval");
+    // In parallel, not in sequence. The baseline is a small static file and the
+    // scorecard cannot be drawn correctly without it, but making it a second
+    // round trip after /api/eval would add its whole latency to a boot the
+    // topbar is already waiting on.
+    //
+    // Fetched once and kept: it changes only when someone commits a new
+    // baseline, so re-requesting it on every render would be pure round trips.
+    const [data, base] = await Promise.all([
+      api("/api/eval"),
+      state.evalBaseline
+        ? Promise.resolve({ baseline: state.evalBaseline })
+        : api("/api/eval/baseline").catch(() => ({ baseline: null })),
+    ]);
+    if (base && base.baseline) state.evalBaseline = base.baseline;
     renderEval(data);
     // A run left in flight (tab closed, reload mid-benchmark) resumes from the
     // last committed slice instead of being stranded at "running" forever.
@@ -2149,7 +2217,7 @@ function renderEval(data) {
     $("eval-scorecard").innerHTML = emptyState(
       "◎",
       "Benchmark needs an account",
-      "Sign in with Google to score retrieval and generation against the 46-question golden set. Every answer you ask below is still graded for faithfulness and relevance.",
+      "Sign in with Google to score retrieval and generation against the golden set. Every answer you ask below is still graded for faithfulness and relevance.",
       `<p class="glossary-strip">${termHtml("golden-set")} · ${termHtml("faithfulness")} · ${termHtml("relevancy")}</p>`
     );
     $("eval-questions").innerHTML = "";
@@ -2186,14 +2254,14 @@ function renderEval(data) {
     }
     runBtn.disabled = true;
     // Partial results stream in as slices complete.
-    renderScorecard(data.metrics || {});
+    renderScorecard(data.metrics || {}, data.mode);
     renderEvalQuestions(data.results || []);
     return;
   }
   if (data.status === "error") {
     statusEl.textContent = "Benchmark failed: " + (data.error || "unknown error");
     runBtn.disabled = false;
-    renderScorecard(data.metrics || {});
+    renderScorecard(data.metrics || {}, data.mode);
     renderEvalQuestions(data.results || []);
     return;
   }
@@ -2208,7 +2276,7 @@ function renderEval(data) {
   const ungraded = (data.metrics || {}).n_ungraded;
   statusEl.textContent =
     "Latest benchmark" + ts + (ungraded ? ` · ⚠ ${ungraded} ungraded (judge unavailable)` : "");
-  renderScorecard(data.metrics || {});
+  renderScorecard(data.metrics || {}, data.mode);
   renderEvalQuestions(data.results || []);
 }
 
@@ -2619,7 +2687,11 @@ function paletteCommands() {
     { group: "Action", label: "Toggle web fallback", run: clickThrough("web-toggle"), lock: "web-toggle" },
     { group: "Action", label: "Re-index all sources", run: clickThrough("reindex-btn"), lock: "reindex-btn" },
     { group: "Action", label: "Run benchmark", run: clickThrough("eval-run-btn"), lock: "eval-run-btn" },
-    { group: "Action", label: "Prune ghost chunks", run: clickThrough("prune-btn"), lock: "prune-btn" },
+    // No `lock`: this one is NOT in GUEST_LOCKED and the endpoint answers 200
+    // for a guest (tests/test_guest_permissions.py). It carried lock:
+    // "prune-btn" and so advertised "needs an account" for something a guest
+    // may do — the palette was contradicting the server.
+    { group: "Action", label: "Clean up leftover chunks", run: cleanUpOrphanChunks },
   ];
   for (const c of state.chats) {
     rows.push({

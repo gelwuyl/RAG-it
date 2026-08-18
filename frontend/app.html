@@ -26,7 +26,7 @@
         }
       })();
     </script>
-    <link rel="stylesheet" href="/styles.css?v=29" />
+    <link rel="stylesheet" href="/styles.css?v=31" />
     <script>
       // Boot diagnostics: collect load/runtime errors so a broken app.js
       // shows a visible message instead of a silently dead UI.
@@ -93,11 +93,14 @@
               <button id="web-toggle" class="switch-btn" type="button"
                 aria-label="Toggle web fallback">Off</button>
             </div>
-            <span class="term-pair">
-              <button id="prune-btn" class="btn btn-small" type="button">Prune ghosts</button>
-              <button class="term-mark" type="button" data-term="prune-ghosts"
-                aria-expanded="false" aria-label="What does Prune ghosts do?">?</button>
-            </span>
+            <!-- "Prune ghosts" used to sit here and no longer does. It deletes
+                 vector rows whose document was already removed — real, but only
+                 ever in an abnormal state, and the visitor has no way to tell
+                 whether they are in one, so the honest report was almost always
+                 "0 removed". A permanent button for a maintenance action nobody
+                 can know they need is chrome, and it was spending a topbar slot
+                 next to the identity block, which is the crowded part. It lives
+                 in the "/" palette now, where infrequent commands belong. -->
             <button id="settings-btn" class="btn btn-small" type="button" title="Tuning parameters">⚙ Settings</button>
             <button id="theme-toggle" class="btn btn-small" type="button"
               title="Switch between the dark and light theme" aria-pressed="false">☾</button>
@@ -541,6 +544,6 @@
       </div>
     </div>
 
-    <script type="module" src="/app.js?v=37"></script>
+    <script type="module" src="/app.js?v=39"></script>
   </body>
 </html>

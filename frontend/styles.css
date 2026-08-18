@@ -1042,6 +1042,14 @@ input:disabled, textarea:disabled, select:disabled {
   font-family: var(--font-mono);
   font-size: var(--text-nano); color: var(--faint); letter-spacing: 0.04em;
 }
+/* States once, under the bars, what a red bar means in THIS run — the marker
+   is a baseline for some runs and a target for others, and the difference is
+   the difference between "we got worse" and "we never got there". */
+.score-legend {
+  margin: 4px 0 0; padding-top: 8px;
+  border-top: 1px solid var(--border);
+  font-size: var(--text-nano); line-height: 1.5; color: var(--faint);
+}
 
 .eval-questions { display: flex; flex-direction: column; gap: 8px; }
 .eval-questions:empty { display: none; }
@@ -1520,12 +1528,12 @@ fieldset legend {
 
         ◆ RAG-it       GUEST 0/3 FILES   [G Sign in]
         [Keyword fusion OFF]   [Web fallback OFF]
-        [Prune ghosts ?]  [⚙ Settings]  [☾]
+        [⚙ Settings]  [☾]
 
      A GRID, not a wrapping flex row, and `display: contents` on .topbar-right is
      what makes it work. That wrapper is `flex: 1 1 0` on desktop, so it only ever
      measured the space LEFT OVER beside the brand — 254px of a 375px screen — and
-     its children wrapped inside that. Prune + Settings + theme need 254px exactly,
+     its children wrapped inside that. The action cluster needed 254px exactly,
      which is why the theme toggle kept falling to a row of its own. Dissolving the
      wrapper promotes both clusters to grid items: identity stays up beside the
      brand, and the action row spans the full width it needed all along. */
@@ -1605,10 +1613,12 @@ fieldset legend {
      not a question aimed at a document, and each was spending topbar rows on a
      screen with none to spare.
 
-     Web fallback and Prune ghosts are the same call: deployment-wide config a
-     guest cannot change at all, and a decision no reader makes mid-answer. Both
-     remain on desktop; fusion is simply on everywhere now. */
-  .switch, .term-pair:has(#prune-btn) { display: none; }
+     Web fallback goes for the same reason: deployment-wide config a guest cannot
+     change at all, and a decision no reader makes mid-answer. It remains on
+     desktop; fusion is simply on everywhere now. (Prune ghosts used to be hidden
+     here too. It is not hidden on phones any more — it is gone from the topbar
+     on every width, and lives in the "/" palette.) */
+  .switch { display: none; }
   #eval-run-btn { display: none; }
   .eval-desktop-note { display: block; }
   /* Folder sources need a server-side path — not something typed on a phone. */
@@ -1641,9 +1651,9 @@ fieldset legend {
 
   /* Touch-friendly targets — but sized by ROLE, not uniformly. Ask and Sign in
      are the two things a thumb reaches for and stay large; the topbar's
-     secondary chrome (prune, settings, theme) is tuned down so all three fit one
-     row, which is worth more on a 375px screen than four more pixels of padding
-     on a button pressed once a session. */
+     secondary chrome (settings, theme) is tuned down so it fits on one row, which
+     is worth more on a 375px screen than four more pixels of padding on a button
+     pressed once a session. */
   .btn { padding: 10px 14px; }
   .btn-small { padding: 8px 12px; font-size: 14px; }
   .topbar-actions .btn-small { padding: 6px 10px; font-size: 13px; }
@@ -1664,8 +1674,8 @@ fieldset legend {
 
 @media (max-width: 400px) {
   /* The buttons used to be told to grow (`flex: 1 1 auto`), which turned each of
-     prune / settings / theme into its own full-width band — three rows to say
-     what fits comfortably in one. They keep their natural width now.
+     settings / theme into its own full-width band — a row each to say what fits
+     comfortably in one. They keep their natural width now.
      Google permits the short "Sign in" label beside the G mark, and dropping
      " with Google" is what lets identity stay on the brand's row here instead of
      taking a full row of its own. */
