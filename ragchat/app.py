@@ -1242,6 +1242,37 @@ def list_presets():
     return {"presets": PRESETS, "keys": list(PRESET_KEYS), "index_keys": list(INDEX_KEYS)}
 
 
+def _overridden_keys() -> dict:
+    """Settings the stored row pins, each with the value config.yaml would use.
+
+    Empty dict means the shipped file is live. Anything in here is a value that
+    survives edits to config.yaml until somebody presses "Reset to shipped
+    defaults", which is the trap CLAUDE.md documents twice.
+    """
+    import yaml
+
+    from .db import get_config_override
+
+    row = get_config_override("pipeline")
+    if row is None or not row.value:
+        return {}
+    try:
+        stored = json.loads(row.value)
+        shipped = yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8")) or {}
+    except Exception:
+        return {"_error": "override row present but unreadable"}
+
+    diff = {}
+    for section, values in (stored or {}).items():
+        if not isinstance(values, dict):
+            continue
+        for key, stored_val in values.items():
+            file_val = (shipped.get(section) or {}).get(key)
+            if file_val != stored_val:
+                diff[f"{section}.{key}"] = {"stored": stored_val, "config_yaml": file_val}
+    return diff
+
+
 @app.get("/api/eval/config")
 def eval_config():
     cfg = load_config()
@@ -1853,6 +1884,12 @@ def health():
         "db_error": db_err,
         "data_dir": str(DATA_DIR),
         "env_present": env_present,
+        # Which settings a stored Settings save is pinning, and what the file
+        # would say instead. Without this "why is the deployment not using the
+        # model in config.yaml?" is only answerable by guessing: the override
+        # row fully replaces the file, and effective_config alone cannot tell
+        # you whether a value came from the file or from a save made months ago.
+        "config_overridden": _overridden_keys(),
         "effective_config": cfg_info,
         "judge": judge_info,
         "embedding_models_by_provider": discovery,

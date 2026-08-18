@@ -21,9 +21,9 @@
         }
       })();
     </script>
-    <link rel="stylesheet" href="/landing.css?v=9" />
+    <link rel="stylesheet" href="/landing.css?v=11" />
   </head>
-  <body>
+  <body class="flows">
     <button id="theme-toggle" class="theme-toggle" type="button"
       title="Switch between the dark and light theme" aria-pressed="false">☾</button>
 
@@ -37,9 +37,9 @@
         </a>
         <h1 class="hero-title">How this was built</h1>
         <p class="hero-lede">
-          A retrieval system is easy to demo and hard to trust. What follows is
-          what was measured, what broke once real traffic hit it, and what was
-          left undone on purpose.
+          A search system is easy to demo and hard to trust. Here is what was
+          measured, what broke in front of real people, and what was left
+          undone on purpose.
         </p>
       </div>
     </header>
@@ -53,50 +53,35 @@
         </div>
 
         <p class="pipeline-intro">
-          Every claim on the front page comes from a run you can reproduce:
-          56 questions with known answers, over 27 documents, replayed through
-          the live pipeline. The result ships with the app rather than being
-          re-run by each visitor.
+          56 questions with known answers, replayed through the live pipeline.
+          The hard part was trusting the scoreboard.
         </p>
 
         <div class="cards cards-4">
           <div class="card">
-            <h3 class="card-title">The metric was wrong for months</h3>
-            <p class="card-text">Retrieval is scored by checking whether a
-              retrieved passage contains the known answer. That check used a
-              similarity threshold of 0.6 — and at 0.6 it scored
-              <strong>79.6% of true containments as misses</strong>. The cause
-              was length, not language: a one-line passage against a 500-token
-              chunk scores low even when the sentence sits verbatim inside it.
-              Most of this project's historically poor retrieval numbers were a
-              broken ruler.</p>
+            <h3 class="card-title">The ruler was broken</h3>
+            <p class="card-text">The check for "did we find the right passage?"
+              was calling <strong>four in five correct answers wrong</strong>.
+              Most of the early bad scores were the measurement, not the
+              search.</p>
           </div>
           <div class="card">
-            <h3 class="card-title">Two metrics, because one flatters</h3>
-            <p class="card-text">The similarity-based score has a direction to
-              its error: false positives <em>rise</em> with corpus size, from
-              17.2% at 21 passages to 19.5% at 39. Adding filler documents makes
-              the score go up. So the build gate reads a second, deterministic
-              set — plain string containment, no threshold, no embedding — which
-              moves only when retrieval actually changes.</p>
+            <h3 class="card-title">One score flatters</h3>
+            <p class="card-text">The similarity score creeps upward as the
+              corpus grows — add filler and it improves. So the build gate uses
+              a second score that can't be gamed that way.</p>
           </div>
           <div class="card">
             <h3 class="card-title">The corpus argues back</h3>
-            <p class="card-text">The 27 documents are deliberately confusable:
-              the same firm, the same vocabulary, numbers of the same shape
-              about different things — S$26,000 per commercial case beside
-              S$9,800 per residential one. Expanding it made the scores
-              <em>fall</em>, which was the point. A corpus where every document
-              is about something different tests nothing.</p>
+            <p class="card-text">27 documents about the same firm, in the same
+              words, with different facts. Expanding it made the scores
+              <em>fall</em>. That was the point.</p>
           </div>
           <div class="card">
-            <h3 class="card-title">A grader that fails open</h3>
-            <p class="card-text">A judge that times out is a broken grader, not
-              a failed answer. It reports <code>ungraded</code>, never
-              <code>failed</code> — rendering the second would be a confident
-              false claim about your documents. The published run shows 8
-              ungraded questions on its face rather than quietly dropping them
-              and reporting a better average.</p>
+            <h3 class="card-title">"Don't know" beats a guess</h3>
+            <p class="card-text">When the grader itself fails, the answer is
+              marked ungraded — never failed. Eight questions show that on the
+              published run rather than being quietly dropped.</p>
           </div>
         </div>
       </div>
@@ -110,50 +95,44 @@
           <span class="section-name">What only production taught</span>
         </div>
         <p class="pipeline-intro">
-          Each of these passed every test and still failed in front of a real
-          visitor. The measurements are from the deployed app.
+          Every one of these passed the tests and still failed in front of a
+          real visitor. Numbers are from the live app.
         </p>
 
         <div class="lessons">
-            <div class="trace-note">
-              <span class="trace-key">Sign-in · 8.4s → 0.95s</span>
-              <p>Signing in did three things: created the workspace, copied
-                sample documents into it, and cleaned up after previous
-                visitors. Only the first was asked for. The rest now happens
-                while you read the page.</p>
-            </div>
-            <div class="trace-note">
-              <span class="trace-key">Schema checks · 18 round trips</span>
-              <p>The database schema was verified before <em>every</em> store
-                operation — six network round trips, eight call sites. Its own
-                comment said "once". It wasn't. Now it is.</p>
-            </div>
-            <div class="trace-note">
-              <span class="trace-key">Connection checks · one per request</span>
-              <p>A liveness ping before every connection checkout costs nothing
-                against a local file and a full round trip against a hosted
-                database. Replaced by recycling connections on age.</p>
-            </div>
-            <div class="trace-note">
-              <span class="trace-key">Identity · 1.2s → 30ms</span>
-              <p>The session cookie is HTTP-only, correctly — so the page could
-                not read it and left the corner blank until the server
-                answered. A second cookie carries only "guest" or "account",
-                enough to paint the right control immediately.</p>
-            </div>
-            <div class="trace-note">
-              <span class="trace-key">The benchmark crashed</span>
-              <p>A refactor renamed a variable and left one reference behind, on
-                a line only the full run reaches. Every full benchmark had been
-                dying at that line — found by running it, not by the 211 tests.</p>
-            </div>
-            <div class="trace-note">
-              <span class="trace-key">A feature that made answers worse</span>
-              <p>Deep search sent the model passages the ranked search had
-                already supplied. One question went from a correct answer to
-                "I couldn't find this" with the feature on. Duplicates are now
-                dropped before the model sees them.</p>
-            </div>
+          <div class="trace-note">
+            <span class="trace-key">Sign-in · 8.4s → 0.95s</span>
+            <p>It was building the workspace, copying sample files and tidying
+              up after old visitors. Only the first was asked for.</p>
+          </div>
+          <div class="trace-note">
+            <span class="trace-key">Setup checks · 18 → 0 per sign-in</span>
+            <p>The database layout was re-verified before every single
+              operation. The comment above it claimed it happened once.</p>
+          </div>
+          <div class="trace-note">
+            <span class="trace-key">Are-you-there pings · one per request</span>
+            <p>Free against a local file, a full round trip against a hosted
+              database. Now connections retire on age instead.</p>
+          </div>
+          <div class="trace-note">
+            <span class="trace-key">Sign-in button · 1.2s → 30ms</span>
+            <p>The page couldn't read its own login cookie, so the corner sat
+              empty until the server replied. A second, harmless cookie fixed
+              it.</p>
+          </div>
+          <div class="trace-note">
+            <span class="trace-key">The benchmark never ran</span>
+            <p>A rename left one stale reference on a line only the full run
+              reaches. Every full run had been dying there. 211 tests missed
+              it; running it found it.</p>
+          </div>
+          <div class="trace-note">
+            <span class="trace-key">A feature that hurt</span>
+            <p>Deep search handed the model text the ranked search had already
+              given it. One question went from right to "I couldn't find
+              this".</p>
+          </div>
         </div>
       </div>
     </section>
@@ -166,28 +145,24 @@
           <span class="section-name">Shaped by one constraint</span>
         </div>
         <p class="pipeline-intro">
-          The app is a single serverless function, frozen the instant it sends a
-          response, with sixty seconds to work in. Nearly every structural
-          decision follows from that.
+          One function, frozen the instant it answers, with sixty seconds to
+          work in. Almost every decision above follows from that.
         </p>
         <div class="platform">
           <div>
             <span class="trace-key">No background work</span>
-            <p>A thread started during a request is killed when the response is
-              sent. Long jobs are sliced instead: each request does one bounded
-              piece and commits it, so progress survives being frozen.</p>
+            <p>A background thread dies the moment the answer is sent. Long
+              jobs are sliced: each request does one piece and saves it.</p>
           </div>
           <div>
             <span class="trace-key">Nothing periodic runs inside</span>
-            <p>Guest workspaces expire after 30 minutes, which needs a clock the
-              function does not have. A scheduled job outside calls in every 15
-              minutes behind a shared secret.</p>
+            <p>Guest workspaces expire after 30 minutes — but the app has no
+              clock. Something outside calls in every 15 minutes.</p>
           </div>
           <div>
             <span class="trace-key">Nothing writable on disk</span>
-            <p>The project directory is read-only and any local file vanishes
-              between requests. Every durable byte goes to Postgres — including
-              the document text that word-for-word search reads.</p>
+            <p>Files written during a request are gone by the next one. Every
+              byte that must survive goes to the database.</p>
           </div>
         </div>
       </div>
@@ -203,29 +178,23 @@
         <div class="cards cards-3">
           <div class="card">
             <h3 class="card-title">Cold starts</h3>
-            <p class="card-text">The first visitor after an idle period waits
-              25–30 seconds. Importing the application accounts for 1.25s of
-              that; the rest is the function starting and the database waking.
-              No amount of application code fixes it — it is a hosting plan
-              decision, so the top bar is built to stay honest while it happens
-              rather than pretending otherwise.</p>
+            <p class="card-text">The first visitor after a quiet spell waits
+              25–30 seconds while the server and database wake up. Loading the
+              code is 1.25s of that. The rest is the hosting plan, not the
+              code — so the page is built to stay honest while it waits.</p>
           </div>
           <div class="card">
             <h3 class="card-title">Word-for-word search does nothing here</h3>
-            <p class="card-text">On the sample workspace it is a no-op, and
-              correctly so: with six passages, ordinary search already returns
-              all of them, and there is nothing for an exhaustive scan to
-              rescue. It earns its place on real document sets, which is where
-              it was left.</p>
+            <p class="card-text">With six sample passages, ordinary search
+              already returns all of them — there is nothing left to rescue. It
+              earns its place on real document sets.</p>
           </div>
           <div class="card">
             <h3 class="card-title">Tools the model chooses between</h3>
-            <p class="card-text">The pipeline is fixed today and word-for-word
-              search is a switch <em>you</em> set. The intent is that the model
-              decides per question — was retrieval enough, does this need a
-              literal scan, does it need something outside. The shape is already
-              there: that search is passed as a function, not a flag, so a
-              second and third tool have the same signature.</p>
+            <p class="card-text">Today you flip the switch. The intent is that
+              the model decides per question whether search was enough, and
+              reaches for another tool when it wasn't. The wiring is already
+              shaped for it.</p>
           </div>
         </div>
       </div>

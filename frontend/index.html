@@ -22,7 +22,7 @@
         }
       })();
     </script>
-    <link rel="stylesheet" href="/landing.css?v=9" />
+    <link rel="stylesheet" href="/landing.css?v=11" />
   </head>
   <body>
     <button id="theme-toggle" class="theme-toggle" type="button"
@@ -80,41 +80,29 @@
         <div class="stage-notes">
           <div class="stage-note">
             <span class="stage-key">Rewrite</span>
-            <p>Questions are rarely phrased the way a document is. The query is
-              restated before it is searched — and the model's own reasoning
-              trace is stripped first, or a thousand characters of deliberation
-              become the search term.</p>
+            <p>Nobody phrases a question the way a document phrases the answer.
+              The question is restated before anything is searched.</p>
           </div>
           <div class="stage-note">
             <span class="stage-key">Retrieve</span>
-            <p>Vector search finds meaning; BM25 finds exact strings. Their
-              rankings are fused by reciprocal rank fusion, so an invoice number
-              and a paraphrased policy are both findable — neither one lost to
-              the other's blind spot.</p>
+            <p>Two searches at once — one for meaning, one for exact words — so
+              an invoice number and a paraphrase are both findable.</p>
           </div>
           <div class="stage-note">
             <span class="stage-key">Rerank</span>
-            <p>Retrieval casts a wide net, then a language model re-scores every
-              candidate against the actual question. Embedding distance is a
-              proxy for relevance. This is a judgement.</p>
+            <p>A model reads every candidate and re-orders them against your
+              actual question. Similarity is a guess; this is a judgement.</p>
           </div>
-          <!-- The one that answers a failure the other four share, so it is
-               the one given the accent. Everything else on this page stays
-               quiet around it. -->
           <div class="stage-note is-feature">
             <span class="stage-key">Deep search<span class="stage-tag">grep</span></span>
-            <p>Every retriever <em>ranks</em>, and a passage ranked just outside
-              the cut is invisible to the answer — the model cannot know what it
-              was not shown. Deep search does not rank. It reads every document
-              you own word for word and returns every literal match, so if the
-              words are there they reach the answer.</p>
+            <p>Search <em>ranks</em> — and whatever falls below the cut is
+              invisible to the answer. This doesn't rank. It reads every
+              document word for word, so if the words are there, they're used.</p>
           </div>
           <div class="stage-note">
             <span class="stage-key">Judge</span>
-            <p>Answers are scored for faithfulness and relevancy. A judge that
-              times out is a broken grader, not a bad answer, so it reports
-              <code>ungraded</code> — rendering that as a failure would be a
-              confident false claim about your documents.</p>
+            <p>A second model checks the answer against its own sources. If it
+              can't decide, it says so — it never guesses at a verdict.</p>
           </div>
         </div>
       </div>
@@ -294,44 +282,16 @@
             <span class="tile-label">Serverless function</span>
           </div>
         </div>
-      </div>
-    </section>
 
-    <!-- ============ 03 · how it was built (teaser) ============= -->
-    <section>
-      <div class="wrap">
-        <div class="section-label">
-          <span class="section-num">03</span>
-          <span class="section-name">How it was built</span>
-        </div>
-        <p class="pipeline-intro">
-          Three of the things that only showed up once it was running in front
-          of people. Each was measured, not guessed at.
-        </p>
-        <div class="cards cards-3">
-          <a class="card card-link" href="/built">
-            <h3 class="card-title">The ruler was broken</h3>
-            <p class="card-text">The check deciding whether retrieval found the
-              right passage was scoring 79.6% of correct answers as misses. Most
-              of this project's poor early numbers were a measurement fault, not
-              a retrieval one.</p>
-            <span class="card-more">Read what it cost →</span>
-          </a>
-          <a class="card card-link" href="/built">
-            <h3 class="card-title">Sign-in did 18 round trips</h3>
-            <p class="card-text">The database schema was re-verified before
-              every single operation. Its own comment claimed it happened once.
-              Sign-in went from 8.4 seconds to under one.</p>
-            <span class="card-more">Read what it cost →</span>
-          </a>
-          <a class="card card-link" href="/built">
-            <h3 class="card-title">A feature that hurt</h3>
-            <p class="card-text">Word-for-word search fed the model passages the
-              ranked search had already found. One question went from a correct
-              answer to "I couldn't find this" with the feature switched on.</p>
-            <span class="card-more">Read what it cost →</span>
-          </a>
-        </div>
+        <!-- The way through to the build write-up. It was a section of three
+             teaser cards, which meant summarising the same findings twice and
+             keeping both in step. One line does the job: it belongs to the
+             numbers above it, and the numbers are what earn the click. -->
+        <a class="handoff" href="/built">
+          <span class="handoff-text">How it was built — the measurements, the
+            things that only broke in production, and what was left undone</span>
+          <span class="handoff-go" aria-hidden="true">→</span>
+        </a>
       </div>
     </section>
 
