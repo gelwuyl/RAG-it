@@ -1628,20 +1628,33 @@ fieldset legend {
      which is why the theme toggle kept falling to a row of its own. Dissolving the
      wrapper promotes both clusters to grid items: identity stays up beside the
      brand, and the action row spans the full width it needed all along. */
+  /* ONE row, and the actions flush right.
+     It was two bands — brand + identity, then a full-width action row pinned
+     LEFT — which spent 112px of a 812px screen on chrome before the chat
+     started, and left the actions floating under the logo with nothing to
+     align to. Everything fits across once Settings loses its label: the gear
+     alone is unambiguous, and the word was costing 47px on the narrowest
+     screen the app supports. */
   .topbar {
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    grid-template-areas:
-      "brand identity"
-      "actions actions";
+    grid-template-columns: auto auto auto minmax(0, 1fr);
+    grid-template-areas: "brand settings theme identity";
     align-items: center;
-    gap: 7px 10px;
+    gap: 0 8px;
     padding: 8px 12px;
   }
   .brand { grid-area: brand; }
   .topbar-right { display: contents; }
-  .topbar-identity { grid-area: identity; justify-self: end; }
-  .topbar-actions { grid-area: actions; gap: 6px; }
+  .topbar-identity { grid-area: identity; justify-self: end; flex-wrap: nowrap; }
+  /* The action buttons are promoted out of their wrapper so each can take its
+     own grid column — a flex cluster could not be split across the row. */
+  .topbar-actions { display: contents; }
+  #settings-btn { grid-area: settings; }
+  #theme-toggle { grid-area: theme; }
+  /* Icon only. The label is the widest thing in the bar and says nothing the
+     gear does not — 47px of a 375px screen for a word nobody needs. */
+  #settings-btn .btn-label { display: none; }
+  #settings-btn { width: 44px; padding: 0; justify-content: center; }
   /* #user-name is empty in guest and OAuth modes; it would otherwise claim a
      grid cell and shove identity out of the brand's row. */
   .user-name:empty { display: none; }
@@ -1787,4 +1800,59 @@ fieldset legend {
   font-family: var(--font-mono); font-size: var(--text-nano);
   letter-spacing: var(--tracking-telemetry); text-transform: uppercase;
   color: var(--faint);
+}
+
+
+/* The gear glyph, so the button reads the same whether or not its label is
+   showing. Sized here rather than inline because the phone hides the label and
+   the icon then has to carry the control on its own. */
+.btn-icon { font-size: 15px; line-height: 1; }
+#settings-btn { display: inline-flex; align-items: center; gap: 6px; }
+
+
+/* ---------- the composer on a phone ----------
+   Measured at 375px: the question box was 130px wide — a quarter of the screen
+   — because it shared one flex row with the Deep search pill and Ask, and both
+   of those take their natural width before the box gets any. You cannot type a
+   question into 130px.
+
+   So the box takes a row of its own, the way every messaging app on the device
+   already works, and the two controls sit under it: the toggle left, the send
+   button right. Nothing is hidden, and the box goes from 130px to full width. */
+@media (max-width: 560px) {
+  .ask-form { flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+  .ask-form textarea {
+    order: 1; flex: 1 0 100%;
+    min-height: 46px;
+  }
+  .deep-pair { order: 2; margin-right: auto; align-self: center; }
+  #ask-btn { order: 3; padding: 10px 22px; }
+
+  /* Smaller, as asked: this is a modifier on the question, not the action.
+     The tap target stays 44px tall — it is only the type and the horizontal
+     padding that shrink, which is what was making it look oversized. */
+  #deep-toggle {
+    font-size: 11px; letter-spacing: 0.02em;
+    padding: 4px 10px; min-width: 0;
+  }
+  .deep-pair .term-mark { width: 26px; height: 26px; }
+}
+
+
+/* The identity cluster, narrowed to fit beside everything else.
+   Measured at 375px it wanted 204px in a 162px column, so `justify-self: end`
+   pushed it back over the theme toggle — two controls occupying the same
+   34px. The badge is what is wide: "0/3 files" says nothing "0/3" does not
+   when it sits directly beside a pill reading GUEST. */
+@media (max-width: 560px) {
+  /* The GUEST tag goes, not the count. A "Sign in" button sitting beside it
+     already says you are not signed in, so the word is the redundant half —
+     and the count is the half that changes. The pill keeps an aria-label, so
+     what is dropped is 59px of pixels, not the meaning. */
+  .guest-badge-tag { display: none; }
+  .guest-badge-usage .usage-word { display: none; }
+  .guest-badge { gap: 5px; padding: 3px 8px; }
+  /* Google permits the short label; " with Google" is already dropped below
+     400px, and the row is tight from 560 down. */
+  .google-btn-long { display: none; }
 }

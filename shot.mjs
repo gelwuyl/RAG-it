@@ -145,6 +145,45 @@ for (const theme of THEMES) {
         failures++;
       }
 
+      // CONTROLS SITTING ON TOP OF EACH OTHER.
+      //
+      // Invisible to every other check here: no overflow, no page error, and a
+      // screenshot just looks slightly tight. It happens when a grid item is
+      // wider than its track and `justify-self: end` pushes it back over its
+      // neighbour — the topbar identity block overlapped the theme toggle by
+      // 27px at 375px, so one of the two was unclickable.
+      const collisions = await page.evaluate(() => {
+        const hits = [];
+        const rows = [
+          [".topbar .brand", "#settings-btn", "#theme-toggle", ".topbar-identity"],
+          ["#question-input", "#deep-toggle", "#ask-btn"],
+        ];
+        for (const row of rows) {
+          const boxes = row
+            .map((sel) => [sel, document.querySelector(sel)])
+            .filter(([, e]) => e && e.getBoundingClientRect().width > 0)
+            .map(([sel, e]) => [sel, e.getBoundingClientRect()]);
+          for (let i = 0; i < boxes.length; i++) {
+            for (let j = i + 1; j < boxes.length; j++) {
+              const [aSel, a] = boxes[i];
+              const [bSel, b] = boxes[j];
+              const overlapX = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+              const overlapY = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+              // Both axes must overlap for the boxes to actually cover one
+              // another; sharing a column across two rows is fine.
+              if (overlapX > 1 && overlapY > 1) {
+                hits.push(`${aSel} over ${bSel} by ${Math.round(overlapX)}px`);
+              }
+            }
+          }
+        }
+        return hits;
+      });
+      for (const c of collisions) {
+        console.warn(`  ! ${page_.name} ${theme}/${bp.name}: controls overlap — ${c}`);
+        failures++;
+      }
+
       // No horizontal scroll at any breakpoint is a hard rule in the plan.
       const overflow = await page.evaluate(
         () => document.documentElement.scrollWidth - document.documentElement.clientWidth,

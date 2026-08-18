@@ -538,8 +538,12 @@ function renderGuestState() {
   const used = u ? u.documents : 0;
   const max = u ? u.max_documents : 3;
   const full = u && used >= max;
+  // The label carries what the phone hides: below 560px the "Guest" tag and the
+  // word "files" are dropped for room, leaving a bare "0/3" that means nothing
+  // to a screen reader without this.
+  el.setAttribute("aria-label", `Guest workspace, ${used} of ${max} files used`);
   el.innerHTML = `<span class="guest-badge-tag">Guest</span>
-    <span class="guest-badge-usage${full ? " is-full" : ""}">${used}/${max} files</span>
+    <span class="guest-badge-usage${full ? " is-full" : ""}">${used}/${max}<span class="usage-word"> files</span></span>
     <span class="guest-badge-note">Sign in to keep your work</span>`;
 }
 

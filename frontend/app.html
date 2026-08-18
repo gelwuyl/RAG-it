@@ -47,7 +47,7 @@
         }
       })();
     </script>
-    <link rel="stylesheet" href="/styles.css?v=38" />
+    <link rel="stylesheet" href="/styles.css?v=41" />
     <script>
       // Boot diagnostics: collect load/runtime errors so a broken app.js
       // shows a visible message instead of a silently dead UI.
@@ -120,7 +120,12 @@
                  can know they need is chrome, and it was spending a topbar slot
                  next to the identity block, which is the crowded part. It lives
                  in the "/" palette now, where infrequent commands belong. -->
-            <button id="settings-btn" class="btn btn-small" type="button" title="Tuning parameters">⚙ Settings</button>
+            <!-- The gear and the word are separate elements so the phone can
+                 drop the word without losing the icon: `font-size: 0` on the
+                 button would take both, and a ::before replacement would then
+                 have to duplicate the glyph. -->
+            <button id="settings-btn" class="btn btn-small" type="button" title="Tuning parameters">
+              <span class="btn-icon" aria-hidden="true">⚙</span><span class="btn-label">Settings</span></button>
             <button id="theme-toggle" class="btn btn-small" type="button"
               title="Switch between the dark and light theme" aria-pressed="false">☾</button>
             <!-- The ⌘K affordance used to live here and no longer does. It sat
@@ -604,6 +609,6 @@
       </div>
     </div>
 
-    <script type="module" src="/app.js?v=47"></script>
+    <script type="module" src="/app.js?v=49"></script>
   </body>
 </html>
