@@ -560,7 +560,14 @@ def guest_login(request: Request, response: Response, db: Session = Depends(get_
         guests.touch(db, existing)
         return {"id": existing.id, "name": existing.name, "guest": True}
 
+    # Timed, and the timings are returned. This request has a stated budget —
+    # under 10 seconds — and it is the FIRST thing a visitor waits on, so
+    # "it feels slow" has to be answerable without adding instrumentation after
+    # the fact. Durations only; nothing here is sensitive. Same reasoning as
+    # /api/health reporting the effective config.
+    t0 = time.time()
     guest = guests.create_guest(db)
+    t_create = time.time()
     try:
         guests.seed_demo_corpus(db, guest)
     except Exception:
@@ -570,8 +577,17 @@ def guest_login(request: Request, response: Response, db: Session = Depends(get_
         # is how the corpus went missing for weeks without a trace.
         log.exception("guest %s: demo corpus seeding failed", guest.id)
         db.rollback()
+    t_seed = time.time()
     set_session_cookie(response, guest.id, kind="guest")
-    return {"id": guest.id, "name": guest.name, "guest": True}
+    timings = {
+        # create_guest also runs the inline reap backstop, so a slow number
+        # here means cleanup is landing in a visitor's path again.
+        "create_ms": round((t_create - t0) * 1000),
+        "seed_ms": round((t_seed - t_create) * 1000),
+        "total_ms": round((t_seed - t0) * 1000),
+    }
+    log.info("guest %s provisioned: %s", guest.id, timings)
+    return {"id": guest.id, "name": guest.name, "guest": True, "timings_ms": timings}
 
 
 @app.post("/api/auth/leaving")
