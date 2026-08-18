@@ -108,6 +108,43 @@ for (const theme of THEMES) {
         failures++;
       }
 
+      // A LONE CARD UNDER A FULL ROW.
+      //
+      // Not a visual bug a screenshot review catches reliably — the page looks
+      // fine, it just reads as "and one more thing" instead of as a set. It is
+      // what `repeat(auto-fit, minmax(...))` produces whenever the item count
+      // and the fitted column count are coprime, which is most of the time:
+      // five stage notes fitted four across, four cards fitted three.
+      //
+      // Rows are derived from actual top offsets rather than from the CSS, so
+      // this tests what rendered.
+      const orphans = await page.evaluate(() => {
+        const bad = [];
+        for (const grid of document.querySelectorAll(
+          ".stage-notes, .cards, .lessons, .tiles, .platform",
+        )) {
+          const kids = [...grid.children];
+          if (kids.length < 3) continue;
+          const rows = new Map();
+          for (const k of kids) {
+            const top = Math.round(k.getBoundingClientRect().top);
+            rows.set(top, (rows.get(top) || 0) + 1);
+          }
+          const counts = [...rows.values()];
+          if (counts.length < 2) continue;
+          const last = counts[counts.length - 1];
+          const prev = counts[counts.length - 2];
+          if (last === 1 && prev >= 3) {
+            bad.push(`${grid.className} -> ${counts.join("+")}`);
+          }
+        }
+        return bad;
+      });
+      for (const o of orphans) {
+        console.warn(`  ! ${page_.name} ${theme}/${bp.name}: lone item under a full row — ${o}`);
+        failures++;
+      }
+
       // No horizontal scroll at any breakpoint is a hard rule in the plan.
       const overflow = await page.evaluate(
         () => document.documentElement.scrollWidth - document.documentElement.clientWidth,

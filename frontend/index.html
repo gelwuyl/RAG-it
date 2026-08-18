@@ -22,7 +22,7 @@
         }
       })();
     </script>
-    <link rel="stylesheet" href="/landing.css?v=8" />
+    <link rel="stylesheet" href="/landing.css?v=9" />
   </head>
   <body>
     <button id="theme-toggle" class="theme-toggle" type="button"
@@ -63,35 +63,58 @@
          page — someone who reads only this knows what the app does. The
          numbered section that follows is the same five stages with their
          serverless constraints attached, for the reader who wants them. -->
+    <!-- ================= what makes this non-trivial =================
+         Unnumbered on purpose: it is the plain-language read of the whole
+         system, and it sits FIRST because it is the most legible thing on the
+         page — someone who reads only this knows what the app does and why it
+         is not a weekend project. It used to be split in two, a stage list
+         here and a "what makes it non-trivial" card grid four screens down,
+         which said the same things twice in different words.
+
+         FIVE across, one row, and the count is not incidental: these are the
+         five decisions the system is made of, and breaking them over two rows
+         made the fifth look like an afterthought rather than the answer to
+         the failure the other four share. -->
     <section class="stages">
       <div class="wrap">
         <div class="stage-notes">
           <div class="stage-note">
             <span class="stage-key">Rewrite</span>
             <p>Questions are rarely phrased the way a document is. The query is
-              restated before it is searched.</p>
+              restated before it is searched — and the model's own reasoning
+              trace is stripped first, or a thousand characters of deliberation
+              become the search term.</p>
           </div>
           <div class="stage-note">
             <span class="stage-key">Retrieve</span>
-            <p>Meaning-based vector search fused with exact keyword matching, so
-              names and IDs are not lost to paraphrase.</p>
+            <p>Vector search finds meaning; BM25 finds exact strings. Their
+              rankings are fused by reciprocal rank fusion, so an invoice number
+              and a paraphrased policy are both findable — neither one lost to
+              the other's blind spot.</p>
           </div>
           <div class="stage-note">
             <span class="stage-key">Rerank</span>
-            <p>A language model re-scores the candidates against the question,
-              which catches what similarity alone misses.</p>
+            <p>Retrieval casts a wide net, then a language model re-scores every
+              candidate against the actual question. Embedding distance is a
+              proxy for relevance. This is a judgement.</p>
+          </div>
+          <!-- The one that answers a failure the other four share, so it is
+               the one given the accent. Everything else on this page stays
+               quiet around it. -->
+          <div class="stage-note is-feature">
+            <span class="stage-key">Deep search<span class="stage-tag">grep</span></span>
+            <p>Every retriever <em>ranks</em>, and a passage ranked just outside
+              the cut is invisible to the answer — the model cannot know what it
+              was not shown. Deep search does not rank. It reads every document
+              you own word for word and returns every literal match, so if the
+              words are there they reach the answer.</p>
           </div>
           <div class="stage-note">
             <span class="stage-key">Judge</span>
-            <p>A second model checks the answer against its own sources. When it
-              cannot decide, that is reported as ungraded — never as a
-              failure.</p>
-          </div>
-          <div class="stage-note">
-            <span class="stage-key">Deep search</span>
-            <p>Ranking can miss a passage that is plainly there. Turn this on for
-              a question and every document is read word for word as well, so a
-              literal match cannot be ranked out.</p>
+            <p>Answers are scored for faithfulness and relevancy. A judge that
+              times out is a broken grader, not a bad answer, so it reports
+              <code>ungraded</code> — rendering that as a failure would be a
+              confident false claim about your documents.</p>
           </div>
         </div>
       </div>
@@ -235,11 +258,20 @@
           <span class="section-num">02</span>
           <span class="section-name">By the numbers</span>
         </div>
-        <!-- Structural facts, verifiable from the repo: eval/golden_set.jsonl has 56
-             lines, eval/corpus/ has 10 files, the Neon `chunks` table has one
-             fixed vector(768) column, and api/index.py is the only function.
-             Deliberately NOT benchmark scores — those need a published run
-             behind them and would go stale here without anything noticing. -->
+        <p class="pipeline-intro">
+          56 golden questions over a 27-document corpus, including unanswerable
+          ones — because refusing to answer is a behaviour worth measuring too.
+          Most of the corpus is confusable on purpose: same firm, same
+          vocabulary, different facts, so retrieval has to discriminate rather
+          than recognise a topic. The scored result ships with the app; nobody
+          has to run it.
+        </p>
+        <!-- Structural facts, verifiable from the repo and TESTED against it
+             (tests/test_landing_claims.py) — the corpus count said 10 for as
+             long as it was 27, because nothing connected the sentence to the
+             directory. Deliberately NOT benchmark scores: those live in the
+             app's Evaluation pane, where a published run backs them, and would
+             go stale here without anything noticing. -->
         <div class="tiles">
           <div class="tile">
             <span class="tile-id">A1</span>
@@ -265,58 +297,11 @@
       </div>
     </section>
 
-    <!-- ================= 03 · what makes it non-trivial ============= -->
+    <!-- ============ 03 · how it was built (teaser) ============= -->
     <section>
       <div class="wrap">
         <div class="section-label">
           <span class="section-num">03</span>
-          <span class="section-name">What makes it non-trivial</span>
-        </div>
-        <div class="cards">
-          <div class="card">
-            <h3 class="card-title">Hybrid retrieval, fused</h3>
-            <p class="card-text">Vector search finds meaning; BM25 finds exact
-              strings. Their rankings are combined by reciprocal rank fusion, so
-              an invoice number and a paraphrased policy are both findable.</p>
-          </div>
-          <div class="card">
-            <h3 class="card-title">Reranking that reads</h3>
-            <p class="card-text">Retrieval casts a wide net, then a language
-              model re-scores each candidate against the actual question.
-              Embedding distance is a proxy for relevance; this is a judgement.</p>
-          </div>
-          <div class="card">
-            <h3 class="card-title">Deep search, when ranking is not enough</h3>
-            <p class="card-text">Every retriever ranks, and a passage that ranks
-              just outside the cut is invisible to the answer — the model cannot
-              know what it was not shown. Deep search does not rank: it reads
-              every document word for word and returns every literal match. If
-              the words are in your documents, they reach the answer.</p>
-          </div>
-          <div class="card">
-            <h3 class="card-title">Evaluation that fails open</h3>
-            <p class="card-text">Answers are scored for faithfulness and
-              relevancy. A judge that times out is a broken grader, not a bad
-              answer, so it reports <code>ungraded</code> — rendering that as a
-              failure would be a confident false claim about your documents.</p>
-          </div>
-          <div class="card">
-            <h3 class="card-title">A benchmark you can run</h3>
-            <p class="card-text">56 golden questions over a 27-document corpus,
-              including unanswerable ones — because refusing to answer is a
-              behaviour worth measuring too. Most of the corpus is deliberately
-              confusable: same firm, same vocabulary, different facts, so
-              retrieval has to discriminate rather than recognise a topic.</p>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ============ 04 · how it was built (teaser) ============= -->
-    <section>
-      <div class="wrap">
-        <div class="section-label">
-          <span class="section-num">04</span>
           <span class="section-name">How it was built</span>
         </div>
         <p class="pipeline-intro">
