@@ -1,480 +1,276 @@
-# Handoff — frontend + backend sessions → combined session
+# Handoff — agentic-RAG
 
-**Written:** 2026-08-17 by the frontend session.
-**Updated:** 2026-08-17 by the backend session (§0, §3, §4 corrections).
-**Updated:** 2026-08-17 by the combined session — **§0 rewritten; read it first.**
+Written 2026-08-18. Replaces the earlier frontend/backend handoff, which described
+phases 0–4 and is now fully landed (see `git log`).
 
-> ## §0. Current status — read first
->
-> Everything is committed on `main`. Phases 0–2 of the combined session are
-> done; `git log --oneline` is the source of truth.
->
-> | Commit | What |
-> |---|---|
-> | `4cde1a7` | Phase 0 — the frontend session's uncommitted tokens/theme/`shot.mjs` baseline |
-> | `d4808d8` | Phase 1 — guest-first entry + the write-route guards it required |
-> | `d29ed86` | Phase 2 — two registers, JetBrains Mono, lime in both themes, per-answer readout |
-> | `f09ffd8` | Excerpt + Evaluation contained in the conversation column |
-> | `30d950d` | Phase 3 — landing page at `/`, workspace at `/app`, callback redirect |
-> | `2fd3ed1` | Phase 4a — settings presets, Advanced disclosure, per-field hints |
-> | `d50322a` | Phase 4b — sequenced empty states, suggested questions, glossary, persistent job status |
-> | `4099e90` | Phase 4c — ⌘K command palette (desktop only) |
->
-> **Every §4 item is now resolved.** §4B and §4E shipped together in `30d950d`,
-> as the ordering trap below requires.
->
-> Two things this document previously got wrong:
->
-> 1. **§4A was not a one-line change.** `app.js` fell back to a guest only when
->    Google OAuth was *unconfigured*. Production has it configured, so every
->    visitor met a sign-in wall and the guest subsystem was unreachable there.
->    Swapping the endpoint alone would have changed nothing. The fix was the
->    boot **policy**.
-> 2. **§9's ordering breaks Google sign-in.** It puts "callback redirect →
->    `/app`" at position 3, before the landing page at position 8. `/app` does
->    not exist until the Vite multi-entry + `vercel.json` rewrite land, so doing
->    it in that order 404s every sign-in. **§4B and §4E must be one commit.**
->
-> ### Found and fixed while turning guest mode on
->
-> Turning guest-first on without these would have been a straight downgrade of
-> production integrity:
->
-> - **Four eval routes had no authentication dependency at all** —
->   `PUT /api/eval/config`, both toggles, and `POST /api/eval/run` / `/step`.
->   `config_overrides` is a **single shared row** (`db.py:121`), so on the public
->   deployment *any anonymous caller* could re-point the embedding model for
->   every user and invalidate their chunks, or start a 46-question benchmark
->   against the deployment's LLM quota. Now behind `require_account`.
-> - **The guest cap only covered `/documents/upload`**, so the 3-document limit
->   was bypassable by pasting URLs.
-> - **`prune_chunks` existed only in `store_neon.py`**, so "Prune ghosts" raised
->   `AttributeError` and 500'd on the Chroma backend.
->
-> Tests: **62 passing** (was 43); `tests/test_guest_permissions.py` is new and
-> asserts both directions — what a guest is refused *and* what a guest keeps.
-
-This session did UI/UX planning and frontend steps 0–2 of
-[`PRODUCT_UX_PLAN.md`](PRODUCT_UX_PLAN.md). It stopped at the point where
-further work would collide with the backend session's changes.
+**Next session's first job is §1.** Everything else is queued work with decisions
+already made.
 
 ---
 
-## 1. Working-tree state
+## 0. Orientation
 
-| File | Owner | State |
-|---|---|---|
-| `frontend/tokens.css` | **this session** | new — design tokens + dark theme |
-| `frontend/styles.css` | **this session** | modified — de-hardcoded, imports tokens |
-| `frontend/index.html` | **this session** | modified — no-flash theme script, theme toggle |
-| `frontend/app.js` | **this session** | modified — +28 lines, theme toggle handler only |
-| `shot.mjs` | **this session** | new — Playwright capture script |
-| `PRODUCT_UX_PLAN.md` | **this session** | new — the plan (rev 3) |
-| `ragchat/guests.py` | **backend session** | new — ephemeral guest accounts |
-| `ragchat/app.py` | **backend session** | modified — guest login, promotion, account deletion |
-| `ragchat/db.py` | **backend session** | modified — `User.last_seen_at`, `Document.size_bytes` |
+Read `CLAUDE.md` first — it carries the non-obvious constraints (serverless
+freeze, config precedence, the 768-dim invariant, fail-open evaluation) and they
+are all still accurate.
 
-The two sets do not overlap in files. They **do** overlap in contract — see §4.
-
----
-
-## 2. What this session built (frontend)
-
-### Step 0 — tokenization *(complete)*
-
-Every hardcoded colour in `styles.css` was promoted to a variable in the new
-`frontend/tokens.css`. Also tokenized the duplicated mono/sans font stacks as
-`--font-mono` / `--font-sans`.
-
-Verified: `grep` finds **zero** hex/rgba literals and zero raw font stacks left
-in `styles.css`; **78 variable references, 78 definitions, none unresolved**
-(the real risk — a typo'd token name fails silently as transparent).
-
-### Step 1 — CSS split *(complete)*
-
-`styles.css` now begins with `@import "./tokens.css"`. Vite inlines this at
-build time, so production is still one CSS request (confirmed: no `@import`
-survives in `dist/assets/*.css`). The landing page will link `tokens.css`
-directly to get the palette without the app's rules.
-
-### Step 1b — screenshot capture *(complete)*
-
-`shot.mjs` at the repo root. **The `_shot.mjs` referenced by
-`UI_UPGRADE_PLAN.md` never existed** — only its output PNGs were committed.
-Playwright is installed at the repo root with no `package.json`, so run from
-there:
+Everything this session did is in the git history with reasoning in the commit
+bodies. Do not re-derive it from the code; read the messages:
 
 ```bash
-node shot.mjs http://localhost:4173
+git log --oneline -12
 ```
 
-Captures 5 breakpoints × 2 themes into `shots/<theme>/<bp>.png`, and **fails the
-run** on horizontal overflow or any page error — both are silent killers a
-screenshot alone would not reveal.
-
-### Step 2 — theme mechanism + dark palette *(complete)*
-
-- `data-theme` on `<html>`, dark default, persisted to `localStorage` under the
-  key **`ragchat-theme`** (the landing page must reuse this exact key).
-- No-flash inline `<head>` script in `index.html` — it must stay inline and
-  blocking, or dark-theme users get a white flash every load.
-- Toggle button `#theme-toggle` in the topbar; handler in `app.js`.
-- Full dark palette in `tokens.css` under `[data-theme="dark"]`: four-step value
-  depth, hairline borders, **no shadows** except the modal, **acid lime** as the
-  single hot accent, purple `--accent` folded into lime.
-- **PASS is neutral, not green** in dark, so lime can mean *active* without also
-  meaning *good*.
-
-Verified: build passes; all 10 captures clean, no overflow, no page errors.
-
-**Known incomplete:** the PASS **checkmark glyph** is not done. Dark makes PASS
-neutral by colour only; the `"PASS"` → `✓` text change lives in
-`buildEvalBlock` (`frontend/app.js:786`), which plan step 6 rewrites wholesale.
-Doing it now would be work thrown away.
-
----
-
-## 3. What the backend session built
-
-Read from the working tree, not from conversation — this is observed, and the
-other session may have moved on since.
-
-**`ragchat/guests.py`** — ephemeral per-visitor accounts:
-
-- Each anonymous visitor gets their **own** `provider="guest"` account. This
-  replaces the old behaviour where `local_login` signed *everyone* into one
-  shared `local` account.
-- **Demo corpus is embedded once** under a template account
-  (`__demo_template__`) and then **vector-copied** per guest — no embedding
-  calls, no quota spend, no latency on arrival.
-- Guests **can upload**, capped at **3 documents / 5 MB total**.
-- Guests are reaped after **2 hours idle**, opportunistically on guest creation
-  (no cron on Vercel Hobby, no background threads).
-- Signing in with Google **promotes** the guest's workspace into the permanent
-  account — documents, folders, conversations and chunks are re-pointed, nothing
-  is re-embedded.
-
-**New endpoints:** `POST /api/auth/guest-login`, `DELETE /api/auth/account`.
-**Schema:** `User.last_seen_at`, `Document.size_bytes`.
-
-All `vectordb` helpers `guests.py` depends on (`copy_user_chunks`,
-`reassign_user_chunks`, `delete_document_chunks`) **exist in both** `store.py`
-and `store_neon.py` — checked.
-
----
-
-## 4. Interface points — the actual handoff
-
-Ordered by severity.
-
-### A. `app.js` still calls a route the backend is replacing — **breaking**
-
-`frontend/app.js:100` calls `POST /api/auth/local-login`. The backend added
-`POST /api/auth/guest-login`. **If `local-login` is removed, the frontend fails
-to boot.**
-
-The new route returns `{id, name, guest: true}` and reuses an existing guest
-session if the browser already has one.
-
-*Action:* switch the call, and decide whether `local-login` stays as a
-single-user dev convenience.
-
-### B. OAuth callback redirect — **will break when the landing page ships**
-
-`ragchat/app.py` still ends the Google callback with `RedirectResponse("/")`.
-Once `/` is the landing page, **signing in dumps the user back on the marketing
-page**. Must become `/app`, ideally with a `next` round-tripped through the
-existing `oauth_state` cookie.
-
-Still unfixed in the working tree.
-
-*Good news:* the callback path itself (`/api/auth/google/callback`) is unchanged
-by the landing split, so `GOOGLE_REDIRECT_URI` and the Google Console entry need
-**no** changes. Given the trailing-slash bug documented at `ragchat/app.py:278`,
-worth not disturbing.
-
-### C + D. Guest identity and quota on `/api/auth/status` — **RESOLVED**
-
-Both requests are implemented. `GET /api/auth/status` now returns:
-
-```json
-{
-  "authenticated": true,
-  "user": { "id": "…", "name": "Guest", "email": null },
-  "google_oauth": true,
-  "provider": "guest",
-  "is_guest": true,
-  "guest_usage": {
-    "documents": 0, "max_documents": 3,
-    "bytes": 0, "max_bytes": 5242880,
-    "idle_ttl_seconds": 7200
-  }
-}
-```
-
-`guest_usage` is `null` for signed-in accounts, which are never capped. It
-reports **usage as well as limits**, so the UI can show "2 of 3 documents"
-before the visitor hits the wall rather than teaching the rule via a rejected
-upload.
-
-Note `documents` **excludes the seeded demo files**, matching how the cap counts
-them. A guest with the 2 demo files still has all 3 upload slots — the demo
-corpus is the app's content, not the visitor's. Do not display
-`len(/api/documents)` as usage; it will read 2 too high.
-
-### E. `vercel.json` — shared file, both sessions may touch it
-
-The landing split needs one added rewrite. Coordinate so neither session
-clobbers the other:
-
-```json
-{ "source": "/app", "destination": "/app.html" }
-```
-
-Plus, in `frontend/vite.config.js`:
-
-```javascript
-build: { rollupOptions: { input: { main: 'index.html', app: 'app.html' } } }
-```
-
-### F. Cache-buster collisions — **explained**
-
-`?v=` moved 8 → 10 because the backend session edited `frontend/` too: the auth
-repair (§4A's counterpart) and the **"RAG Chat" → "RAG-it" rename**. Both are
-committed; `index.html` is at `v=10`. The advice still stands — re-read before
-editing — but there is no unknown third writer.
-
-**The rename is done and must not be reverted.** Every user-visible string is
-now "RAG-it": `<title>`, the `#auth-view` heading, `.brand-name`, and the
-FastAPI title on `/docs`. `frontend/dist/` still contains the old name; it is a
-gitignored build artifact and regenerates.
-
-### G. Session cookie lacks `secure`
-
-`set_cookie(..., httponly=True)` throughout `ragchat/app.py` — no `secure=True`,
-no explicit `samesite`. Worth hardening on an HTTPS deploy. Independent of this
-work; noted because it now guards real Google identities.
-
----
-
-## 5. Plan corrections required
-
-`PRODUCT_UX_PLAN.md` **§3 and §4 are now wrong.** They were written before the
-backend session's design existed and describe a *shared read-only demo corpus*.
-The backend built something better:
-
-| Plan says (rev 3) | Reality |
+| commit | what |
 |---|---|
-| Shared demo corpus, read-only | **Per-guest private copy, writable** |
-| Guests cannot upload | Guests **can** upload, capped 3 docs / 5 MB |
-| "Try it with 10 sample documents" | **2 files only** — `helios_energy_handbook.md`, `meridian_coffee_ops.md` |
-| Sign in "for your own workspace" | Sign in **keeps the work you already did** — it is promoted, not discarded |
-| Demo chats need separate ephemeral handling | Solved — each guest is already its own account |
+| `3619d4d` | deterministic exact-containment metrics; gate baseline |
+| `2f8a1f4` | eight distractor documents, 21 → 39 chunks |
+| `665b8a6` | MATCH_THRESHOLD calibrated 0.6 → 0.45; baseline mechanism |
+| `e2b2ecb` | synthetic corpus + golden set (then history-purged) |
+| `215c064` | plain-language metric names + benchmark percentile |
+| `f79f875` | demo vectors ship with the repo (cold-start 504 fix) |
+| `c002445` | harness scores the passages the model is actually handed |
+| `8e46ab2` | guest seeding: a document either has its vectors or is not there |
+| `53cf838` | command palette moved to "/" in the composer |
+| `acd599e` | Cohere reranks by default; two embedders instead of six |
 
-**The 2-file limit is deliberate and must not be "fixed".** `guests.py` states
-the other eight files in `eval/corpus/` are real business content that must
-never be exposed to anonymous visitors. Any landing copy promising ten sample
-documents is wrong.
-
-The messaging shift matters for the landing page: the CTA is no longer "try a
-read-only demo", it is **"start using it now, sign in when you want to keep
-it"** — a materially better pitch.
-
----
-
-## 6. Safe to continue without backend coordination
-
-Frontend-only, no contract dependency:
-
-- **Step 4 — two registers.** Type scale, mono micro-label system, large-sans
-  content register for answers. Highest visual payoff remaining.
-- **Step 11 — ⌘K command palette.** Self-contained, desktop only.
-- **Step 12 — mobile pass.** Chat-first reader shape; bulk operations
-  desktop-only. Note the guest quota UI will need adding afterwards.
-- **Step 13 — light theme repair.** Light still uses blue `--primary` while dark
-  uses lime; they should converge on the lime identity.
-
-Blocked on §4 items: steps 3, 6, 7, 8, 9 of the plan.
+Deployment: `https://rag-gel.vercel.app` · `GET /api/health` reports effective
+config. Repo is **public**.
 
 ---
 
-## 7. Open decisions (unchanged from plan §14)
+## 1. LIVE BUG — identity is blank for seconds after every load
 
-1. Mono typeface — self-hosted JetBrains Mono vs the system stack.
-2. Hero display typeface for the landing page.
-3. Which space image, and its licence. NASA imagery is public domain.
-4. Preset names and values — needs a real tuning pass.
+**Reported as:** "the sign-in button at the top right is missing in the latest
+deployment, and after a refresh it can't quickly tell guest from signed-in."
 
-Plus four auth questions this session raised but never got answered, now largely
-**overtaken** by the backend's design — re-derive them from §4 rather than from
-the earlier conversation.
+**It is not missing.** Measured on the deployment, the button renders correctly.
+The real defect is timing, and the user's instinct about cookies is the right fix.
 
----
-
-## 8. Backend session — everything else it shipped
-
-Added 2026-08-17. All committed; `git log --oneline` for the full list.
-
-### Auth is live end to end
-
-Google sign-in **works** on both local and production. It had never worked
-before: four frontend/backend contract mismatches, none of which could ever have
-succeeded (`/api/auth/me` did not exist; the sign-in and sign-out buttons issued
-GETs against POST-only routes; the status payload was read in an old shape).
-
-Per-user isolation was **already fully implemented server-side** — every route is
-gated by `get_current_user`, and documents, folders, chats and vector chunks all
-filter on user id, with cross-user id access returning 404. Verified live with
-two concurrent sessions. The only reason everyone shared one space was that
-sign-in never worked, so every visitor was auto-signed into `local`.
-
-### Production configuration is correct
-
-`GET /api/health` now has an `auth` block. Current production state:
+### Evidence (Resource Timing, warm function, deployed app)
 
 ```
-session_secret_is_default : false
-google_oauth_configured   : true
-google_redirect_uri_set   : true
+domContentLoaded            73 ms
+/api/auth/status      73 → 1301 ms      identity UNKNOWN for 1.2s
+/api/chats           1302 → 2449 ms     ← all five serialise behind status
+/api/eval            1302 → 2449 ms
+/api/eval/config     1302 → 2456 ms
+/api/documents       1302 → 2468 ms
+/api/folders         1302 → 2499 ms
+/api/auth/status     2500 → 3669 ms     ← SECOND call, re-renders the badge
 ```
 
-Two gotchas worth not rediscovering:
+Three separate problems:
 
-- **`GOOGLE_REDIRECT_URI` must match the Google Console entry character for
-  character.** Production is registered **without** a trailing slash, local
-  **with** one. Both work, because the callback route is registered on both
-  forms — but the env var must match its own environment's registration.
-- **`SESSION_SECRET` must be set in production.** Without it the app signs
-  sessions with a hardcoded default and anyone who knows it can forge a cookie
-  for any account. `/api/health` → `auth.session_secret_is_default` reports this.
+1. **Topbar identity is blank until `/api/auth/status` resolves** — 1.2s warm.
+   A cold Vercel function is ~3s (measured `/api/health` at 2.9–3.7s), so a
+   first-time visitor stares at a topbar with neither guest badge nor sign-in
+   button for about three seconds. That is the reported symptom.
 
-### Migration tool
+2. **`/api/auth/status` is called twice on boot.** The second call is
+   `refreshGuestUsage()` (`frontend/app.js` ~line 540), which re-renders the
+   guest badge at 3669 ms — a visible second change after the first paint.
+   Note the comment at `frontend/app.js` ~line 634 claims a duplicate call was
+   already removed; this is a *different* call site and the comment is
+   misleading as a result.
 
-`scripts/migrate_user_data.py` reassigns a whole workspace between accounts
-(documents, folders, conversations, messages, vector chunks) with no
-re-embedding. Dry-run by default, `--commit` to write, reversible by swapping
-`--from`/`--to`. Used to move the owner's data from `local` to their Google
-account. Handles both vector backends.
+3. **Five API calls serialise behind status** rather than firing in parallel,
+   so first meaningful content is ~2.5s.
 
-### Retrieval and eval fixes
+### Why JS cannot tell today
 
-- **Hybrid search was fusing two different corpora.** The vector half filtered on
-  `fingerprint`, the FTS half did not, so stale chunks from a previous chunking
-  config were retrieved by keyword and RRF-promoted. Fixed.
-- **The benchmark could not survive Vercel.** One scored question takes 40–54s,
-  so `EVAL_BATCH_DEFAULT = 2` took 83s against the 60s `maxDuration`. An
-  overrunning step is killed *before* it commits, so the client retried the same
-  slice forever. Now 1, with only ~6s headroom — **if judge latency grows, slice
-  the judges rather than raising the batch.**
-- **A truncated `<thought>` block was graded as a confident FAIL.** The judge
-  model is thinking-capable; when reasoning hit `max_tokens` the wrapper was
-  never closed, the stripper missed it, and a stray "FAIL" inside the trace was
-  read as a verdict. Unterminated wrappers are now stripped → ungraded, not
-  failed.
-- **Settings could not be saved at all.** The stored embedding model was the
-  legacy bare `qwen3-embedding-8b` while the allowlist held
-  `qwen/qwen3-embedding-8b`; every save re-submits the stored model, so
-  validation rejected all of them. Comparison now ignores the vendor prefix.
-- Config values are bounds-checked (`chunk_size`, `top_k`, `similarity_threshold`
-  …). Previously `top_k=0` or `threshold>1` saved fine and made every question
-  answer "not found", which looks like a broken app rather than a bad setting.
+The session cookie is `httponly=True` (`ragchat/app.py` ~line 84, set centrally
+by one helper — good). So the page has no synchronous way to know who it is and
+must wait for a round trip.
 
-### Known-good verification commands
+### Suggested fix (not yet implemented, not yet agreed with the user)
+
+Set a **second, non-httpOnly hint cookie** beside the session cookie carrying
+only the identity *kind* — e.g. `ragchat-kind=guest` or `=account`. The boot
+script reads it synchronously and paints the correct topbar at ~73 ms, then
+`/api/auth/status` reconciles when it lands.
+
+It carries no secret and being spoofable is harmless: every real authorisation
+decision stays server-side on the httpOnly session cookie. This is a *rendering*
+hint only. Make sure it is cleared on logout and rewritten on
+guest-login/promotion, or it will out-live the session it describes.
+
+Also worth doing in the same pass:
+- Delete the duplicate status call — `refreshGuestUsage()` should read the
+  payload `applyAuthStatus` already stored, and fix the now-misleading comment.
+- Fire the five independent calls in parallel with status instead of after it.
+- Render a skeleton in `.topbar-identity` so it never occupies zero height
+  (currently it collapses, which is why the layout appears to shift).
+
+**Confirm the cookie approach with the user before building it** — they raised
+it as a question, not an instruction.
+
+---
+
+## 2. Remaining queue, in order
+
+All decisions below are already settled with the user. Do not re-ask.
+
+### 2.1 Finish the corpus (~20 more chunks)
+39 chunks today; the original haystack was ~59. Approved to continue *now that
+the gate metric is deterministic*. Write same-domain **confusable** documents —
+unrelated filler is separated trivially by embeddings and adds bulk without
+difficulty. Regenerate the golden set and baseline afterwards (§4).
+
+### 2.2 CI gate
+GitHub Actions, **push to main only**, retrieval-only, fails on regression
+against `eval/baseline.json`. Fork PRs never receive secrets on a public repo,
+so PRs are skipped by design. Gate compares the `exact_*` metrics only — see
+`eval/baseline.py:GATED_METRICS` and the test that pins it.
+
+### 2.3 Scorecard reads the baseline
+`frontend/app.js:EVAL_TARGETS` still hardcodes aspirational targets (0.80 etc.).
+It must read `eval/baseline.json` so "red means regression" is true in the UI as
+well as in CI. Both consume the same file — do it with §2.2.
+
+### 2.4 Guest lifecycle — **fully designed, confirmed, not started**
+- Idle TTL 2h → **30 min** (guests only; signed-in workspaces are permanent and
+  already excluded by `provider == "guest"`, with a test).
+- **Keepalive** while the tab is visible (~5 min) so an open tab is never reaped
+  mid-read. Reuse `/api/auth/status`, which already calls `touch()`.
+- **Close beacon**: `pagehide` → `sendBeacon` that *back-dates* `last_seen_at`
+  so the next sweep collects it. It must **not** delete inline — close-and-reopen
+  has to survive. **The OAuth redirect must suppress the beacon**, or signing in
+  destroys the workspace during promotion.
+- **Sweeper**: GitHub Actions every 15 min against an authenticated sweep
+  endpoint (shared secret, constant-time compare). Vercel Hobby cron exists but
+  is **once per day**, which cannot honour a 30-minute promise — verified, and
+  the code comment in `ragchat/guests.py` saying Hobby has no cron is out of date.
+- **Inline backstop**: `create_guest` clears at most **2** workspaces as one bulk
+  statement, so cleanup never stops dead if Actions is disabled at 60 days.
+- **Bulk set-based deletes**: `purge_user_data` currently costs ~6–8 round-trips
+  per workspace and `create_guest` reaps 20 inline — that measured **39.7s** on a
+  guest-login against 11.1s warm. Acceptance criterion: **guest-login under 10s**.
+
+### 2.5 Phase 5 sweep
+Tap-target audit (44×44 minimum) and a light-theme pass over the surfaces added
+in phases 4–5. No decisions outstanding.
+
+### 2.6 Deep search — planned, named, not started
+Replaces web search entirely. Full design is in this conversation's history; the
+essentials:
+- `documents.source_text` (`ragchat/db.py` ~line 93) already stores full document
+  text durably, so grep needs no new storage and no vector-backend dispatch.
+- **Per-request flag, never a persisted config.** `config_overrides` is ONE row
+  shared by the whole deployment — a persisted toggle would change retrieval for
+  every user. The existing web-augmentation toggle has exactly this bug
+  (`ragchat/app.py` ~line 1050 writes `save_config_override`).
+- `seed_demo_corpus` does **not** copy `source_text` to guest clones — one line,
+  and a prerequisite for guests to use deep search at all.
+- UI name: **"Deep search"**. Delete web search in the same commit so there is
+  never a build with two fallbacks.
+
+---
+
+## 3. Non-obvious things learned this session
+
+Additions to what `CLAUDE.md` already documents.
+
+**The eval harness measured the wrong list for months.** `retrieve()` returns
+`candidate_k` chunks; `ask()` reranks to `top_k`. `context_recall` was computed
+over all 40 while precision/MRR/hit sliced `[:6]` — two different retrievals
+reported side by side. And `score_item` never reranked at all, so a preset with
+`reranker: True` scored exactly as if it were False. Fixed in `c002445`.
+
+**`MATCH_THRESHOLD` was never calibrated and was catastrophically wrong.** At
+0.6 it scored **79.6% of true containments as misses**. Cause is length, not
+language: a one-line passage against a ~500-token chunk scores low even when
+verbatim inside it (Latin fared *worse* than CJK). Most of this repo's
+historically low retrieval scores were a broken measurement.
+
+**Cosine matching is biased with a direction.** Its false-positive rate *rises*
+with corpus size (17.2% at 21 chunks → 19.5% at 39), so adding filler documents
+makes scores go **up**. Never gate CI on it. The `exact_*` metrics exist for that
+reason; cosine remains the reported RAGAS-comparable number by user decision.
+
+**A `config_overrides` row masks `config.yaml` defaults forever.** Changing a
+default does nothing on any deployment that ever saved Settings. `hybrid_search`
+and now `reranker_provider` are **hardcoded** in `load_config()` for this reason.
+Whether to rerank is still read from config; which vendor is not.
+
+**A stale local override silently invalidates local measurement.** A local row
+carried `qwen3-embedding-8b` without the `qwen/` prefix, which changed the
+fingerprint and made every local benchmark unrepresentative. If local and
+deployed fingerprints differ, suspect this first.
+
+**`golden_passages` must be verbatim substrings.** If a passage is not
+character-for-character present in a corpus document, `context_recall` measures
+nothing — the cosine runs against text absent from the corpus. The generator
+enforces this; keep it that way.
+
+---
+
+## 4. Verification
 
 ```bash
-.venv/Scripts/python -m pytest tests/ -q          # 105 passing
-.venv/Scripts/python -m scripts.migrate_user_data --list
-curl -s https://rag-gel.vercel.app/api/health | python -m json.tool
-node shot.mjs http://localhost:5173               # both pages x 5 bp x 2 themes
-node layout_check.mjs http://localhost:5173       # drag/collapse/persistence
+# Tests — 122 passing at time of writing
+.venv\Scripts\python -m pytest tests/ -v
+
+# Free retrieval benchmark (no LLM call). --with-rerank costs one Cohere
+# call per question; --ceiling separates a ranking problem from a retrieval one.
+.venv\Scripts\python -m eval.run_eval --retrieval-only
+.venv\Scripts\python -m eval.run_eval --retrieval-only --with-rerank --ceiling
+
+# Regenerate the baseline after ANY corpus / golden set / chunking / model change.
+# Read the diff before committing — regenerating blindly launders a regression.
+.venv\Scripts\python -m eval.baseline
+
+# Demo vectors, after an embedding-model or chunking change (else guest-login 504s)
+.venv\Scripts\python -m ragchat.demo_vectors
+
+# Frontend: both pages x 5 breakpoints x 2 themes; fails on overflow or page error
+node shot.mjs http://localhost:5173
+node layout_check.mjs http://localhost:5173
 ```
 
-`.claude/launch.json` now defines **both** dev servers (`frontend`, `backend`), so
-the two node scripts above have an API to talk to.
+The golden-set generator lives outside the repo (it was a scratchpad script). If
+the corpus changes, it must be rewritten or recovered — it is what guarantees the
+verbatim invariant. **Consider committing it under `eval/` as part of §2.1.**
 
 ---
 
-## 9. Remaining work, in order
+## 5. Working agreements with this user
 
-Items 1–2, 4–5 of the previous list are **done** (see §0). What is left:
+- **Interview with `AskUserQuestion` option cards**, not numbered questions in
+  prose. They said so directly. Batch a round into one call, recommendation
+  first, tradeoff in the description.
+- **Explain commands in plain language** — purpose, outcome, and a choice. Never
+  hand over a bare shell command. Prefer running it yourself and reporting.
+- They read carefully and push back well. Twice they answered a question based on
+  a misreading of *my* wording (they thought "lower the reap limit to 3" meant
+  capping guest chat turns). **If an answer sounds like a yes to a different
+  question, re-ask rather than proceeding.**
+- They asked for speed, explicitly to shrink the exposure window. Prefer shipping
+  verified tranches over long silent stretches.
 
-### Phase 3 — landing page + routing — **DONE** (`30d950d`)
+---
 
-All five pieces shipped in one commit, as required. Open decisions §7.1–§7.3
-are all settled: JetBrains Mono for both the app's telemetry register and the
-landing hero (no second webfont), and a pure-CSS starfield instead of an
-image, so there is no licence question and no network request.
+## 6. Suggested skills
 
-The A1–A4 tiles carry **structural facts only** — 46 golden questions, 10
-corpus documents, 768 dimensions, 1 function — not benchmark scores. Scores
-would need a published run behind them and would go stale on a static page
-with nothing to notice. If that changes, `eval/run_eval.py:334` has the
-published targets.
+Call these via the `Skill` tool:
 
-**Dev note:** there is no `/app` rewrite on the Vite dev server — that lives
-in `vercel.json`. The app is at **`/app.html`** in development.
+- **`anthropic-skills:grilling`** — for any multi-decision design work. This user
+  responds very well to it; the guest-lifecycle design in §2.4 came out of it
+  cleanly. Combine with the option-card rule in §5.
+- **`code-review`** — before shipping §2.2 and §2.4. Both touch auth, deletion
+  and CI, where a mistake is expensive and not obvious from tests.
+- **`security-review`** — specifically for §1 (a new cookie) and §2.4 (a sweep
+  endpoint with a shared secret and a deletion path). Worth one deliberate pass.
 
-### Phase 4 — product depth — **DONE** (`2fd3ed1`, `d50322a`, `4099e90`)
+---
 
-Three commits, one per plan step: presets (step 7), inline help and sequenced
-empty states (step 10), the ⌘K palette (step 11). The step-10 copy bug is gone —
-the empty conversation now offers per-document suggested questions instead of
-telling a guest to add sources they already have.
+## 7. Open risk the user has accepted
 
-Decisions worth keeping:
+The KFD documents were publicly fetchable for some time before the history purge
+in `e2b2ecb`. The purge removed them from the repo and every commit (verified: no
+blob in any of 95 commits contains the markers), and the paths now 404. It does
+**not** undo any copy taken beforehand. The user has been told; treat the content
+as disclosed rather than recovered.
 
-- **Presets set the ten pipeline keys only.** Never the model or provider fields:
-  switching embedding provider re-points every vector in the store and 422s
-  outright without a key, so a card called "Fast" must not decide it. Each card
-  computes its own "needs re-index" badge against the **saved** config, not
-  against another preset.
-- **The re-index warning used to fire on every save.** The server derives
-  `needs_reindex` from which keys were *sent* and this form always sends all of
-  them, so the one save that mattered looked like the fourteen that did not. The
-  frontend now compares against the config it loaded.
-- **Demo tier is read-only in fact, not just at the Save button** — the fields are
-  `disabled` (and styled to look it). A form that silently ignores you is worse
-  than one that says no.
-- **Only one beat strip is on screen at a time.** `beatsHtml(n)` returns nothing
-  unless `n` is the current beat, so the guide sits beside the next action instead
-  of appearing in three empty states at once. Beat 4 has no empty state left by
-  the time it is reachable, so its nudge rides on the readout chip.
-- **The glossary replaced `title` attributes, which do not exist on touch.** That
-  was the plan's specific complaint about the topbar toggles, and it applied to
-  the definition of the app's own switches.
-- **Palette commands click the real controls.** Guest locks, disabled states and
-  confirmations live on those handlers; a palette with its own copies would be a
-  second, laxer way in.
-
-### Found while building phase 4 — not fixed
-
-**Demo corpus seeding drops a document intermittently.** Roughly one local guest
-in three lands with one of the two seeded files instead of both, while the
-`__demo_template__` account has both `ready`. `seed_demo_corpus`
-(`ragchat/guests.py`) commits each clone **before** `copy_user_chunks`, so a
-throw in the copy leaves the loop half-done with a committed document behind it.
-Worth a look: the visitor path is exactly where this shows.
-
-The frontend no longer depends on it — suggested questions are keyed per document
-and gated on `is_demo`, so a visitor holding one seeded file still gets the
-questions that file answers.
-
-### Phase 5 — mobile
-
-Deliberately last: it re-lays-out everything above it. Scope (full separate
-product shape vs. responsive-only) was left open pending Phase 2 and is now
-ready to decide.
-
-### Backend, unstarted
-
-A **retrieval-only CI gate** running the 46 golden questions on every push at
-zero LLM cost.
-
-### Noted, not chased
-
-Running locally against a scratch DB with **`config.yaml` defaults**, an answer
-came back echoing the rewritten query rather than answering it, and the judge
-returned a reasoning block with no verdict. Production runs a tuned
-`config_overrides` row, not these defaults, so this may be an artefact of the
-scratch environment rather than a live defect — but it is worth one deliberate
-look, because both symptoms would be invisible from `/api/health`.
+A pre-purge backup bundle exists only in this session's scratchpad and will not
+survive. If the originals matter, they must be recovered from elsewhere.
