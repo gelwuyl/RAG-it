@@ -933,6 +933,11 @@ html.identity-resolved .identity-hint { display: none; }
   text-transform: uppercase;
 }
 .eval-chip:hover { color: var(--text); }
+/* The verdict word ("Partly graded", "Grounded") is the headline of the whole
+   readout, so it takes the accent like the labels under it. The rest of the
+   chip — the meter and caret — stays muted, or the accent stops meaning
+   anything by being everywhere. */
+.eval-state { color: var(--primary-ink); }
 .eval-dot {
   width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
   background: var(--muted);
@@ -981,8 +986,12 @@ html.identity-resolved .identity-hint { display: none; }
   font-size: var(--text-micro);
   letter-spacing: var(--tracking-telemetry);
 }
+/* Lime, not muted grey. These labels ARE the instrument (the gloss beneath
+   each one is the footnote), and in a single-accent system the accent is what
+   marks the reading you are meant to take. Muted put them below their own
+   explanations in the visual order. */
 .eval-label {
-  color: var(--muted); min-width: 104px; font-weight: 500;
+  color: var(--primary-ink); min-width: 104px; font-weight: 500;
   text-transform: uppercase;
 }
 .eval-value { font-weight: 700; font-variant-numeric: tabular-nums; }

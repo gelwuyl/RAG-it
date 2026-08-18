@@ -242,12 +242,17 @@ def back_date(db: Session, user: User) -> None:
     db.commit()
 
 
-def create_guest(db: Session) -> User:
-    """Provision a fresh, private guest workspace."""
-    # A visitor is waiting on this request, so the inline reap is a backstop
-    # kept deliberately tiny — see INLINE_REAP_LIMIT. The scheduled sweeper is
-    # what actually keeps the table clean.
-    reap_stale_guests(db, limit=INLINE_REAP_LIMIT)
+def create_guest(db: Session, *, reap: bool = True) -> User:
+    """Provision a fresh, private guest workspace.
+
+    `reap=False` skips the inline cleanup backstop. The sign-in path uses it,
+    because that request is the FIRST thing a visitor waits on and cleanup is
+    not work they asked for: even two workspaces measured 1.7s of Neon round
+    trips in front of an empty screen. The seeding request that follows runs it
+    instead — same backstop, off the critical path.
+    """
+    if reap:
+        reap_stale_guests(db, limit=INLINE_REAP_LIMIT)
     guest = User(
         provider=GUEST_PROVIDER,
         sub=f"guest-{new_id()}",

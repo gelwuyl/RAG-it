@@ -560,34 +560,89 @@ def guest_login(request: Request, response: Response, db: Session = Depends(get_
         guests.touch(db, existing)
         return {"id": existing.id, "name": existing.name, "guest": True}
 
-    # Timed, and the timings are returned. This request has a stated budget —
-    # under 10 seconds — and it is the FIRST thing a visitor waits on, so
-    # "it feels slow" has to be answerable without adding instrumentation after
-    # the fact. Durations only; nothing here is sensitive. Same reasoning as
-    # /api/health reporting the effective config.
+    # ONE INSERT and a cookie. Nothing else.
+    #
+    # This used to seed the demo corpus and run the cleanup backstop here too,
+    # and measured 8.1s on the deployment — 6.4s of copying sample documents
+    # and 1.7s of clearing up after previous visitors, all in front of somebody
+    # looking at an empty screen. Neither is work they asked for, and neither
+    # has to finish before they can use the app.
+    #
+    # So the workspace exists immediately and POST /api/auth/guest-seed fills
+    # it while they read the page. Same sliced-job shape the benchmark uses:
+    # each request does one bounded unit and commits before returning, which is
+    # the only thing that works on a function frozen the moment it responds.
     t0 = time.time()
-    guest = guests.create_guest(db)
-    t_create = time.time()
+    guest = guests.create_guest(db, reap=False)
+    set_session_cookie(response, guest.id, kind="guest")
+    return {
+        "id": guest.id,
+        "name": guest.name,
+        "guest": True,
+        # The client calls /api/auth/guest-seed next. Saying so in the payload
+        # rather than leaving it implied means a caller that ignores it gets an
+        # empty workspace, not a broken one.
+        "seeded": False,
+        "timings_ms": {"create_ms": round((time.time() - t0) * 1000)},
+    }
+
+
+@app.post("/api/auth/guest-seed")
+def guest_seed(
+    user: User = Depends(authn.get_current_user),
+    db: Session = Depends(get_session),
+):
+    """Fill a guest workspace with the sample documents. Called after sign-in.
+
+    Split out of guest-login so the visitor gets a usable workspace in one
+    round trip instead of waiting on ~6.4s of document copying they did not ask
+    for. By the time they have read the page, this has landed.
+
+    Idempotent: a workspace that already has its sample documents returns
+    immediately. The client can retry, and a double-fired request costs one
+    SELECT rather than a second copy of the corpus.
+    """
+    if not guests.is_guest(user):
+        # Signed-in accounts own their own documents; seeding one would put the
+        # demo corpus in a real workspace.
+        return {"seeded": False, "reason": "not a guest workspace"}
+
+    existing = (
+        db.query(Document)
+        .filter(Document.user_id == user.id, Document.is_demo.is_(True))
+        .count()
+    )
+    if existing:
+        return {"seeded": True, "documents": existing, "reason": "already seeded"}
+
+    t0 = time.time()
+    copied = 0
     try:
-        guests.seed_demo_corpus(db, guest)
+        copied = guests.seed_demo_corpus(db, user)
     except Exception:
         # An empty workspace is a worse demo but still a working one. Per-file
         # failures are already handled inside seed_demo_corpus; reaching here
         # means something broader broke, so log it — swallowing this silently
         # is how the corpus went missing for weeks without a trace.
-        log.exception("guest %s: demo corpus seeding failed", guest.id)
+        log.exception("guest %s: demo corpus seeding failed", user.id)
         db.rollback()
     t_seed = time.time()
-    set_session_cookie(response, guest.id, kind="guest")
-    timings = {
-        # create_guest also runs the inline reap backstop, so a slow number
-        # here means cleanup is landing in a visitor's path again.
-        "create_ms": round((t_create - t0) * 1000),
-        "seed_ms": round((t_seed - t_create) * 1000),
-        "total_ms": round((t_seed - t0) * 1000),
+
+    # The cleanup backstop, moved off the sign-in path. Still bounded to
+    # INLINE_REAP_LIMIT, and still only a backstop — the scheduled sweeper does
+    # the real work — but now nobody is staring at a blank page while it runs.
+    try:
+        guests.reap_stale_guests(db, limit=guests.INLINE_REAP_LIMIT)
+    except Exception:
+        log.exception("inline reap backstop failed")
+    return {
+        "seeded": copied > 0,
+        "documents": copied,
+        "timings_ms": {
+            "seed_ms": round((t_seed - t0) * 1000),
+            "reap_ms": round((time.time() - t_seed) * 1000),
+        },
     }
-    log.info("guest %s provisioned: %s", guest.id, timings)
-    return {"id": guest.id, "name": guest.name, "guest": True, "timings_ms": timings}
 
 
 @app.post("/api/auth/leaving")

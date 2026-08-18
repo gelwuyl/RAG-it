@@ -15,6 +15,7 @@ const state = {
   evalData: null,     // last /api/eval payload, so an answer can place itself against the run
   evalBaseline: null, // eval/baseline.json — what a bar is measured against
   simThreshold: 0,    // live retrieval threshold, marked on the per-answer meter
+  seeding: null,      // in-flight sample-document copy, so the sources pane can say so
   bootUsageSkipped: false, // consumes the one duplicate status fetch at boot
   deepSearch: false,  // per-QUESTION literal scan; sent with ask, never stored
   // Documents + folders currently in the workspace. Only the COUNT is kept:
@@ -379,8 +380,15 @@ async function initAuth() {
     // exists to prevent. guest-login gives each visitor their own.
     if (!status.authenticated) {
       try {
-        await api("/api/auth/guest-login", { method: "POST" });
+        const created = await api("/api/auth/guest-login", { method: "POST" });
         status = await api("/api/auth/status");
+        // The sample documents are NOT in that workspace yet. Filling it is a
+        // second request, deliberately: doing it inline measured 6.4s of
+        // copying in front of an empty screen, and nobody asked for sample
+        // documents before they had seen the app. Started here and pointedly
+        // NOT awaited — the workspace is already usable, and this lands while
+        // the visitor is still reading the page.
+        if (created && created.seeded === false) state.seeding = seedGuestWorkspace();
       } catch (e) {
         // No guest workspace could be provisioned (DB down, seeding failed).
         // Fall through to the sign-in gate rather than booting into an app
@@ -539,6 +547,52 @@ function renderGuestState() {
 // Usage changes on every add and delete, so the badge has to be refreshed from
 // the server rather than incremented locally — the server is the only thing
 // that knows which documents count against the cap.
+// The sources pane is empty for two different reasons and they need different
+// words. "Upload a source to begin" under a workspace whose sample documents
+// are still being copied reads as "there will never be anything here", which
+// is how a visitor decides the app is broken and leaves.
+function renderSourcesEmptyState() {
+  const el = $("sources-empty");
+  if (!el) return;
+  const empty = state.sourceCount === 0;
+  el.classList.toggle("hidden", !empty);
+  if (!empty) return;
+  const waiting = !!state.seeding;
+  el.classList.toggle("is-waiting", waiting);
+  const title = el.querySelector(".empty-title");
+  const text = el.querySelector(".empty-text");
+  if (waiting) {
+    title.textContent = "Adding sample documents…";
+    text.textContent =
+      "Your workspace is ready — the samples are being copied into it. " +
+      "You can upload your own files now without waiting.";
+  } else {
+    title.textContent = "Upload a source to begin";
+    text.textContent =
+      "Drop a file above, paste a URL, or point at a folder. " +
+      "Everything you add is chunked, embedded and cited.";
+  }
+}
+
+// Fill a new guest workspace with the sample documents, in the background.
+//
+// Failure here is not fatal and must not be shouted about: an empty workspace
+// is a worse demo, not a broken app, and the visitor can upload their own
+// files regardless. The sources pane says what is happening while it runs.
+async function seedGuestWorkspace() {
+  try {
+    const r = await api("/api/auth/guest-seed", { method: "POST" });
+    await refreshSources();
+    return r;
+  } catch (e) {
+    console.error("sample documents could not be added:", e);
+    return null;
+  } finally {
+    state.seeding = null;
+    renderSourcesEmptyState();
+  }
+}
+
 async function refreshGuestUsage() {
   if (!state.isGuest) return;
   // Skip exactly ONE fetch: the one refreshSources() triggers during boot,
@@ -871,7 +925,7 @@ async function refreshSources() {
   }
   state.sourceCount = docs.length + folders.length;
   $("source-count").textContent = String(state.sourceCount);
-  $("sources-empty").classList.toggle("hidden", state.sourceCount > 0);
+  renderSourcesEmptyState();
   // Suggested questions are only honest while the document they are about is
   // present, so they are collected per seeded file. Exactly two of the ten corpus
   // files are exposed to guests and that limit is deliberate (guests.py) — the
@@ -1080,6 +1134,7 @@ async function cleanUpOrphanChunks() {
 /* Tuning parameters modal */
 function openSettings() {
   $("settings-overlay").classList.remove("hidden");
+  setAdvanced(false);   // presets first, every time
   $("settings-note").classList.add("hidden");
   // Say up front that nothing here will save, rather than letting a guest tune
   // ten fields and meet the refusal at the Save button.
@@ -1259,27 +1314,25 @@ function updatePresetSelection() {
   }
 }
 
-// Advanced stays where you left it. Collapsing it on every open would make the
-// full field set feel hidden rather than folded, and this is a tuning app.
-const ADVANCED_KEY = "ragchat-settings-advanced";
-
-function setAdvanced(open, remember) {
+// Advanced starts FOLDED every time the dialog opens.
+//
+// It used to persist across sessions, on the reasoning that this is a tuning
+// app and collapsing it each time would make the fields feel hidden rather
+// than folded. Reversed deliberately: the presets are the whole point of the
+// dialog, and someone who opened the fields once to look at them then met a
+// wall of fifteen inputs on every visit afterwards, with the four cards that
+// answer the question pushed off the top. Anyone who wants the fields is one
+// click away and that click is labelled.
+function setAdvanced(open) {
   $("advanced-fields").classList.toggle("hidden", !open);
   $("advanced-toggle").setAttribute("aria-expanded", String(open));
-  if (remember) {
-    try { localStorage.setItem(ADVANCED_KEY, open ? "1" : "0"); } catch { /* storage off */ }
-  }
 }
 
 $("advanced-toggle").onclick = () => {
-  setAdvanced($("advanced-fields").classList.contains("hidden"), true);
+  setAdvanced($("advanced-fields").classList.contains("hidden"));
 };
 
-(function restoreAdvanced() {
-  let open = false;
-  try { open = localStorage.getItem(ADVANCED_KEY) === "1"; } catch { /* storage off */ }
-  setAdvanced(open, false);
-})();
+setAdvanced(false);
 
 // One delegated listener rather than fifteen: any edit inside the advanced
 // fields re-derives which preset (if any) the form now describes.
@@ -2750,7 +2803,7 @@ function paletteCommands() {
       label,
       run: () => {
         openSettings();
-        setAdvanced(true, true);
+        setAdvanced(true);
         const field = $(id);
         field?.scrollIntoView({ block: "center" });
         field?.focus();

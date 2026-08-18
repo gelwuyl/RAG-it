@@ -325,3 +325,72 @@ def test_sweep_ignores_a_junk_limit_instead_of_erroring(client):
     r = client.post("/api/admin/sweep-guests?limit=abc",
                     headers={"x-sweep-secret": SWEEP_SECRET})
     assert r.status_code == 200, r.text
+
+
+# --- sign-in is one INSERT; the sample documents follow separately ----------
+
+def test_guest_login_does_not_seed_or_reap(client, monkeypatch):
+    """Both measured as pure waiting in front of an empty screen: 6.4s of
+    copying sample documents and 1.7s of clearing up after previous visitors,
+    neither of which the arriving visitor asked for."""
+    from ragchat import guests
+
+    called = []
+    monkeypatch.setattr(guests, "seed_demo_corpus",
+                        lambda db, g: called.append("seed") or 0)
+    monkeypatch.setattr(guests, "reap_stale_guests",
+                        lambda db, **k: called.append("reap") or 0)
+
+    r = client.post("/api/auth/guest-login")
+    assert r.status_code == 200, r.text
+    assert r.json()["seeded"] is False, "the client must know to ask for seeding"
+    assert called == [], f"sign-in did work it should have deferred: {called}"
+
+
+def test_the_seed_request_does_both(client, monkeypatch):
+    from ragchat import guests
+
+    called = []
+    monkeypatch.setattr(guests, "seed_demo_corpus",
+                        lambda db, g: called.append("seed") or 2)
+    monkeypatch.setattr(guests, "reap_stale_guests",
+                        lambda db, **k: called.append("reap") or 0)
+
+    client.post("/api/auth/guest-login")
+    r = client.post("/api/auth/guest-seed")
+    assert r.status_code == 200, r.text
+    assert r.json()["seeded"] is True
+    assert called == ["seed", "reap"], called
+
+
+def test_seeding_twice_does_not_copy_the_corpus_twice(client, monkeypatch):
+    """The client can retry, and a double-fired request must cost a SELECT
+    rather than a second copy of every sample document."""
+    from ragchat import guests
+    from ragchat.db import Document, User
+
+    monkeypatch.setattr(guests, "reap_stale_guests", lambda db, **k: 0)
+
+    def _fake_seed(db, g):
+        db.add(Document(user_id=g.id, source_type="upload", title="demo.md",
+                        status="ready", is_demo=True, size_bytes=1))
+        db.commit()
+        return 1
+
+    monkeypatch.setattr(guests, "seed_demo_corpus", _fake_seed)
+    client.post("/api/auth/guest-login")
+    assert client.post("/api/auth/guest-seed").json()["seeded"] is True
+
+    monkeypatch.setattr(guests, "seed_demo_corpus",
+                        lambda db, g: pytest.fail("seeded a second time"))
+    again = client.post("/api/auth/guest-seed")
+    assert again.json() == {"seeded": True, "documents": 1, "reason": "already seeded"}
+
+
+def test_seeding_refuses_a_signed_in_workspace(client):
+    """It would put the demo corpus into somebody's real documents."""
+    client.post("/api/auth/register",
+                json={"username": f"u{os.urandom(3).hex()}", "password": "pw-12345678"})
+    r = client.post("/api/auth/guest-seed")
+    assert r.status_code == 200
+    assert r.json()["seeded"] is False
