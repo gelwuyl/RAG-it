@@ -192,3 +192,57 @@ def test_the_searcher_closure_binds_one_user(db):
     fn = deepsearch.searcher(db, u1)
     hits = fn("distinctivetoken")
     assert len(hits) == 1 and hits[0]["title"] == "one.txt"
+
+
+# --- windows are clean, and do not duplicate the ranked pool ---------------
+
+def test_a_window_never_starts_or_ends_mid_word(db):
+    """An excerpt beginning 'inimum clearance' is what the model is handed AND
+    what the citation shows the reader."""
+    u = _user()
+    body = ("word " * 200) + "SENTINELTOKEN" + (" word" * 200)
+    _doc(db, u, "a.txt", body)
+    hit = deepsearch.literal_passages(db, u, "SENTINELTOKEN")[0]
+    text = hit["text"]
+    # The excerpt is stripped, so its own ends must align with the source's
+    # word boundaries: every token in it must be a whole word from the source.
+    assert text.split()[0] in body.split()
+    assert text.split()[-1] in body.split()
+    assert "SENTINELTOKEN" in text
+
+
+def test_a_deep_hit_the_ranked_pool_already_carries_is_dropped(db):
+    """On a small corpus a whole document is one chunk, so the deep window and
+    the retrieved chunk are the same prose. Sending both spends context on a
+    second copy — measured live, it turned a correct answer into a refusal."""
+    from ragchat.pipeline import _drop_duplicates
+
+    u = _user()
+    body = FILLER + "Technicians can force an update by entering code 4455." + FILLER
+    _doc(db, u, "a.txt", body)
+    deep = deepsearch.literal_passages(db, u, "code 4455")
+    assert deep, "nothing to de-duplicate"
+
+    ranked = [{"text": body, "similarity": 0.4, "doc_id": "a", "title": "a.txt"}]
+    assert _drop_duplicates(deep, ranked) == []
+
+
+def test_a_deep_hit_the_ranked_pool_lacks_survives(db):
+    from ragchat.pipeline import _drop_duplicates
+
+    u = _user()
+    _doc(db, u, "a.txt", FILLER + "entering code 4455 forces an update" + FILLER)
+    deep = deepsearch.literal_passages(db, u, "code 4455")
+    ranked = [{"text": "Something else entirely about coffee.",
+               "similarity": 0.4, "doc_id": "b", "title": "b.txt"}]
+    assert _drop_duplicates(deep, ranked) == deep
+
+
+def test_de_duplication_is_a_no_op_when_there_is_nothing_to_compare(db):
+    from ragchat.pipeline import _drop_duplicates
+
+    u = _user()
+    _doc(db, u, "a.txt", FILLER + "havenmark" + FILLER)
+    deep = deepsearch.literal_passages(db, u, "havenmark")
+    assert _drop_duplicates(deep, []) == deep
+    assert _drop_duplicates([], deep) == []

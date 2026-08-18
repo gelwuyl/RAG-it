@@ -412,3 +412,22 @@ def test_a_pool_below_the_threshold_refuses_without_generating(monkeypatch):
     res = _pl.ask("user-DS5", "unrelated question", [], _make_cfg())
     assert res["not_found"]
     assert not called, "spent a generation call on a pool that cleared nothing"
+
+
+def test_candidate_k_bounds_the_pool_even_without_the_bm25_index():
+    """`_BM25_OBJ` is an in-memory, per-process index built during ingest, so a
+    freshly started process has none and the fusion branch is skipped. That
+    return path handed back the whole over-fetched vector list — 30 chunks —
+    ignoring candidate_k entirely, which makes every measurement taken on that
+    setting wrong.
+    """
+    u = "user-CK"
+    cfg = _make_cfg()
+    for i in range(12):
+        _pl.ingest_document_text(u, f"d{i}", f"doc {i}", f"Chunk number {i} about coffee and energy.", cfg)
+
+    # Simulate the fresh process: the collection is on disk, the BM25 cache is not.
+    _store._BM25_OBJ.clear()
+
+    got = _pl.retrieve(u, "coffee", _make_cfg(candidate_k=3))
+    assert len(got) <= 3, f"candidate_k=3 returned {len(got)} chunks"

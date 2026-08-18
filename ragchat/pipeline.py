@@ -336,6 +336,42 @@ def _rerank(
     return [c for _, c in scored[: cfg.top_k]]
 
 
+_WS = re.compile(r"\s+")
+
+
+def _drop_duplicates(extra: list[dict], have: list[dict]) -> list[dict]:
+    """Remove extra passages whose text the ranked pool already carries.
+
+    Deep search reads whole documents, so on a small corpus its window and a
+    retrieved chunk are frequently the SAME prose. Sending both spends context
+    on a second copy and, measured live, made answers worse rather than better:
+    a question that was answered correctly with deep search off came back "I
+    couldn't find this" with it on, because most of what the model received was
+    the same text twice.
+
+    Containment is checked on a middle slice rather than the whole passage: the
+    two are rarely byte-identical (different boundaries), but if a window's core
+    already appears in a retrieved chunk then the chunk is the better copy —
+    it is the unit that was indexed, and it carries a real similarity score.
+    """
+    if not extra or not have:
+        return extra
+    corpus = "\n".join(_WS.sub(" ", c.get("text") or "") for c in have)
+    out = []
+    for c in extra:
+        t = _WS.sub(" ", c.get("text") or "").strip()
+        if not t:
+            continue
+        # A slice from the middle, long enough to be distinctive and short
+        # enough to survive the boundaries differing at both ends.
+        start = max(0, len(t) // 2 - 80)
+        core = t[start:start + 160]
+        if core and core in corpus:
+            continue
+        out.append(c)
+    return out
+
+
 def _build_context(chunks: list[dict]) -> str:
     parts = []
     for i, c in enumerate(chunks, start=1):
@@ -483,7 +519,7 @@ def ask(
     deep_chunks: list[dict] = []
     if deep_search is not None:
         try:
-            deep_chunks = deep_search(effective_query)
+            deep_chunks = _drop_duplicates(deep_search(effective_query), chunks)
         except Exception:
             # A scan failing must not cost the visitor their answer; ranked
             # retrieval already has one.

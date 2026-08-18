@@ -402,6 +402,22 @@ def ensure_demo_template(db: Session, cfg) -> User:
     return template
 
 
+def _drop_orphans(guest_id: str, clone_id: str, title: str) -> None:
+    """Remove chunks a failed clone may have left behind. Never raises.
+
+    Every abandoned clone goes through here, because a chunk with no document
+    row is worse than a missing document: query_chunks scopes by user and
+    fingerprint, not by whether the row exists, so it surfaces in answers
+    citing a source the visitor cannot open.
+    """
+    from .vectordb import delete_document_chunks
+
+    try:
+        delete_document_chunks(guest_id, clone_id)
+    except Exception:
+        log.exception("demo seeding: could not clean up orphan chunks for %s", title)
+
+
 def seed_demo_corpus(db: Session, guest: User) -> int:
     """Give a new guest their own copy of the demo corpus — no embedding calls.
 
@@ -478,6 +494,16 @@ def seed_demo_corpus(db: Session, guest: User) -> int:
                 "demo seeding: copying %s to guest %s failed; skipping the row "
                 "rather than seeding a document with no vectors", title, guest_id
             )
+            # A copy is not atomic — Chroma reads the source collection and then
+            # writes to the destination, so a failure part-way leaves chunks
+            # behind with no row to own them. Those are worse than nothing:
+            # query_chunks scopes by user and fingerprint, NOT by whether a
+            # document row exists, so they surface in answers citing a document
+            # the visitor cannot see. The commit-failure branch below always
+            # cleaned up; this one did not, and it is the branch that actually
+            # fires (observed locally when two processes held the same Chroma
+            # directory: "Error creating hnsw segment reader").
+            _drop_orphans(guest_id, clone_id, title)
             continue
         if n <= 0:
             db.rollback()
@@ -485,6 +511,7 @@ def seed_demo_corpus(db: Session, guest: User) -> int:
                 "demo seeding: %s copied 0 chunks to guest %s (template vectors "
                 "missing?); skipping the row", title, guest_id
             )
+            _drop_orphans(guest_id, clone_id, title)
             continue
         try:
             db.commit()
@@ -495,10 +522,7 @@ def seed_demo_corpus(db: Session, guest: User) -> int:
             # answers citing a document the visitor does not have.
             db.rollback()
             log.exception("demo seeding: committing %s for guest %s failed", title, guest_id)
-            try:
-                delete_document_chunks(guest_id, clone_id)
-            except Exception:
-                log.exception("demo seeding: could not clean up orphan chunks for %s", title)
+            _drop_orphans(guest_id, clone_id, title)
             continue
         copied += 1
     return copied

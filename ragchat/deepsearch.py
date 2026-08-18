@@ -132,6 +132,25 @@ def _fold(text: str) -> str:
     return unicodedata.normalize("NFKC", text).casefold()
 
 
+def _snap(text: str, lo: int, hi: int) -> tuple[int, int]:
+    """Widen a span out to the nearest word boundaries.
+
+    A fixed-width window cuts mid-word — an excerpt beginning "inimum clearance"
+    is what the model is handed and what the citation shows the reader. It also
+    defeats the duplicate check in the pipeline, which compares text against the
+    ranked chunks: half a word matches nothing.
+
+    Widen rather than narrow, so the matched term can never be trimmed off by
+    the very step meant to tidy the edges.
+    """
+    while lo > 0 and not text[lo - 1].isspace():
+        lo -= 1
+    n = len(text)
+    while hi < n and not text[hi].isspace():
+        hi += 1
+    return lo, hi
+
+
 def _windows(text: str, folded: str, terms: list[str]) -> list[tuple[int, int, set[str]]]:
     """Merged (start, end, matched-terms) spans around every literal hit."""
     spans: list[tuple[int, int, str]] = []
@@ -145,9 +164,10 @@ def _windows(text: str, folded: str, terms: list[str]) -> list[tuple[int, int, s
             i = folded.find(needle, start)
             if i < 0:
                 break
-            spans.append((max(0, i - WINDOW_CHARS),
-                          min(len(text), i + len(needle) + WINDOW_CHARS),
-                          term))
+            lo, hi = _snap(text,
+                           max(0, i - WINDOW_CHARS),
+                           min(len(text), i + len(needle) + WINDOW_CHARS))
+            spans.append((lo, hi, term))
             start = i + len(needle)
             found += 1
     if not spans:

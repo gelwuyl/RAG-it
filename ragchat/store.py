@@ -219,7 +219,19 @@ def query_chunks(
 
     if bm25_index and query_text and col.name in _BM25_OBJ:
         return _bm25_fuse(col.name, chunks, query_text, n_results)
-    return chunks
+    # Slice here too. `v_n` deliberately over-fetches (30) so BM25 has something
+    # to promote from, and _bm25_fuse cuts back to n_results — but this return
+    # is the path taken when fusion CANNOT run, and it used to hand back all 30.
+    # candidate_k is a tunable setting the benchmark reports; a code path that
+    # quietly ignores it makes every measurement taken on it wrong.
+    #
+    # That path is reached more often than it looks: _BM25_OBJ is an in-memory,
+    # per-process index built during ingest, so a freshly started process has
+    # none until something re-ingests. Chroma is local dev only — the Neon
+    # backend uses Postgres full-text search, which is stateless and always
+    # available — but it means local retrieval can differ from deployed
+    # retrieval until the process has ingested something.
+    return chunks[: max(n_results, 1)]
 
 
 def _bm25_fuse(
