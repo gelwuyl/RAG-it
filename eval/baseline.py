@@ -28,25 +28,31 @@ from pathlib import Path
 
 BASELINE_FILE = Path(__file__).resolve().parent / "baseline.json"
 
-# Metrics the gate watches. Deliberately the retrieval ones only: they need no
-# LLM call, so the gate stays free and runs on every push. Generation and judge
-# scores move with model updates outside our control and would fail the build
-# for something nobody changed.
+# Metrics the gate watches. The EXACT ones, not the cosine ones.
+#
+# Retrieval only, so no LLM call and the gate stays free on every push —
+# generation and judge scores move with model updates outside our control and
+# would fail the build for something nobody changed.
+#
+# And exact rather than cosine because the cosine metrics carry ~20% error in
+# both directions and, worse, drift UPWARD as the corpus grows (metrics.py has
+# the measurements). A gate on those can be improved by adding filler documents
+# and would fire on embedding jitter. These are decidable string containment:
+# they change only when retrieval changes.
 GATED_METRICS = (
-    "context_recall",
-    "precision_at_k",
-    "mrr",
-    "ndcg_at_k",
-    "hit_rate_at_k",
+    "exact_context_recall",
+    "exact_precision_at_k",
+    "exact_mrr",
+    "exact_hit_rate_at_k",
 )
 
 # How far a metric may fall before the gate fails.
 #
-# Not tight, and deliberately so: MATCH_THRESHOLD is 0.45, which carries roughly
-# 20% false misses and 17% false positives (see metrics.py), so run-to-run
-# movement of a few points is measurement noise rather than a code change. A
-# tolerance below that noise floor produces a gate that cries wolf, and a gate
-# people learn to ignore is worse than no gate.
+# The gated metrics are deterministic, so there is no noise floor to clear and
+# this could in principle be zero. It is not, because retrieval order can still
+# shift for legitimate reasons — a re-embedded corpus, a provider-side model
+# update — and one question of 53 flipping is 1.9%. This tolerates that and
+# fails on anything larger.
 TOLERANCE = 0.05
 
 

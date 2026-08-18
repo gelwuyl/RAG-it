@@ -1,5 +1,5 @@
 {
-  "generated": "2026-08-18 14:32:41",
+  "generated": "2026-08-18 15:24:20",
   "mode": "retrieval-pre-rerank",
   "fingerprint": "2ba2611547c8",
   "embedding_model": "qwen/qwen3-embedding-8b",
@@ -9,10 +9,9 @@
   "n_questions": 53,
   "tolerance": 0.05,
   "metrics": {
-    "context_recall": 0.8836,
-    "precision_at_k": 0.6415,
-    "mrr": 0.9009,
-    "ndcg_at_k": 0.9826,
-    "hit_rate_at_k": 0.9623
+    "exact_context_recall": 0.7358,
+    "exact_precision_at_k": 0.2123,
+    "exact_mrr": 0.5299,
+    "exact_hit_rate_at_k": 0.7547
   }
 }

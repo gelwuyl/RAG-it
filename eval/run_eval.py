@@ -36,6 +36,10 @@ from ragchat.pipeline import (  # noqa: E402
 from ragchat.vectordb import delete_document_chunks  # noqa: E402
 from eval.metrics import (  # noqa: E402
     MATCH_THRESHOLD,
+    exact_context_recall,
+    exact_hit_rate_at_k,
+    exact_mrr_at_k,
+    exact_precision_at_k,
     context_recall,
     precision_at_k,
     mrr_at_k,
@@ -167,6 +171,7 @@ def score_item(
     question instead of top_k, several times the embedding spend.
     """
     question = item["question"]
+    golden_passages = item.get("golden_passages", [])
     golden_embs = item.get("_golden_embs")
     if golden_embs is None:
         golden_embs = embed_passages(
@@ -215,6 +220,13 @@ def score_item(
         "mrr": round(mrr_at_k(chunk_embs, golden_embs, k), 4),
         "ndcg_at_k": round(ndcg_at_k(chunk_embs, golden_embs, k), 4),
         "hit_rate_at_k": hit_rate_at_k(chunk_embs, golden_embs, k),
+        # Deterministic twins of the four above. No threshold, no embedding, no
+        # false anything — the CI gate compares these, because the cosine ones
+        # drift upward as the corpus grows (see metrics.py).
+        "exact_context_recall": round(exact_context_recall(final_texts, golden_passages), 4),
+        "exact_precision_at_k": round(exact_precision_at_k(final_texts, golden_passages, k), 4),
+        "exact_mrr": round(exact_mrr_at_k(final_texts, golden_passages, k), 4),
+        "exact_hit_rate_at_k": exact_hit_rate_at_k(final_texts, golden_passages, k),
         "retrieved": [
             {"title": c["title"], "similarity": round(c["similarity"], 4)}
             for c in final
@@ -278,6 +290,10 @@ def aggregate(results: list[dict], retrieval_only: bool = False) -> dict:
         "mrr": _mean([r["mrr"] for r in answerable]),
         "ndcg_at_k": _mean([r["ndcg_at_k"] for r in answerable]),
         "hit_rate_at_k": _mean([r["hit_rate_at_k"] for r in answerable]),
+        "exact_context_recall": _mean([r.get("exact_context_recall", 0.0) for r in answerable]),
+        "exact_precision_at_k": _mean([r.get("exact_precision_at_k", 0.0) for r in answerable]),
+        "exact_mrr": _mean([r.get("exact_mrr", 0.0) for r in answerable]),
+        "exact_hit_rate_at_k": _mean([r.get("exact_hit_rate_at_k", 0) for r in answerable]),
     }
     # Present only on a --ceiling run. Recall over the whole candidate pool: how
     # much the ranking is leaving on the table. A large gap between this and

@@ -127,3 +127,61 @@ def ndcg_at_k(
     for i, r in enumerate(all_rel[:k], start=1):
         idcg += r / math.log2(i + 1)
     return dcg / idcg if idcg > 0 else 0.0
+
+
+# ---------------------------------------------------------------------------
+# Exact containment metrics — deterministic, free, and what the CI gate uses.
+#
+# The cosine metrics above answer "is this chunk ABOUT the golden passage".
+# These answer "does this chunk CONTAIN it", which for a golden set whose
+# passages are guaranteed verbatim substrings (the generator enforces it) is
+# decidable exactly, with no threshold and no embedding call.
+#
+# They exist because the cosine metric has a pathology that makes it unfit to
+# fail a build on. Measured on this corpus at MATCH_THRESHOLD 0.45:
+#
+#   corpus size    false misses    false positives
+#   21 chunks         20.4%           17.2%
+#   39 chunks         20.4%           19.5%
+#
+# The false-positive rate RISES with corpus size, because more same-domain
+# chunks drift above the threshold. So cosine scores go UP as the corpus grows —
+# adding filler improves the number. A gate on that can be gamed by writing more
+# documents, and it carries a fifth error in both directions besides.
+#
+# The cosine metrics remain the reported, RAGAS-comparable ones. These are the
+# ones the gate compares, so a red build means something actually changed.
+# ---------------------------------------------------------------------------
+
+
+def _contains_any(text: str, passages: Iterable[str]) -> bool:
+    return any(p in text for p in passages)
+
+
+def exact_context_recall(retrieved_texts: list[str], passages: list[str]) -> float:
+    """Fraction of golden passages present verbatim in some retrieved chunk."""
+    if not passages:
+        return 0.0
+    hits = sum(1 for p in passages if any(p in t for t in retrieved_texts))
+    return hits / len(passages)
+
+
+def exact_precision_at_k(retrieved_texts: list[str], passages: list[str], k: int) -> float:
+    """Fraction of the top-k chunks that carry at least one golden passage."""
+    top = retrieved_texts[:k]
+    if not top:
+        return 0.0
+    return sum(1 for t in top if _contains_any(t, passages)) / len(top)
+
+
+def exact_hit_rate_at_k(retrieved_texts: list[str], passages: list[str], k: int) -> int:
+    """1 if any of the top-k chunks carries a golden passage, else 0."""
+    return int(any(_contains_any(t, passages) for t in retrieved_texts[:k]))
+
+
+def exact_mrr_at_k(retrieved_texts: list[str], passages: list[str], k: int) -> float:
+    """Reciprocal rank of the first top-k chunk carrying a golden passage."""
+    for rank, t in enumerate(retrieved_texts[:k], start=1):
+        if _contains_any(t, passages):
+            return 1.0 / rank
+    return 0.0
