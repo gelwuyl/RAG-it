@@ -11,7 +11,6 @@ const state = {
   currentChatId: null,
   currentCitations: [], // citations of the last assistant message, for the excerpt pane
   models: { chat: [], embedding: [] }, // proxy model catalog for the settings dropdowns
-  evalRunning: false, // true while the chunked benchmark loop is driving
   evalData: null,     // last /api/eval payload, so an answer can place itself against the run
   evalBaseline: null, // eval/baseline.json — what a bar is measured against
   simThreshold: 0,    // live retrieval threshold, marked on the per-answer meter
@@ -2275,9 +2274,12 @@ async function loadEval() {
     ]);
     if (base && base.baseline) state.evalBaseline = base.baseline;
     renderEval(data);
-    // A run left in flight (tab closed, reload mid-benchmark) resumes from the
-    // last committed slice instead of being stranded at "running" forever.
-    if (data.status === "running" && !state.evalRunning) driveEvalRun();
+    // Nothing resumes a run any more. There is no way to START one from the
+    // app, so a row left in "running" is abandoned by definition — and the
+    // client used to keep driving it on EVERY page load, which is what put
+    // "Scoring golden questions... 0/56" and a retry countdown on the
+    // deployment for minutes at a time, spending model calls the whole way.
+    // The server now retires such a row and serves the published result.
   } catch (e) {
     console.error("eval load failed:", e);
   }
@@ -2347,68 +2349,11 @@ function renderEval(data) {
   renderEvalQuestions(data.results || []);
 }
 
-// Drive the run to completion, one slice per request. Each POST /api/eval/step
-// does a bounded piece of work and commits it, so this loop is resumable: if
-// the tab is closed mid-run, reopening it picks up from the last committed
-// slice rather than starting over.
-// A step that overruns the serverless time limit returns 504 (or 502/503) and,
-// crucially, has NOT committed its slice — so re-issuing the request simply
-// redoes that same slice. Aborting the whole benchmark on the first such blip
-// threw away a run that was actually fine and resumable, which is what produced
-// "Benchmark failed: Request failed (504)" near the end of a run: the free-tier
-// quota depletes as the run proceeds, the server's own retry/backoff stretches a
-// step past the limit, and one timeout killed everything. Waiting and retrying
-// also gives the rate limit time to recover.
-const EVAL_TRANSIENT_STATUS = /\((408|409|425|429|500|502|503|504)\)/;
-// A function that hits its time limit does not always answer with a tidy 504 —
-// it often just drops the connection, which surfaces as a fetch-level TypeError
-// ("Failed to fetch" / "NetworkError" / "Load failed") with no status at all.
-// Same cause, same safe response: the slice never committed, so retry it.
-const EVAL_TRANSIENT_NETWORK = /failed to fetch|networkerror|network request failed|load failed/i;
-const EVAL_STEP_MAX_RETRIES = 5;
+// The benchmark step retry helpers lived here and are gone with the loop that
+// used them. Nothing in the app drives a run any more: the result ships with
+// it (eval/published_run.json) and the CLI re-measures when the numbers should
+// actually change.
 
-function isTransientEvalError(err) {
-  const msg = (err && err.message) || "";
-  return EVAL_TRANSIENT_STATUS.test(msg) || EVAL_TRANSIENT_NETWORK.test(msg);
-}
-
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-async function driveEvalRun() {
-  if (state.evalRunning) return;
-  state.evalRunning = true;
-  let failures = 0;
-  try {
-    for (;;) {
-      let data;
-      try {
-        data = await api("/api/eval/step", { method: "POST" });
-        failures = 0; // a slice landed — reset the budget
-      } catch (e) {
-        if (!isTransientEvalError(e) || ++failures > EVAL_STEP_MAX_RETRIES) throw e;
-        const wait = Math.min(2000 * 2 ** (failures - 1), 15000);
-        $("eval-status").textContent =
-          `Step timed out — retrying in ${Math.round(wait / 1000)}s ` +
-          `(attempt ${failures}/${EVAL_STEP_MAX_RETRIES}). Progress so far is saved.`;
-        await sleep(wait);
-        if (!state.evalRunning) break; // superseded while we were waiting
-        continue;
-      }
-      renderEval(data);
-      if (data.status !== "running") break;
-      if (!state.evalRunning) break; // cancelled by a new run starting
-    }
-  } catch (e) {
-    // A run can still be driven to completion when one exists — started from
-    // the CLI or the API — but nothing in the UI starts one any more, so there
-    // is no button to re-enable here.
-    $("eval-status").textContent =
-      "Benchmark paused: " + e.message +
-      " — progress is saved; reopen the Evaluation tab to resume.";
-  } finally {
-    state.evalRunning = false;
-  }
-}
 
 // ---------- collapsible panes (tablet / mobile) ----------
 

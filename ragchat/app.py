@@ -1554,6 +1554,23 @@ def get_eval(
     was right when there was nothing to show and wrong now that there is.
     """
     run = _active_run(db, user)
+
+    # A row still marked "running" is ABANDONED, not in progress.
+    #
+    # Nothing starts or advances a benchmark from the app any more, so such a
+    # row can only be left over from before. The client used to keep driving it
+    # on every page load — which is what put "Scoring golden questions... 0/56"
+    # and a retry countdown on the deployment for minutes at a time, spending
+    # model calls the whole way, on a screen the visitor could do nothing with.
+    #
+    # Retire it and serve the published result. Marked cancelled rather than
+    # deleted so the row is still there to look at if someone asks what happened.
+    if run is not None and run.status == "running":
+        run.status = "cancelled"
+        run.updated_at = time.time()
+        db.commit()
+        run = None
+
     payload = _run_payload(run)
     payload["can_run"] = not guests.is_guest(user)
     if run is not None:

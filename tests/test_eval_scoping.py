@@ -224,3 +224,29 @@ def test_your_own_run_replaces_the_published_one(client, monkeypatch):
     monkeypatch.setattr(rapp, "_active_run", lambda db, user: _Run())
     body = json.loads(_body(client))
     assert body.get("published") is not True
+
+
+def test_an_abandoned_running_row_does_not_hold_the_pane_hostage(client, monkeypatch):
+    """Nothing starts or advances a benchmark from the app any more, so a row
+    still marked "running" is left over from before. The client used to keep
+    driving it on every page load — minutes of "Scoring golden questions...
+    0/56" and a retry countdown on a screen the visitor could do nothing with,
+    spending model calls throughout.
+    """
+    import ragchat.app as rapp
+
+    _as_account(client)
+
+    class _Stuck:
+        id, status, error = "stuck", "running", None
+        total, completed = 56, 0
+        results = metrics = config = indexed_files = None
+        updated_at = started_at = 0.0
+        retrieval_only = False
+
+    stuck = _Stuck()
+    monkeypatch.setattr(rapp, "_active_run", lambda db, user: stuck)
+    body = json.loads(_body(client))
+
+    assert stuck.status == "cancelled", "the abandoned row was left running"
+    assert body["status"] != "running", body["status"]
