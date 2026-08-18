@@ -178,14 +178,49 @@ def test_the_latest_of_the_owners_own_runs_wins(client):
 # --------------------------------------------------------------------------
 
 
-def test_guest_response_is_flagged_locked(client):
-    """A guest is not looking at an empty result, they are looking at a feature
-    that is not theirs to run. The UI needs to tell those apart to show a
-    sign-in prompt instead of "No benchmark run yet"."""
+def test_a_guest_may_read_the_numbers_but_not_run_them(client):
+    """RUNNING the benchmark needs an account — it spends real model calls
+    against a shared quota. READING the results does not, and the pane used to
+    conflate the two: a guest got a sign-in prompt where the numbers go, which
+    hid the app's own evidence for its claims behind a login."""
     _as_guest(client)
-    assert json.loads(_body(client))["locked"] is True
+    body = json.loads(_body(client))
+    assert body["can_run"] is False
 
 
-def test_account_response_is_not_flagged_locked(client):
+def test_an_account_may_run_it(client):
     _as_account(client)
-    assert json.loads(_body(client)).get("locked") is not True
+    assert json.loads(_body(client))["can_run"] is True
+
+
+def test_a_caller_with_no_run_of_their_own_gets_the_published_one(client):
+    """The whole point: content on first paint, without every visitor driving
+    ~56 sliced requests through the live pipeline to see numbers that are the
+    same for all of them."""
+    from eval.published import load
+
+    if not load():
+        pytest.skip("no published run committed yet")
+    _as_guest(client)
+    body = json.loads(_body(client))
+    assert body["published"] is True
+    assert body["status"] == "done"
+    assert body["metrics"], "a published run with no metrics is not worth serving"
+
+
+def test_your_own_run_replaces_the_published_one(client, monkeypatch):
+    """A shipped result must never be shown as though the caller produced it."""
+    import ragchat.app as rapp
+
+    _as_account(client)
+
+    class _Run:
+        id, status, error = "r1", "done", None
+        total, completed = 5, 5
+        results = metrics = config = indexed_files = None
+        updated_at = started_at = 0.0
+        retrieval_only = True
+
+    monkeypatch.setattr(rapp, "_active_run", lambda db, user: _Run())
+    body = json.loads(_body(client))
+    assert body.get("published") is not True

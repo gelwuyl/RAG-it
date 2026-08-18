@@ -2296,25 +2296,16 @@ function renderEval(data) {
   state.evalData = data;
   const statusEl = $("eval-status");
   const runBtn = $("eval-run-btn");
-  // `locked` is not "no run yet" — it is a feature that is not this visitor's
-  // to run. Saying "No benchmark run yet" to a guest invites them to press a
-  // button that will answer 403, so say what actually unblocks it. The
-  // per-answer grades below still work for guests and are left alone.
-  if (data && data.locked) {
-    statusEl.textContent = "";
-    $("eval-scorecard").innerHTML = emptyState(
-      "◎",
-      "Benchmark needs an account",
-      "Sign in with Google to score retrieval and generation against the golden set. Every answer you ask below is still graded for faithfulness and relevance.",
-      `<p class="glossary-strip">${termHtml("golden-set")} · ${termHtml("faithfulness")} · ${termHtml("relevancy")}</p>`
-    );
-    $("eval-questions").innerHTML = "";
-    runBtn.disabled = true;
-    runBtn.classList.add("guest-locked");
-    return;
-  }
+  // Running the benchmark needs an account — it spends real model calls
+  // against a shared quota. Showing the RESULTS does not, and the pane used to
+  // conflate the two: a guest got a sign-in prompt where the numbers go, which
+  // hid the app's whole evidence for its own claims behind a login.
+  const canRun = data ? data.can_run !== false : true;
+  runBtn.disabled = !canRun;
+  runBtn.classList.toggle("guest-locked", !canRun);
   if (!data || data.status === "none") {
     statusEl.textContent = "";
+    runBtn.disabled = !canRun;
     // The pane used to say only "no run yet", which explained neither what a
     // benchmark is, how long it takes, nor that it spends real model calls —
     // a button with unstated cost behind it (plan §5).
@@ -2359,11 +2350,18 @@ function renderEval(data) {
     return;
   }
   // done
-  runBtn.disabled = false;
+  runBtn.disabled = !canRun;
   const ts = data.timestamp ? ` · ${data.timestamp}` : "";
   const ungraded = (data.metrics || {}).n_ungraded;
+  // Whose numbers these are is the first thing a reader needs. Presenting a
+  // shipped result as "your benchmark" would be a quiet lie, and the reader's
+  // very next thought would be "when did I run this?".
+  const whose = data.published
+    ? `Published run${ts} · ${data.n_corpus_files || "?"} sample documents` +
+      (canRun ? " · run your own to replace it" : "")
+    : "Latest benchmark" + ts;
   statusEl.textContent =
-    "Latest benchmark" + ts + (ungraded ? ` · ⚠ ${ungraded} ungraded (judge unavailable)` : "");
+    whose + (ungraded ? ` · ⚠ ${ungraded} ungraded (judge unavailable)` : "");
   renderScorecard(data.metrics || {}, data.mode);
   renderEvalQuestions(data.results || []);
 }

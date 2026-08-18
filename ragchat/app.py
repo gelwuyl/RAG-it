@@ -1536,16 +1536,52 @@ def get_eval(
     user: User = Depends(authn.get_current_user),
     db: Session = Depends(get_session),
 ):
-    """The CALLER'S latest benchmark report for the Evaluation pane.
+    """The caller's latest benchmark report, or the published one.
 
-    `locked` tells the UI to render a sign-in prompt where the scorecard goes,
-    rather than "No benchmark run yet" — a guest is not looking at an empty
-    result, they are looking at a feature that is not theirs to run.
+    The pane used to be empty until you ran the benchmark yourself, and running
+    it means the browser driving ~56 sliced requests through the live pipeline:
+    minutes of waiting, real model spend, and a visibly busy app — to see
+    numbers identical for every visitor, because the corpus, the questions and
+    the pipeline are the same for all of them.
+
+    So a committed run is served when the caller has none of their own
+    (eval/published.py). The pane has content on first paint and "Run
+    benchmark" becomes what it should always have been: a way to re-measure
+    after changing something, not a toll on the front door.
+
+    `can_run` replaces the old `locked` flag. Locked meant "this is not yours
+    to run" and the UI put a sign-in prompt where the scorecard goes — which
+    was right when there was nothing to show and wrong now that there is.
     """
-    payload = _run_payload(_active_run(db, user))
-    if guests.is_guest(user):
-        payload["locked"] = True
-    return payload
+    run = _active_run(db, user)
+    payload = _run_payload(run)
+    payload["can_run"] = not guests.is_guest(user)
+    if run is not None:
+        return payload
+
+    from eval.published import load as load_published
+
+    pub = load_published()
+    if not pub:
+        # No committed run either — the old empty state, which is honest.
+        return payload
+    return {
+        "status": "done",
+        # The pane must be able to say whose numbers these are. Presenting a
+        # shipped result as "your benchmark" would be a quiet lie, and the
+        # first thing a reader would do is wonder when they ran it.
+        "published": True,
+        "generated": pub.get("generated"),
+        "mode": pub.get("mode"),
+        "metrics": pub.get("metrics", {}),
+        "results": pub.get("results", []),
+        "config": pub.get("config", {}),
+        "n_corpus_files": pub.get("n_corpus_files"),
+        "total": len(pub.get("results", [])),
+        "completed": len(pub.get("results", [])),
+        "can_run": not guests.is_guest(user),
+        "timestamp": pub.get("generated"),
+    }
 
 
 @app.post("/api/eval/run")
@@ -1699,6 +1735,14 @@ def health():
         # can mint a cookie for ANY user id. Without dashboard access there was
         # no way to tell from outside whether a deploy was in that state.
         "SESSION_SECRET": bool(_os.environ.get("SESSION_SECRET")),
+        # Whether the guest sweeper is armed. Without this you cannot tell a
+        # deployment that never had the secret from one where it was added to
+        # the dashboard but no redeploy has happened since — Vercel applies
+        # environment variables to NEW deployments only, so adding one changes
+        # nothing until the next push. Both look identical from outside: the
+        # sweep endpoint answers 404 either way, by design, and guest
+        # workspaces quietly outlive their TTL.
+        "GUEST_SWEEP_SECRET": bool(_os.environ.get("GUEST_SWEEP_SECRET")),
         "GOOGLE_CLIENT_ID": bool(_os.environ.get("GOOGLE_CLIENT_ID")),
         "GOOGLE_CLIENT_SECRET": bool(_os.environ.get("GOOGLE_CLIENT_SECRET")),
         "GOOGLE_REDIRECT_URI": bool(_os.environ.get("GOOGLE_REDIRECT_URI")),
