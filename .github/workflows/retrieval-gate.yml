@@ -1,0 +1,61 @@
+name: retrieval gate
+
+# Push to main only, and deliberately not pull_request.
+#
+# This repo is PUBLIC. GitHub does not expose secrets to workflows triggered by
+# a fork's pull request, so a PR run would find no API key, skip, and report a
+# green check that proved nothing — worse than no check, because people trust
+# it. `pull_request_target` would hand the key to unreviewed code and is not an
+# option. So the gate runs where it can actually measure something.
+on:
+  push:
+    branches: [main]
+    # Skip pushes that cannot move retrieval: docs, the frontend, deploy config.
+    # The gate spends real embedding quota, and running it on a CSS change is
+    # how a team ends up disabling it.
+    paths:
+      - "ragchat/**"
+      - "eval/**"
+      - "config.yaml"
+      - "requirements.txt"
+      - ".github/workflows/retrieval-gate.yml"
+  workflow_dispatch: {}
+
+concurrency:
+  # One at a time, and cancel a superseded run: two gates racing on the same
+  # baseline burn quota to answer a question the newer commit already replaced.
+  group: retrieval-gate
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Unit tests
+        run: python -m pytest tests/ -q
+
+      - name: Retrieval gate
+        env:
+          # Embeddings only. No generation and no judge call happens in
+          # retrieval-only mode, so no chat provider key is needed here.
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          EMBEDDING_PROVIDER: openrouter
+          # Chroma, on the runner's own disk. Neon is the deployment's store and
+          # a CI run must never touch it — it would write eval chunks into the
+          # same table real workspaces are read from.
+          VECTOR_BACKEND: chroma
+          RAG_DATA_DIR: ${{ runner.temp }}/ragchat-gate
+        run: python -m eval.gate

@@ -1273,6 +1273,13 @@ def _run_payload(run) -> dict:
         "completed": run.completed or 0,
         "indexed_files": len(indexed),
         "total_files": len(_corpus_files()),
+        # Which pipeline these numbers describe. The strings MUST match the ones
+        # eval/run_eval.py writes into its report, because the scorecard uses
+        # them to decide whether the committed baseline is comparable to this
+        # run at all — a pre-rerank baseline against a full run is two different
+        # retrievals reported as one number, which is the bug c002445 fixed in
+        # the harness and would otherwise walk straight back in via the UI.
+        "mode": "retrieval-pre-rerank" if run.retrieval_only else "full",
         "metrics": metrics,
         "results": results,
         "config": json.loads(run.config) if run.config else {},
@@ -1287,6 +1294,24 @@ class EvalRunIn(BaseModel):
     limit: int | None = None          # score only the first N golden questions
     retrieval_only: bool = False      # skip generation + judges (much faster)
     batch: int | None = None          # questions per step (clamped server-side)
+
+
+@app.get("/api/eval/baseline")
+def get_eval_baseline(user: User = Depends(authn.get_current_user)):
+    """What this pipeline scored on a known-good run, for the scorecard.
+
+    The scorecard used to draw its marker at a hardcoded aspiration (context
+    recall >= 0.80 and so on) that nothing had ever met, so every bar was red
+    and the panel said nothing on the day a bar went red for a real reason.
+    This is the same file the CI gate compares against, so "red" means the same
+    thing in the UI and in the build.
+
+    Read-only, and a repo artifact rather than user data — a guest sees the same
+    numbers, because they are a property of the pipeline, not of a workspace.
+    """
+    from eval.baseline import load as load_baseline
+
+    return {"baseline": load_baseline()}
 
 
 @app.get("/api/eval")
