@@ -1,0 +1,18 @@
+{
+  "generated": "2026-08-18 14:32:41",
+  "mode": "retrieval-pre-rerank",
+  "fingerprint": "2ba2611547c8",
+  "embedding_model": "qwen/qwen3-embedding-8b",
+  "top_k": 4,
+  "candidate_k": 20,
+  "reranker": true,
+  "n_questions": 53,
+  "tolerance": 0.05,
+  "metrics": {
+    "context_recall": 0.8836,
+    "precision_at_k": 0.6415,
+    "mrr": 0.9009,
+    "ndcg_at_k": 0.9826,
+    "hit_rate_at_k": 0.9623
+  }
+}

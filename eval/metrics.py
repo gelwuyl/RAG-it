@@ -15,13 +15,36 @@ import math
 from typing import Iterable
 
 # Cosine threshold for counting a retrieved chunk as a match for a golden
-# passage. Tunable; raised to 0.6 because 0.45 let a single shared keyword
-# (e.g. "system") cross the bar against a multi-token golden passage under a
-# coarse embedder. A real embedding model separates meaning better, but 0.6
-# is a safer default. CALIBRATE on the real KFD run: if Context Recall comes
-# out implausibly high, lower this; if golden passages that ARE retrieved
-# score as missed, raise it. Measurement-first (user decision #3).
-MATCH_THRESHOLD = 0.6
+# passage.
+#
+# CALIBRATED 2026-08-18, on the synthetic corpus with qwen3-embedding-8b. The
+# method: every golden passage is a verbatim substring of some chunk (the
+# generator enforces it), so the cosine between a passage and the chunk that
+# literally contains it is a ground-truth "this really is a match". Anything
+# scoring below the threshold there is a FALSE MISS — retrieval worked and the
+# metric called it a failure. Measured against 98 passages and 21 chunks:
+#
+#   threshold   false misses      false positives
+#   0.60          79.6%              0.7%
+#   0.50          31.6%              7.6%
+#   0.45          20.4%             17.2%
+#   0.40           9.2%             31.6%
+#   0.30           0.0%             74.1%
+#
+# 0.6 was scoring FOUR IN FIVE true containments as misses, which is most of why
+# context recall read so low — it was largely a broken measurement, not broken
+# retrieval. The cause is length, not language: a one-line passage against a
+# ~500-token chunk scores low even when it is verbatim inside it, and Latin
+# passages fared worse (83.1%) than CJK (66.7%).
+#
+# No threshold is good. 0.45 is the least-bad point on the curve and is chosen
+# deliberately over exact substring matching, which would be exact and free but
+# would stop being the RAGAS-style embedding-cosine metric this harness reports
+# (user decision, 2026-08-18).
+#
+# Live with the consequence: recall carries roughly a fifth error in BOTH
+# directions, so small movements between runs are noise, not signal.
+MATCH_THRESHOLD = 0.45
 
 
 def cosine(a: list[float], b: list[float]) -> float:
