@@ -129,6 +129,23 @@ Everything §2 listed is landed. Kept here as a map of where each decision lives
 | 2.5 phase 5 sweep | `38bd468` | `frontend/styles.css`, `frontend/landing.css` |
 | 2.6 deep search | `a1c20cd` | `ragchat/deepsearch.py` |
 
+### Measured on the deployment (2026-08-18, after everything landed)
+
+```
+guest sign-in     8.4-8.7s wire   (create 1.7s + seed 6.4s)   budget: <10s  MET
+/api/auth/status  0.3-0.5s
+/api/health       3.0-3.8s        (does live model discovery)
+```
+
+It was 11.1s until `_ensure_table` stopped running six DDL/catalog round trips
+on every store call. There is more headroom in the remaining 8.1s and it has
+not been chased: the numbers are suspiciously CONSTANT (1693-1697ms, then
+6424-6448ms across seven runs), which is the signature of a fixed per-operation
+cost rather than variable work — most likely a fresh Neon connection and TLS
+handshake per `eng.begin()`. Connection reuse is the obvious next thing to
+measure. `POST /api/auth/guest-login` returns `timings_ms`, so the next person
+does not have to add instrumentation to find out.
+
 ### Two things that need doing OUTSIDE the repo
 
 1. **`GUEST_SWEEP_SECRET`** must be set in *both* places or the sweeper is a
