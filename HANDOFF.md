@@ -129,22 +129,36 @@ Everything §2 listed is landed. Kept here as a map of where each decision lives
 | 2.5 phase 5 sweep | `38bd468` | `frontend/styles.css`, `frontend/landing.css` |
 | 2.6 deep search | `a1c20cd` | `ragchat/deepsearch.py` |
 
-### Measured on the deployment (2026-08-18, after everything landed)
+### Measured on the deployment (2026-08-18)
 
 ```
-guest sign-in     8.4-8.7s wire   (create 1.7s + seed 6.4s)   budget: <10s  MET
-/api/auth/status  0.3-0.5s
-/api/health       3.0-3.8s        (does live model discovery)
+                        WARM              COLD (first request after idle/deploy)
+guest sign-in           2.1s wire         25-31s
+  server side           1.57s
+guest-seed (deferred)   11.6s             18s      <- off the critical path
+/api/auth/status        0.3-0.5s
 ```
 
-It was 11.1s until `_ensure_table` stopped running six DDL/catalog round trips
-on every store call. There is more headroom in the remaining 8.1s and it has
-not been chased: the numbers are suspiciously CONSTANT (1693-1697ms, then
-6424-6448ms across seven runs), which is the signature of a fixed per-operation
-cost rather than variable work — most likely a fresh Neon connection and TLS
-handshake per `eng.begin()`. Connection reuse is the obvious next thing to
-measure. `POST /api/auth/guest-login` returns `timings_ms`, so the next person
-does not have to add instrumentation to find out.
+Sign-in went 8.4s -> 2.1s by doing only what the visitor asked for: it is one
+INSERT and a cookie now, and POST /api/auth/guest-seed copies the sample
+documents and runs the cleanup backstop afterwards.
+
+THE COLD NUMBER IS THE ONE THAT GETS REPORTED AS "the app is slow", and it is
+not our code. `python -X importtime -c "import ragchat.app"` is 1.25s locally,
+so the other ~24s is platform: the Vercel function unpacking and starting, plus
+Neon's compute resuming from autosuspend (free tier suspends after ~5 minutes
+idle). The levers are Neon's autosuspend setting and Vercel's, not this repo.
+
+What the repo CAN do about it, and does: the identity skeleton paints from the
+`ragchat_kind` cookie at ~30ms and now shows a neutral button-shaped
+placeholder even for a first-time visitor with no cookie, so the top-right
+corner is never empty while the backend wakes up.
+
+Still on the table warm: 1.57s of server time for a single INSERT, and 3.7s for
+the reap backstop. Both are per-operation Neon costs and the per-phase numbers
+are constant to within a few ms across runs, which points at connection setup
+rather than work. Connection reuse is the next measurement. `guest-login` and
+`guest-seed` both return `timings_ms`.
 
 ### Two things that need doing OUTSIDE the repo
 

@@ -238,21 +238,23 @@ input:disabled, textarea:disabled, select:disabled {
 }
 
 /* ---------- identity skeleton ----------
-   Shown from the `ragchat_kind` cookie before any request is made, and removed
-   the instant app.js has the real status. It exists because this block used to
-   be EMPTY for 1.2s warm and ~3s cold, which read as a missing sign-in button
-   and let the top bar reflow under the visitor as it filled.
+   Shown until identity resolves, and removed the instant app.js has the real
+   status. This block used to be EMPTY while it waited, which read as a missing
+   sign-in button and let the top bar reflow under the visitor as it filled.
 
-   Hidden by default: with no cookie there is nothing truthful to show, and a
-   guess that resolves the other way is worse than a blank. */
+   Shown even with NO cookie to read. A first-time visitor has no hint by
+   definition, and they are also the one most likely to meet a cold function —
+   measured at 25s on the deployment, essentially all of it platform wake-up —
+   staring at an empty corner. The button-shaped placeholder claims nothing
+   about who they are; it says a control belongs here and is coming, which is
+   the honest thing to say while the answer is genuinely unknown. */
 .identity-hint { display: none; align-items: center; gap: 10px; }
-html[data-kind="guest"] .identity-hint,
-html[data-kind="account"] .identity-hint { display: flex; }
-/* The badge half is guest-only; the button half stands in for either control,
-   because both resolve to something button-shaped in the same place. */
-html[data-kind="account"] .identity-hint .hint-badge { display: none; }
-/* Once app.js knows, the real controls take over in the same frame. */
+html:not(.identity-resolved) .identity-hint { display: flex; }
 html.identity-resolved .identity-hint { display: none; }
+/* The badge half IS a claim about identity, so it appears only where the
+   cookie made one. The button half fits either outcome. */
+.identity-hint .hint-badge { display: none; }
+html[data-kind="guest"] .identity-hint .hint-badge { display: inline-block; }
 
 .identity-hint .hint-badge {
   font-family: var(--font-mono); font-size: var(--text-nano);
