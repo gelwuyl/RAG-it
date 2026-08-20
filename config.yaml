@@ -24,18 +24,25 @@ embedding:
   # ragchat/guests.py instead.
   model: qwen/qwen3-embedding-8b
 generation:
-  # Gemini 3.5 Flash Lite, served by Google AI Studio's OpenAI-compatible
+  # Gemma 4 26B instruct, served by Google AI Studio's OpenAI-compatible
   # endpoint. Used for generation AND the eval LLM-as-judge.
   #
-  # Confirmed present in the live client.models.list() catalog before being set
-  # here — that endpoint 404s on near-misses, and this file is where a wrong id
-  # turns into "every answer fails" (CLAUDE.md).
+  # MEASURED against gemini-3.5-flash-lite over the full 56-question golden set,
+  # which is why it is back. Flash-lite lost 6.5 points of answer correctness
+  # (0.8696 -> 0.8049) and 2 points of faithfulness, and — because the judge
+  # runs on whatever model just answered — nearly doubled the answers it could
+  # not grade at all (8 -> 14 of 53). Retrieval was identical either way, so
+  # the whole difference was the model's own work.
+  #
+  # The id must be exact: the endpoint 404s on near-misses, and the bare
+  # "gemma-4-26b-it" is NOT in the live /v1/models catalog.
   #
   # NOTE this key is masked by a config_overrides row if the Settings UI has
   # ever been saved on a deployment. Changing it here does nothing on such a
-  # deployment until the override is updated too — check GET /api/health, which
-  # reports the EFFECTIVE model rather than this file's opinion of it.
-  llm_model: models/gemini-3.5-flash-lite
+  # deployment until the override is cleared — check GET /api/health, which
+  # reports the EFFECTIVE model rather than this file's opinion of it, and
+  # Settings -> Reset to shipped defaults to clear one.
+  llm_model: models/gemma-4-26b-a4b-it
   temperature: 0.0
   # NOTE: there is no `web_augmentation` key here any more, and nothing reads
   # one. Web fallback is gone; deep search replaced it (ragchat/deepsearch.py).

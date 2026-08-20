@@ -1,7 +1,7 @@
 {
  "published": true,
- "generated": "2026-08-21 00:36:02",
- "run": "20260821_003602",
+ "generated": "2026-08-18 23:30:56",
+ "run": "20260818_233056",
  "mode": "full",
  "config": {
   "chunk_size": 512,
@@ -14,7 +14,7 @@
   "reranker": true,
   "reranker_provider": "openrouter",
   "query_rewrite": true,
-  "llm_model": "models/gemini-3.5-flash-lite",
+  "llm_model": "models/gemma-4-26b-a4b-it",
   "judge_model": "models/gemini-3.5-flash-lite",
   "temperature": 0.0,
   "embedding_model": "qwen/qwen3-embedding-8b",
@@ -24,19 +24,19 @@
  "metrics": {
   "context_recall": 0.9025,
   "precision_at_k": 0.717,
-  "mrr": 0.9387,
-  "ndcg_at_k": 0.9842,
+  "mrr": 0.9292,
+  "ndcg_at_k": 0.9833,
   "hit_rate_at_k": 0.9811,
-  "exact_context_recall": 0.9245,
-  "exact_precision_at_k": 0.2877,
+  "exact_context_recall": 0.934,
+  "exact_precision_at_k": 0.2925,
   "exact_mrr": 0.9214,
   "exact_hit_rate_at_k": 0.9623,
-  "faithfulness": 0.9574,
-  "answer_relevancy": 0.975,
-  "answer_correctness": 0.8049,
+  "faithfulness": 0.9778,
+  "answer_relevancy": 0.98,
+  "answer_correctness": 0.8696,
   "not_found_rate_unanswerables": 1.0,
   "context_recall_multi_doc": 0.9167,
-  "n_ungraded": 14,
+  "n_ungraded": 8,
   "n_answerable": 53,
   "n_unanswerable": 3,
   "n_multi_doc": 6
@@ -65,29 +65,29 @@
    "retrieved": [
     {
      "title": "havenmark_method.txt",
-     "similarity": 0.6434
+     "similarity": 0.6442
     },
     {
      "title": "havenmark_pathway.txt",
-     "similarity": 0.5351
+     "similarity": 0.5361
     },
     {
      "title": "valuation_notes.txt",
-     "similarity": 0.4254
+     "similarity": 0.427
     },
     {
      "title": "havenmark_client_data_policy.txt",
-     "similarity": 0.3271
+     "similarity": 0.3293
     }
    ],
-   "answer": "Based on the provided documents, the Havenmark Method in Chinese is:\n\n**\u5236\u5ea6\u5316 \u6570\u636e\u5316 \u4eba\u6027\u5316 \u957f\u671f\u5316\uff01** [1]\n\nIn English, it means:\n**Systematised, Data-led, Human, Long-term.** [1]",
+   "answer": "The Havenmark Method in Chinese is \u6052\u5b89\u65b9\u6cd5 (H\u00e9ng'\u0101n F\u0101ngf\u01ce) [1]. In English, it is defined by four principles: Systematised, Data-led, Human, and Long-term [1].",
    "not_found": false,
-   "faithful": true,
-   "faithful_reason": "The Chinese terms and English meanings for the Havenmark Method are directly supported by section 1 of document [1].",
+   "faithful": null,
+   "faithful_reason": "judge unavailable: judge returned only a reasoning block, no verdict",
    "relevant": true,
-   "relevant_reason": "The answer correctly provides the Chinese translation and English meaning of the Havenmark Method as requested.",
-   "correct": true,
-   "correct_reason": "The system correctly provided both the Chinese characters and the English translation of the Havenmark Method as stated in the source text."
+   "relevant_reason": "The answer directly provides both the Chinese translation and the English definition requested in the question.",
+   "correct": null,
+   "correct_reason": "judge unavailable: judge returned only a reasoning block, no verdict"
   },
   {
    "question": "How does Havenmark classify clients, and where should an agent spend their time?",
@@ -103,7 +103,7 @@
    "context_recall": 1.0,
    "precision_at_k": 1.0,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9875,
+   "ndcg_at_k": 0.9862,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.25,
@@ -112,29 +112,29 @@
    "retrieved": [
     {
      "title": "havenmark_method.txt",
-     "similarity": 0.6691
+     "similarity": 0.6689
     },
     {
      "title": "havenmark_commercial_desk.txt",
-     "similarity": 0.6246
+     "similarity": 0.6256
     },
     {
      "title": "agent_faq.txt",
-     "similarity": 0.6021
+     "similarity": 0.603
     },
     {
      "title": "havenmark_method.txt",
-     "similarity": 0.6523
+     "similarity": 0.6527
     }
    ],
-   "answer": "Havenmark classifies clients differently depending on whether they are residential or commercial clients:\n\n**Residential Clients**\nResidential clients are classified into four tiers: P1, P2, P3, and Watch [1]. \n* **P1:** Meets three conditions at once\u2014financing pre-checked, decision maker identified, and a move-in or completion date within six months [1]. \n* **P2:** Missing any one of the three P1 conditions [1]. \n* **P3:** Managed by letting the system nurture them automatically [1].\n* **Watch:** Clients whose timing is not yet right; they are not bad clients, but no active time is invested in them until a signal appears [1, 4].\n\n**Commercial Clients**\nThe commercial and industrial desk uses its own three-point scale\u2014C1, C2, and Hold [2].\n* **C1:** Meets three conditions at once\u2014a signed mandate or a board paper, a stated occupation window, and a budget expressed as a rate per square foot per month [2].\n* **C2:** Missing any one of the three C1 conditions [2].\n* **Hold:** Requirements waiting on a lease expiry more than nine months away; these are diaryed to the expiry month with no active time invested before then [2].\n\n**Where an Agent Should Spend Their Time**\n* For residential clients, an agent should spend their time prioritizing P1 clients first, follow up with P2 clients once every two weeks, let the system handle P3 clients, and invest no active time in Watch clients until a signal appears [1].\n* For commercial clients, C2 requirements are reviewed monthly rather than fortnightly [2], and Hold requirements have no active time invested before their expiry month [2].",
+   "answer": "Havenmark classifies clients differently depending on whether the agent is working in residential or commercial/industrial sectors:\n\n**Residential Classification**\nResidential practice follows the Havenmark Method, which classifies clients into four tiers [1, 2]:\n*   **P1:** These clients meet three specific conditions simultaneously: financing is pre-checked, the decision maker is identified, and there is a move-in or completion date within six months [1, 4]. Agents should spend their time on P1 clients first [1].\n*   **P2:** Clients that miss any one of the three P1 conditions are classified as P2, regardless of how enthusiastic they seem [1, 4]. Agents should follow up with P2 clients once every two weeks [1].\n*   **P3:** These clients are left to be nurtured automatically by the system [1].\n*   **Watch (\u89c2\u5bdf):** These are not \"bad\" clients, but rather clients for whom the timing is not yet right [1, 4]. Agents should invest no active time in Watch clients until a signal appears [1].\n\n**Commercial & Industrial Classification**\nThe commercial desk uses its own three-point scale because requirements are driven by board approvals or lease expiries rather than family move-in dates [2]:\n*   **C1:** These requirements meet three conditions at once: a stated budget (expressed as a rate per square foot per month), a stated occupation window, and a signed mandate or board paper [2].\n*   **C2:** Any requirement missing one of the three C1 conditions is classified as C2, regardless of how urgent the caller sounds [2]. These requirements are reviewed monthly [2].\n*   **Hold:** This covers requirements waiting on a lease expiry that is more than nine months away [2]. Agents should diary these to the expiry month and invest no active time before then [2].",
    "not_found": false,
-   "faithful": true,
-   "faithful_reason": "Every factual claim about client classification and time management for both residential and commercial clients is fully supported by documents [1], [2], and [4].",
+   "faithful": null,
+   "faithful_reason": "judge unavailable: judge returned only a reasoning block, no verdict",
    "relevant": true,
-   "relevant_reason": "The answer fully addresses both parts of the question by detailing the client classifications for residential and commercial clients and outlining where agents should spend their time.",
+   "relevant_reason": "The answer directly addresses both parts of the question by detailing the classification tiers and the corresponding time allocation for agents in both residential and commercial sectors.",
    "correct": true,
-   "correct_reason": "The system answer correctly covers the four client tiers and where the agent should spend their time, aligning with the expected answer."
+   "correct_reason": "The system correctly identifies all four client tiers (P1, P2, P3, Watch) and their corresponding time allocation requirements."
   },
   {
    "question": "What three conditions must be met at once for a client to be graded P1?",
@@ -150,7 +150,7 @@
    "context_recall": 0.5,
    "precision_at_k": 0.25,
    "mrr": 1.0,
-   "ndcg_at_k": 0.999,
+   "ndcg_at_k": 0.9988,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.5,
@@ -159,29 +159,29 @@
    "retrieved": [
     {
      "title": "havenmark_method.txt",
-     "similarity": 0.5663
+     "similarity": 0.5666
     },
     {
      "title": "havenmark_method.txt",
-     "similarity": 0.4949
+     "similarity": 0.4942
     },
     {
      "title": "havenmark_commercial_desk.txt",
-     "similarity": 0.523
+     "similarity": 0.5231
     },
     {
      "title": "agent_faq.txt",
-     "similarity": 0.5346
+     "similarity": 0.5334
     }
    ],
-   "answer": "To be graded P1, a client must meet three conditions at once:\n\n1. Financing pre-checked [1, 2]\n2. Decision maker identified [1, 2]\n3. A move-in or completion date within six months [1, 2]",
+   "answer": "To be graded as a P1 client, the following three conditions must be met at once:\n\n*   Financing is pre-checked [1, 2].\n*   The decision maker has been identified [1, 2].\n*   There is a move-in or completion date within six months [1, 2].\n\nMissing any one of these three conditions makes the client a P2, regardless of how enthusiastic they sound [1, 2].",
    "not_found": false,
    "faithful": true,
-   "faithful_reason": "The context explicitly states that a P1 client must meet financing pre-checked, decision maker identified, and a move-in or completion date within six months [1, 2].",
-   "relevant": null,
-   "relevant_reason": "judge unavailable: judge model 'models/gemini-3.5-flash-lite' failed: Error code: 429 - [{'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.5-flash-lite\\nPlease retry in 35.07811311s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.5-flash-lite'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '35s'}]}}]",
-   "correct": null,
-   "correct_reason": "judge unavailable: judge model 'models/gemini-3.5-flash-lite' failed: Error code: 429 - [{'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.5-flash-lite\\nPlease retry in 33.371473308s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'model': 'gemini-3.5-flash-lite', 'location': 'global'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '33s'}]}}]"
+   "faithful_reason": "The answer accurately reflects the three conditions for a P1 client as specified in sections 2.2 of documents [1] and [2].",
+   "relevant": true,
+   "relevant_reason": "The answer directly and accurately lists the three specific conditions requested in the question.",
+   "correct": true,
+   "correct_reason": "The system correctly identifies all three required conditions and the consequence of missing one."
   },
   {
    "question": "What annual transaction targets does Havenmark set for full-timers and part-timers?",
@@ -206,29 +206,29 @@
    "retrieved": [
     {
      "title": "havenmark_method.txt",
-     "similarity": 0.6093
+     "similarity": 0.6077
     },
     {
      "title": "havenmark_commercial_desk.txt",
-     "similarity": 0.5592
+     "similarity": 0.5576
     },
     {
      "title": "havenmark_pathway.txt",
-     "similarity": 0.6158
+     "similarity": 0.6143
     },
     {
      "title": "havenmark_practice_committee_charter.txt",
-     "similarity": 0.4821
+     "similarity": 0.48
     }
    ],
-   "answer": "Based on the provided documents, Havenmark sets the following annual transaction targets for residential practice:\n\n* **Full-timers:** More than 18 cases per year [1].\n* **Part-timers:** More than 6 cases per year [1].\n\n*(Note: For commercial agents, the full-time target is more than 9 completed transactions per year [2].)*",
+   "answer": "Havenmark sets the following annual transaction targets:\n\n*   **Full-timers:** More than 18 cases per year [1].\n*   **Part-timers:** More than 6 cases per year [1].",
    "not_found": false,
-   "faithful": true,
-   "faithful_reason": "The context explicitly states that annual transaction targets are more than 18 cases for full-timers and more than 6 for part-timers.",
+   "faithful": null,
+   "faithful_reason": "judge unavailable: judge returned only a reasoning block, no verdict",
    "relevant": true,
-   "relevant_reason": "The answer correctly provides the annual transaction targets for both full-timers and part-timers as requested by the prompt.",
-   "correct": true,
-   "correct_reason": "The system correctly identifies the annual transaction targets of >18 for full-timers and >6 for part-timers."
+   "relevant_reason": "The answer directly provides the specific annual transaction targets for both full-timers and part-timers as requested.",
+   "correct": null,
+   "correct_reason": "judge unavailable: judge returned only a reasoning block, no verdict"
   },
   {
    "question": "What average commission per case does the Havenmark Method set for residential agents, and what happens to one who falls below it?",
@@ -253,29 +253,29 @@
    "retrieved": [
     {
      "title": "havenmark_method.txt",
-     "similarity": 0.6779
+     "similarity": 0.6788
     },
     {
      "title": "havenmark_pathway.txt",
-     "similarity": 0.6825
+     "similarity": 0.6837
     },
     {
      "title": "havenmark_market_call.txt",
-     "similarity": 0.6433
+     "similarity": 0.6435
     },
     {
      "title": "havenmark_commercial_desk.txt",
      "similarity": 0.6326
     }
    ],
-   "answer": "According to the Havenmark Method, the target average commission per case is not less than S$9,800 [1]. \n\nIf an agent hits the case count while falling below this figure, they are taking work that does not pay, and their pipeline is reviewed rather than praised [1].",
+   "answer": "The target average commission per case for residential agents is not less than S$9,800 [1]. If an agent hits their case count target but falls below this commission figure, they are considered to be taking work that does not pay, and their pipeline is reviewed rather than praised [1].",
    "not_found": false,
    "faithful": true,
-   "faithful_reason": "The context explicitly states the target average commission is not less than S$9,800 and that falling below it results in a pipeline review rather than praise [1].",
+   "faithful_reason": "The answer accurately reflects the target commission and the consequence for falling below it as stated in section 3.3 of the first document.",
    "relevant": true,
-   "relevant_reason": "The answer correctly states the target average commission per case and explains that falling below it results in a pipeline review.",
+   "relevant_reason": "The answer directly provides the specific commission amount and the consequence for falling below it.",
    "correct": true,
-   "correct_reason": "The system answer correctly states the S$9,800 target and the pipeline review consequence for falling below it."
+   "correct_reason": "The system correctly provides the commission target and the consequence for falling below it."
   },
   {
    "question": "What ramp applies to new agents instead of the full annual target?",
@@ -300,29 +300,29 @@
    "retrieved": [
     {
      "title": "havenmark_method.txt",
-     "similarity": 0.6382
+     "similarity": 0.6383
     },
     {
      "title": "havenmark_pathway.txt",
-     "similarity": 0.5287
+     "similarity": 0.5292
     },
     {
      "title": "havenmark_team_leader_standard.txt",
-     "similarity": 0.5036
+     "similarity": 0.5021
     },
     {
      "title": "havenmark_new_agent_handbook.txt",
-     "similarity": 0.6131
+     "similarity": 0.6136
     }
    ],
-   "answer": "New agents are held to a ramp instead of the full annual target: 4 cases in the first six months, and 9 cases in months seven to twelve [1].",
+   "answer": "New agents are held to a ramp rather than the full target, which consists of 4 cases in the first six months and 9 cases in months seven to twelve [1].",
    "not_found": false,
    "faithful": true,
-   "faithful_reason": "Context [1] states that new agents have a ramp of 4 cases in the first six months and 9 cases in months seven to twelve instead of the full target.",
+   "faithful_reason": "The answer accurately reflects the ramp details provided in section 3.2 of the first document.",
    "relevant": true,
-   "relevant_reason": "The answer correctly identifies the specific ramp (4 cases in the first six months, and 9 cases in months seven to twelve) that applies to new agents.",
+   "relevant_reason": "The answer directly specifies the case requirements for new agents during their first year.",
    "correct": true,
-   "correct_reason": "The system answer accurately conveys all key facts from the expected answer regarding the agent ramp targets."
+   "correct_reason": "The system answer correctly includes all key facts regarding the number of cases for both time periods."
   },
   {
    "question": "What happens if an agent does not update their Friday data?",
@@ -338,7 +338,7 @@
    "context_recall": 1.0,
    "precision_at_k": 1.0,
    "mrr": 1.0,
-   "ndcg_at_k": 0.996,
+   "ndcg_at_k": 0.9959,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.25,
@@ -347,29 +347,29 @@
    "retrieved": [
     {
      "title": "havenmark_method.txt",
-     "similarity": 0.4819
+     "similarity": 0.4825
     },
     {
      "title": "havenmark_pathway.txt",
-     "similarity": 0.4671
+     "similarity": 0.4678
     },
     {
      "title": "agent_faq.txt",
-     "similarity": 0.52
+     "similarity": 0.5215
     },
     {
      "title": "havenmark_new_agent_handbook.txt",
-     "similarity": 0.4342
+     "similarity": 0.4348
     }
    ],
-   "answer": "An agent who does not update their Friday data receives no new leads the following week [1].",
+   "answer": "If an agent does not update their Friday data, they will receive no new leads the following week [1].",
    "not_found": false,
    "faithful": true,
-   "faithful_reason": "Context [1] explicitly states that an agent who does not update their Friday data receives no new leads the following week.",
+   "faithful_reason": "Section 4.4 of [1] explicitly states that an agent who does not update Friday data receives no new leads the following week.",
    "relevant": true,
-   "relevant_reason": "The answer directly addresses the consequences of an agent failing to update their Friday data.",
+   "relevant_reason": "The answer directly addresses the consequence of not updating the Friday data.",
    "correct": true,
-   "correct_reason": "The system answer accurately conveys the key fact that agents who do not update Friday data receive no new leads the next week."
+   "correct_reason": "The system answer accurately conveys the key fact that no new leads will be received the following week."
   },
   {
    "question": "What does Havenmark refuse to do when quoting a price?",
@@ -385,7 +385,7 @@
    "context_recall": 0.5,
    "precision_at_k": 0.5,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9545,
+   "ndcg_at_k": 0.954,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.25,
@@ -394,29 +394,29 @@
    "retrieved": [
     {
      "title": "havenmark_method.txt",
-     "similarity": 0.5868
+     "similarity": 0.5864
     },
     {
      "title": "district_guide.txt",
-     "similarity": 0.4806
+     "similarity": 0.4818
     },
     {
      "title": "launch_portfolio.txt",
-     "similarity": 0.4637
+     "similarity": 0.4621
     },
     {
      "title": "valuation_notes.txt",
-     "similarity": 0.5638
+     "similarity": 0.5649
     }
    ],
-   "answer": "Based on the provided documents, Havenmark does not quote a price that has not been verified against a caveat lodged in the last ninety days [1].",
+   "answer": "Havenmark refuses to quote a price that has not been verified against a caveat lodged in the last ninety days [1]. Additionally, agents are instructed to verify any figures against the developer's current price list before quoting them to a client [3].",
    "not_found": false,
    "faithful": true,
-   "faithful_reason": "Document [1] states that Havenmark does not quote a price that has not been verified against a caveat lodged in the last ninety days.",
+   "faithful_reason": "Both claims are directly supported by the provided context documents [1] and [3].",
    "relevant": true,
-   "relevant_reason": "The answer correctly identifies that Havenmark refuses to quote an unverified price based on recent caveats.",
+   "relevant_reason": "The answer directly states that Havenmark refuses to quote prices that have not been verified against a caveat lodged in the last ninety days.",
    "correct": true,
-   "correct_reason": "The system's answer accurately captures that Havenmark refuses to quote unverified prices against a caveat from the last ninety days."
+   "correct_reason": "The system answer correctly identifies that Havenmark refuses to quote a price that has not been verified against a caveat lodged in the last ninety days."
   },
   {
    "question": "What are the five stages of the Havenmark Pathway and how long does each take?",
@@ -432,7 +432,7 @@
    "context_recall": 1.0,
    "precision_at_k": 0.25,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9964,
+   "ndcg_at_k": 0.9966,
    "hit_rate_at_k": 1,
    "exact_context_recall": 0.5,
    "exact_precision_at_k": 0.25,
@@ -441,29 +441,29 @@
    "retrieved": [
     {
      "title": "havenmark_pathway.txt",
-     "similarity": 0.7502
+     "similarity": 0.7508
     },
     {
      "title": "havenmark_new_agent_handbook.txt",
-     "similarity": 0.4619
+     "similarity": 0.4624
     },
     {
      "title": "havenmark_method.txt",
-     "similarity": 0.592
+     "similarity": 0.5922
     },
     {
      "title": "havenmark_team_leader_standard.txt",
-     "similarity": 0.3775
+     "similarity": 0.3798
     }
    ],
-   "answer": "Based on the provided documents, the Havenmark Pathway lists three stages with their durations (Stages 4 and 5 are mentioned by name as part of the ladder in Source [4], but durations are only provided for the first three stages):\n\n* **Stage 1 \u2014 Ground (\u5730\u57fa):** Months 1 to 3 [1]\n* **Stage 2 \u2014 Frame (\u67b6\u6784):** Months 4 to 9 [1]\n* **Stage 3 \u2014 Roof (\u5c01\u9876):** Months 10 to 18 [1]\n\n*(Note: The provided sources do not specify the time durations for the subsequent stages, Beacon and Keystone, which are mentioned in Source [4]).*",
-   "not_found": false,
-   "faithful": true,
-   "faithful_reason": "The answer correctly identifies the first three stages and their durations as stated in source [1], while accurately noting that durations for subsequent stages are not provided.",
-   "relevant": true,
-   "relevant_reason": "The answer correctly provides the stages and durations available in the sources while accurately noting that the durations for the final two stages are missing.",
+   "answer": "I couldn't find this in your documents.",
+   "not_found": true,
+   "faithful": null,
+   "faithful_reason": "judge unavailable: judge returned only a reasoning block, no verdict",
+   "relevant": null,
+   "relevant_reason": "judge unavailable: judge returned only a reasoning block, no verdict",
    "correct": false,
-   "correct_reason": "The system's answer is incomplete because it misses the durations and details for the remaining stages of the Havenmark Pathway."
+   "correct_reason": "The system failed to provide any of the requested stages or their durations."
   },
   {
    "question": "What must a new agent do before conducting a viewing alone?",
@@ -488,29 +488,29 @@
    "retrieved": [
     {
      "title": "havenmark_pathway.txt",
-     "similarity": 0.4181
+     "similarity": 0.4208
     },
     {
      "title": "agent_faq.txt",
-     "similarity": 0.5553
+     "similarity": 0.5573
     },
     {
      "title": "transaction_checklist.txt",
-     "similarity": 0.5392
+     "similarity": 0.5379
     },
     {
      "title": "ec_portfolio.txt",
-     "similarity": 0.5246
+     "similarity": 0.5265
     }
    ],
-   "answer": "A new agent must pass the Practice Test before conducting a viewing alone [1].",
+   "answer": "A new agent may not conduct a viewing alone before passing the Practice Test [1]. To reach this point, the agent must complete the Havenmark Foundation course (24 hours, in person) and shadow 12 viewings [1].",
    "not_found": false,
    "faithful": true,
-   "faithful_reason": "Context [1] explicitly states that a new agent may not conduct a viewing alone before passing the Practice Test.",
+   "faithful_reason": "All claims are directly supported by the requirements listed in Stage 1 of the Havenmark Pathway System.",
    "relevant": true,
-   "relevant_reason": "The answer directly states the requirement to pass the Practice Test before conducting a viewing alone based on the provided text [1].",
-   "correct": false,
-   "correct_reason": "The system answer omitted the key fact that the agent must also shadow 12 viewings first as stated in the expected answer."
+   "relevant_reason": "The answer directly specifies the requirements (passing the Practice Test, completing the course, and shadowing viewings) needed to conduct a viewing alone.",
+   "correct": true,
+   "correct_reason": "The system answer correctly includes both passing the Practice Test and shadowing 12 viewings."
   },
   {
    "question": "What is the pass mark for the Practice Test and how can a candidate fail despite a good total?",
@@ -526,7 +526,7 @@
    "context_recall": 1.0,
    "precision_at_k": 0.5,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9801,
+   "ndcg_at_k": 0.9804,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.25,
@@ -535,29 +535,29 @@
    "retrieved": [
     {
      "title": "havenmark_pathway.txt",
-     "similarity": 0.49
+     "similarity": 0.4896
     },
     {
      "title": "havenmark_new_agent_handbook.txt",
-     "similarity": 0.326
+     "similarity": 0.3245
     },
     {
      "title": "havenmark_pathway.txt",
-     "similarity": 0.3695
+     "similarity": 0.3699
     },
     {
      "title": "havenmark_new_agent_handbook.txt",
-     "similarity": 0.4702
+     "similarity": 0.4695
     }
    ],
-   "answer": "Based on the provided sources:\n\n* **Pass mark:** The pass mark for the Practice Test is 80% [1, 3].\n* **How a candidate can fail despite a total:** A candidate can score well on total points but still fail if they score below 50% in any single section [1]. An agent strong in three sections but blind in the fourth fails the whole test, as they would make the mistake that the fourth section exists to prevent [1].",
+   "answer": "The pass mark for the Practice Test is 80% [1]. A candidate can fail the whole test regardless of their total score if they score below 50% in any single section [1]. This rule exists because an agent who is strong in three sections but \"blind on the fourth\" will make the mistake that the fourth section was designed to prevent [1].",
    "not_found": false,
    "faithful": true,
-   "faithful_reason": "The pass mark is 80% and scoring below 50% in any single section results in failing the whole test regardless of total [1].",
+   "faithful_reason": "All factual claims regarding the pass mark and the failure condition are directly supported by the provided context.",
    "relevant": true,
-   "relevant_reason": "The answer correctly identifies the 80% pass mark and explains how failing a single section causes an overall failure despite a good total.",
+   "relevant_reason": "The answer directly addresses both parts of the question by providing the pass mark and explaining the section-specific failure rule.",
    "correct": true,
-   "correct_reason": "The system correctly identifies the 80% pass mark and the rule that scoring below 50% in any single section causes a failure regardless of the total."
+   "correct_reason": "The system correctly identifies both the 80% pass mark and the rule regarding scoring below 50% in any single section."
   },
   {
    "question": "What are the four sections of the Practice Test?",
@@ -573,7 +573,7 @@
    "context_recall": 0.5,
    "precision_at_k": 0.25,
    "mrr": 0.25,
-   "ndcg_at_k": 0.938,
+   "ndcg_at_k": 0.9383,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.25,
@@ -582,29 +582,29 @@
    "retrieved": [
     {
      "title": "havenmark_pathway.txt",
-     "similarity": 0.4422
+     "similarity": 0.4418
     },
     {
      "title": "havenmark_new_agent_handbook.txt",
-     "similarity": 0.2843
+     "similarity": 0.2842
     },
     {
      "title": "havenmark_pathway.txt",
-     "similarity": 0.3172
+     "similarity": 0.3169
     },
     {
      "title": "havenmark_new_agent_handbook.txt",
-     "similarity": 0.4201
+     "similarity": 0.4198
     }
    ],
-   "answer": "Based on the provided sources, the four sections of the Practice Test are:\n\n* **Section 1** \u2014 Documentation (Which form, at which stage, signed by whom) [1]\n* **Section 2** \u2014 Valuation (Reading caveats and adjusting for floor, facing and age) [1]\n* **Section 3** \u2014 Financing (Loan-to-value limits and the timeline they impose) [1]\n* **Section 4** \u2014 Conduct (What must be disclosed and when) [1]",
+   "answer": "The four sections of the Practice Test are:\n\n*   **Section 1 \u2014 Documentation:** Which form, at which stage, signed by whom [1].\n*   **Section 2 \u2014 Valuation:** Reading caveats and adjusting for floor, facing and age [1].\n*   **Section 3 \u2014 Financing:** Loan-to-value limits and the timeline they impose [1].\n*   **Section 4 \u2014 Conduct:** What must be disclosed and when [1].",
    "not_found": false,
    "faithful": true,
-   "faithful_reason": "The four sections are explicitly stated in Part B of the context with matching descriptions.",
+   "faithful_reason": "All four sections and their descriptions are directly stated in the provided context.",
    "relevant": true,
-   "relevant_reason": "The answer directly lists the four sections of the Practice Test as requested by the prompt.",
-   "correct": false,
-   "correct_reason": "The system answer includes information about Valuation and Financing that is not supported by the provided source passages."
+   "relevant_reason": "The answer directly and accurately lists the four sections requested in the question.",
+   "correct": true,
+   "correct_reason": "The system correctly identifies all four sections: Documentation, Valuation, Financing, and Conduct."
   },
   {
    "question": "What is the default co-broke split and when must a different split be agreed?",
@@ -620,7 +620,7 @@
    "context_recall": 1.0,
    "precision_at_k": 1.0,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9986,
+   "ndcg_at_k": 0.9984,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.25,
@@ -629,29 +629,29 @@
    "retrieved": [
     {
      "title": "havenmark_pathway.txt",
-     "similarity": 0.6785
+     "similarity": 0.6775
     },
     {
      "title": "havenmark_market_call.txt",
-     "similarity": 0.5367
+     "similarity": 0.5366
     },
     {
      "title": "agent_faq.txt",
-     "similarity": 0.5438
+     "similarity": 0.5433
     },
     {
      "title": "compliance_casebook.txt",
-     "similarity": 0.6619
+     "similarity": 0.661
     }
    ],
-   "answer": "Based on the provided documents:\n\n* **Default co-broke split:** The default split is fifty-fifty (50/50) between the listing side and the buyer side [1].\n* **When a different split must be agreed:** Any different split must be agreed upon in writing **before the first viewing** [1]. A split renegotiated after an offer is made is not recognized [1].",
+   "answer": "The default co-broke split is 50/50 between the listing side and the buyer side [1]. Any different split must be agreed upon in writing before the first viewing [1]. A split renegotiated after an offer has been made is not recognized [1].",
    "not_found": false,
    "faithful": true,
-   "faithful_reason": "The answer correctly states the default split and the timing requirement based on Part C of the context.",
+   "faithful_reason": "All claims are directly supported by Section C of the havenmark_pathway.txt document.",
    "relevant": true,
-   "relevant_reason": "The answer correctly identifies the 50/50 default split and states that a different split must be agreed in writing before the first viewing.",
+   "relevant_reason": "The answer directly addresses both the default split percentage and the timing required for agreeing to a different split.",
    "correct": true,
-   "correct_reason": "The system answer correctly identifies the fifty-fifty default split and the requirement for a written agreement before the first viewing."
+   "correct_reason": "The system answer correctly includes all key facts: the 50/50 default split, the requirement for written agreement before the first viewing, and the invalidity of renegotiations after an offer."
   },
   {
    "question": "What four things must a co-broke agreement name to be enforceable internally?",
@@ -667,7 +667,7 @@
    "context_recall": 1.0,
    "precision_at_k": 0.75,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9937,
+   "ndcg_at_k": 0.994,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.25,
@@ -676,29 +676,29 @@
    "retrieved": [
     {
      "title": "havenmark_pathway.txt",
-     "similarity": 0.6062
+     "similarity": 0.6056
     },
     {
      "title": "havenmark_pathway.txt",
-     "similarity": 0.4506
+     "similarity": 0.4499
     },
     {
      "title": "havenmark_referral_programme.txt",
-     "similarity": 0.4963
+     "similarity": 0.4954
     },
     {
      "title": "havenmark_method.txt",
-     "similarity": 0.4384
+     "similarity": 0.4389
     }
    ],
-   "answer": "To be enforceable internally, a co-broke agreement must name the following four things:\n\n1. Both agencies [1]\n2. Both agents [1]\n3. The property [1]\n4. The split [1]",
+   "answer": "To be enforceable internally, a co-broke agreement must name the following four things:\n1. Both agencies\n2. Both agents\n3. The property\n4. The split [1]",
    "not_found": false,
    "faithful": true,
-   "faithful_reason": "Context [1] states that a co-broke agreement must name both agencies, both agents, the property, and the split to be enforceable internally.",
-   "relevant": null,
-   "relevant_reason": "judge unavailable: judge model 'models/gemini-3.5-flash-lite' failed: Error code: 429 - [{'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.5-flash-lite\\nPlease retry in 23.456978533s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.5-flash-lite'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '23s'}]}}]",
-   "correct": null,
-   "correct_reason": "judge unavailable: judge model 'models/gemini-3.5-flash-lite' failed: Error code: 429 - [{'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.5-flash-lite\\nPlease retry in 21.775655987s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'model': 'gemini-3.5-flash-lite', 'location': 'global'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '21s'}]}}]"
+   "faithful_reason": "Section C.3 of [1] explicitly states that a co-broke agreement must name both agencies, both agents, the property, and the split to be enforceable internally.",
+   "relevant": true,
+   "relevant_reason": "The answer directly lists the four specific requirements requested in the question.",
+   "correct": true,
+   "correct_reason": "The system correctly identifies all four required elements specified in the source passage."
   },
   {
    "question": "How long are Havenmark case files retained?",
@@ -714,7 +714,7 @@
    "context_recall": 1.0,
    "precision_at_k": 0.75,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9875,
+   "ndcg_at_k": 0.9878,
    "hit_rate_at_k": 1,
    "exact_context_recall": 0.0,
    "exact_precision_at_k": 0.0,
@@ -723,7 +723,7 @@
    "retrieved": [
     {
      "title": "havenmark_client_data_policy.txt",
-     "similarity": 0.6482
+     "similarity": 0.6496
     },
     {
      "title": "havenmark_pathway.txt",
@@ -731,21 +731,21 @@
     },
     {
      "title": "havenmark_market_call_august.txt",
-     "similarity": 0.4814
+     "similarity": 0.4795
     },
     {
      "title": "havenmark_client_data_policy.txt",
-     "similarity": 0.6202
+     "similarity": 0.6191
     }
    ],
    "answer": "I couldn't find this in your documents.",
    "not_found": true,
-   "faithful": false,
-   "faithful_reason": "Document [1] states that case file retention periods are set by the Pathway, and Document [3] mentions that the case file retention period was taught as a rule, but the specific duration is not provided in the text.",
+   "faithful": true,
+   "faithful_reason": "The documents state that the case file retention period is set by the Pathway, but the Pathway document does not provide a specific duration.",
    "relevant": true,
-   "relevant_reason": "The provided documents do not contain information about the retention period for Havenmark case files, making the 'not found' response correct.",
+   "relevant_reason": "The answer correctly states that the information was not found in the provided documents.",
    "correct": false,
-   "correct_reason": "The system failed to find the information and stated it couldn't find it, missing the correct answer of seven years."
+   "correct_reason": "The system failed to retrieve the fact that case files are retained for seven years."
   },
   {
    "question": "What are the three grades of compliance finding and what happens for the most serious?",
@@ -761,7 +761,7 @@
    "context_recall": 1.0,
    "precision_at_k": 1.0,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9856,
+   "ndcg_at_k": 0.9859,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.25,
@@ -770,11 +770,11 @@
    "retrieved": [
     {
      "title": "havenmark_pathway.txt",
-     "similarity": 0.5018
+     "similarity": 0.5027
     },
     {
      "title": "compliance_casebook.txt",
-     "similarity": 0.6001
+     "similarity": 0.6011
     },
     {
      "title": "agent_faq.txt",
@@ -782,17 +782,17 @@
     },
     {
      "title": "compliance_casebook.txt",
-     "similarity": 0.5055
+     "similarity": 0.5065
     }
    ],
-   "answer": "Based on the provided documents, compliance findings are graded as **Minor**, **Major**, or **Critical** [1].\n\nFor the most serious grade (**Critical**):\n* Examples include an unverified price quoted to a client, an undisclosed conflict, or a co-broke split changed after an offer [1]. \n* The case is suspended immediately, and the Practice Committee convenes within one working day [1].",
+   "answer": "The three grades of compliance findings are Minor, Major, and Critical [1].\n\nFor the most serious grade, **Critical**, the following occurs:\n*   The case is suspended immediately [1].\n*   The Practice Committee convenes within one working day [1].",
    "not_found": false,
    "faithful": true,
-   "faithful_reason": "The three grades and the consequences for the most serious grade are directly supported by Part E of document [1].",
+   "faithful_reason": "All claims are directly supported by the text in Part E of the first document.",
    "relevant": true,
-   "relevant_reason": "The answer correctly identifies the three grades and details the specific consequences for the most serious one.",
-   "correct": true,
-   "correct_reason": "The system correctly identifies the three grades and states that a Critical finding suspends the case immediately."
+   "relevant_reason": "The answer directly identifies the three grades and explains the consequences for the most serious one.",
+   "correct": null,
+   "correct_reason": "judge unavailable: judge returned only a reasoning block, no verdict"
   },
   {
    "question": "Who leads the final segment of Market Call, and why is it given to them?",
@@ -808,7 +808,7 @@
    "context_recall": 1.0,
    "precision_at_k": 0.25,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9955,
+   "ndcg_at_k": 0.9954,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.25,
@@ -821,25 +821,25 @@
     },
     {
      "title": "agent_faq.txt",
-     "similarity": 0.3735
+     "similarity": 0.3754
     },
     {
      "title": "outreach_blueprint.txt",
-     "similarity": 0.4296
+     "similarity": 0.4306
     },
     {
      "title": "havenmark_pathway.txt",
-     "similarity": 0.3038
+     "similarity": 0.3056
     }
    ],
-   "answer": "Based on the provided documents, the final segment of Market Call is led by the **most junior person present** (a Ground agent) [1, 2]. \n\nIt is given to them because:\n* Teaching a rule is how you find out whether you understand it [1]. \n* Someone who has read a rule can repeat it, but someone who can teach it has to reconstruct why it exists, which makes the gaps show [2].",
+   "answer": "The final segment of Market Call is led by the most junior person present [1]. This segment is given to them because teaching a rule is the method used to determine whether it is actually understood [1]. Explaining a rule is considered the only reliable test of understanding because while someone can repeat a rule they have read, someone who can teach it must reconstruct why the rule exists, which reveals any gaps in their knowledge [2].",
    "not_found": false,
    "faithful": true,
-   "faithful_reason": "The answer correctly identifies that the final segment is led by the most junior person to test their understanding by teaching a rule, as stated in the text [1, 2].",
+   "faithful_reason": "All claims regarding the leader of the final segment and the reasoning for it are directly supported by the provided context.",
    "relevant": true,
-   "relevant_reason": "The answer correctly identifies who leads the final segment and provides the exact pedagogical reasons stated in the documents.",
+   "relevant_reason": "The answer directly identifies the most junior person as the leader and explains that it is used to test their understanding of rules.",
    "correct": true,
-   "correct_reason": "The system correctly identifies that the most junior person leads the final segment to test their understanding through teaching."
+   "correct_reason": "The system correctly identifies the most junior person as the leader and explains that it is used to test understanding."
   },
   {
    "question": "When an agent leaves Havenmark, what do they take and what stays with the firm?",
@@ -855,7 +855,7 @@
    "context_recall": 1.0,
    "precision_at_k": 1.0,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9899,
+   "ndcg_at_k": 0.9897,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.25,
@@ -864,29 +864,29 @@
    "retrieved": [
     {
      "title": "havenmark_pathway.txt",
-     "similarity": 0.709
+     "similarity": 0.7098
     },
     {
      "title": "havenmark_new_agent_handbook.txt",
-     "similarity": 0.5556
+     "similarity": 0.5542
     },
     {
      "title": "havenmark_client_data_policy.txt",
-     "similarity": 0.592
+     "similarity": 0.59
     },
     {
      "title": "havenmark_pathway.txt",
-     "similarity": 0.5395
+     "similarity": 0.5392
     }
    ],
-   "answer": "Based on the provided documents, when an agent leaves Havenmark, they keep their own client relationships, while the case files remain with the firm [1].",
+   "answer": "An agent leaving Havenmark keeps their own client relationships [1]. However, case files remain with the firm because the files carry obligations to the client that outlast the agent's employment [1].",
    "not_found": false,
    "faithful": true,
-   "faithful_reason": "Document [1] states that an leaving agent keeps client relationships and case files remain with the firm.",
+   "faithful_reason": "The answer accurately reflects the information provided in context [1].",
    "relevant": true,
-   "relevant_reason": "The answer correctly identifies what leaves and what stays with the firm based on the provided documents.",
+   "relevant_reason": "The answer directly addresses both parts of the question by specifying that agents keep client relationships and the firm retains case files.",
    "correct": true,
-   "correct_reason": "The system correctly states that departing agents keep their client relationships while case files remain with the firm."
+   "correct_reason": "The system answer accurately conveys all key facts and the reasoning provided in the expected answer."
   },
   {
    "question": "How is a Keystone agent assessed?",
@@ -911,29 +911,29 @@
    "retrieved": [
     {
      "title": "havenmark_pathway.txt",
-     "similarity": 0.6024
+     "similarity": 0.6027
     },
     {
      "title": "havenmark_team_leader_standard.txt",
-     "similarity": 0.4904
+     "similarity": 0.4898
     },
     {
      "title": "havenmark_pathway.txt",
-     "similarity": 0.4593
+     "similarity": 0.4599
     },
     {
      "title": "havenmark_practice_committee_charter.txt",
-     "similarity": 0.4157
+     "similarity": 0.416
     }
    ],
-   "answer": "A Keystone agent is assessed primarily on team retention (above 70% over the trailing twenty-four months), and only secondarily on personal transactions.",
+   "answer": "A Keystone agent is assessed primarily on team retention, and only secondarily on personal transactions [1].",
    "not_found": false,
    "faithful": true,
-   "faithful_reason": "Context [1] explicitly states that a Keystone agent is assessed primarily on team retention and secondarily on personal transactions, with a requirement of team retention above 70% over the trailing twenty-four months.",
+   "faithful_reason": "The answer is directly supported by the text in context [1].",
    "relevant": true,
-   "relevant_reason": "The answer directly addresses how a Keystone agent is assessed by citing team retention and personal transactions.",
+   "relevant_reason": "The answer directly specifies the criteria used to assess a Keystone agent.",
    "correct": true,
-   "correct_reason": "The system's answer correctly conveys the key facts about team retention and personal transactions as stated in the source passages."
+   "correct_reason": "The system answer accurately conveys all key facts from the expected answer."
   },
   {
    "question": "What are Havenmark's three content tiers and how often is each published?",
@@ -949,7 +949,7 @@
    "context_recall": 1.0,
    "precision_at_k": 0.5,
    "mrr": 1.0,
-   "ndcg_at_k": 0.964,
+   "ndcg_at_k": 0.9644,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.25,
@@ -958,29 +958,29 @@
    "retrieved": [
     {
      "title": "havenmark_media_briefing.txt",
-     "similarity": 0.8036
+     "similarity": 0.8048
     },
     {
      "title": "havenmark_paid_advertising_policy.txt",
-     "similarity": 0.5037
+     "similarity": 0.5034
     },
     {
      "title": "havenmark_method.txt",
-     "similarity": 0.5883
+     "similarity": 0.5889
     },
     {
      "title": "havenmark_media_briefing.txt",
-     "similarity": 0.522
+     "similarity": 0.5225
     }
    ],
-   "answer": "Based on the provided documents, Havenmark's three content tiers and their publishing frequencies are:\n\n* **Tier 1 \u2014 Market Read:** Published monthly (on the fifteenth of each month) [1].\n* **Tier 2 \u2014 Unit Study:** Published weekly [1].\n* **Tier 3 \u2014 Answer Post:** Published daily [1].",
+   "answer": "Havenmark's three content tiers and their publication frequencies are:\n\n*   **Tier 1 \u2014 Market Read:** Published monthly on the fifteenth of each month [1].\n*   **Tier 2 \u2014 Unit Study:** Published weekly [1].\n*   **Tier 3 \u2014 Answer Post:** Published daily [1].",
    "not_found": false,
-   "faithful": true,
-   "faithful_reason": "The context explicitly lists the three content tiers (Market Read, Unit Study, Answer Post) and their respective frequencies (monthly, weekly, daily).",
-   "relevant": null,
-   "relevant_reason": "judge unavailable: judge model 'models/gemini-3.5-flash-lite' failed: Error code: 429 - [{'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.5-flash-lite\\nPlease retry in 32.438531334s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.5-flash-lite'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '32s'}]}}]",
-   "correct": null,
-   "correct_reason": "judge unavailable: judge model 'models/gemini-3.5-flash-lite' failed: Error code: 429 - [{'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.5-flash-lite\\nPlease retry in 30.850514873s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'model': 'gemini-3.5-flash-lite', 'location': 'global'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '30s'}]}}]"
+   "faithful": null,
+   "faithful_reason": "judge unavailable: judge model 'models/gemma-4-26b-a4b-it' failed: Error code: 429 - [{'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_input_token_count, limit: 16000, model: gemma-4-26b\\nPlease retry in 20.019733071s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_input_token_count', 'quotaId': 'GenerateContentInputTokensPerModelPerMinute-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemma-4-26b'}, 'quotaValue': '16000'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '20s'}]}}]",
+   "relevant": true,
+   "relevant_reason": "The answer directly identifies all three content tiers and their respective publication frequencies as requested.",
+   "correct": true,
+   "correct_reason": "The system correctly identifies all three content tiers and their corresponding publication frequencies."
   },
   {
    "question": "What is Havenmark's policy on using AI to write posts?",
@@ -1005,29 +1005,29 @@
    "retrieved": [
     {
      "title": "havenmark_media_briefing.txt",
-     "similarity": 0.713
+     "similarity": 0.7168
     },
     {
      "title": "havenmark_media_briefing.txt",
-     "similarity": 0.5615
+     "similarity": 0.5627
     },
     {
      "title": "havenmark_client_data_policy.txt",
-     "similarity": 0.4291
+     "similarity": 0.4296
     },
     {
      "title": "compliance_casebook.txt",
-     "similarity": 0.4301
+     "similarity": 0.4291
     }
    ],
-   "answer": "I couldn't generate an answer right now (Error code: 429 - [{'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.5-flash-lite\\nPlease retry in 6.32221018s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'model': 'gemini-3.5-flash-lite', 'location': 'global'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '6s'}]}}]). Your documents are still indexed \u2014 please try again shortly.",
-   "not_found": true,
-   "faithful": false,
-   "faithful_reason": "The answer is an API error message rather than a policy statement about using AI to write posts.",
-   "relevant": false,
-   "relevant_reason": "The answer is an API rate limit error message rather than a response to the question.",
-   "correct": false,
-   "correct_reason": "The system returned an error message instead of the expected answer."
+   "answer": "Havenmark's policy regarding AI assistance for posts includes the following rules:\n\n*   **Drafting vs. Publishing:** AI is permitted to draft posts, but it is not permitted to publish them [1].\n*   **Review Requirement:** Every post assisted by AI must be reviewed by a named agent before it is published [1]. The agent's name is recorded against the post, and that agent is held accountable for the claims made, rather than the tool [1].\n*   **Market Data:** AI must never be used to generate market figures [1]. All numbers in a Havenmark post must come from transaction records or a lodged caveat, and the source must be stated [1].\n*   **Compliance:** A post that cites a figure without a source is considered a Major compliance finding and must be taken down within one working day of being flagged [1, 2]. An example of a failure in this policy involved an AI-drafted post that went out without a named reviewer and cited a figure that could not be traced to a caveat [4].",
+   "not_found": false,
+   "faithful": null,
+   "faithful_reason": "judge unavailable: judge returned only a reasoning block, no verdict",
+   "relevant": true,
+   "relevant_reason": "The answer directly and comprehensively outlines the specific rules and requirements regarding Havenmark's use of AI for posts.",
+   "correct": true,
+   "correct_reason": "The system answer correctly conveys both the drafting/publishing rule and the requirement for a named agent to review and be accountable for the post."
   },
   {
    "question": "Can AI be used to generate market figures at Havenmark?",
@@ -1043,7 +1043,7 @@
    "context_recall": 1.0,
    "precision_at_k": 0.5,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9821,
+   "ndcg_at_k": 0.9835,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.25,
@@ -1052,29 +1052,29 @@
    "retrieved": [
     {
      "title": "havenmark_media_briefing.txt",
-     "similarity": 0.6749
-    },
-    {
-     "title": "launch_portfolio.txt",
-     "similarity": 0.4598
+     "similarity": 0.6762
     },
     {
      "title": "havenmark_method.txt",
-     "similarity": 0.5287
+     "similarity": 0.528
+    },
+    {
+     "title": "launch_portfolio.txt",
+     "similarity": 0.4566
     },
     {
      "title": "valuation_notes.txt",
-     "similarity": 0.4662
+     "similarity": 0.4665
     }
    ],
-   "answer": "No, AI must never be used to generate market figures at Havenmark [1]. Every number in a Havenmark post must come from a lodged caveat or from their own transaction records, with the source clearly stated [1].",
+   "answer": "No, AI must never be used to generate market figures [1]. All numbers in a Havenmark post must come from a lodged caveat or from the company's own transaction records, and the source must be stated [1].",
    "not_found": false,
    "faithful": true,
-   "faithful_reason": "The context explicitly states that AI must never be used to generate market figures [1].",
+   "faithful_reason": "The answer directly reflects the policy stated in section 3.3 of the first document.",
    "relevant": true,
-   "relevant_reason": "The answer directly addresses the question by stating that AI must never be used to generate market figures at Havenmark.",
+   "relevant_reason": "The answer directly addresses the question by stating that AI cannot be used and specifying the required sources for market figures.",
    "correct": true,
-   "correct_reason": "The system's answer correctly states that AI cannot be used and that numbers must come from transaction records or caveats."
+   "correct_reason": "The system answer correctly conveys that AI cannot be used and that all numbers must come from specific sources with the source stated."
   },
   {
    "question": "What is the required response time for a portal enquiry during working hours?",
@@ -1090,7 +1090,7 @@
    "context_recall": 1.0,
    "precision_at_k": 0.5,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9893,
+   "ndcg_at_k": 0.9891,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.25,
@@ -1099,7 +1099,7 @@
    "retrieved": [
     {
      "title": "havenmark_media_briefing.txt",
-     "similarity": 0.6739
+     "similarity": 0.6738
     },
     {
      "title": "havenmark_market_call.txt",
@@ -1107,21 +1107,21 @@
     },
     {
      "title": "havenmark_referral_programme.txt",
-     "similarity": 0.4277
+     "similarity": 0.4293
     },
     {
      "title": "havenmark_new_agent_handbook.txt",
-     "similarity": 0.4324
+     "similarity": 0.4326
     }
    ],
-   "answer": "Based on the provided documents, the required response time for a portal enquiry during working hours is **20 minutes** [1, 2].",
+   "answer": "The required response time for a portal enquiry during working hours is 20 minutes [1].",
    "not_found": false,
    "faithful": true,
-   "faithful_reason": "Context [1] explicitly states that a portal enquiry requires a 20-minute response time during working hours.",
+   "faithful_reason": "Context [1] explicitly states that the response time for a portal enquiry during working hours is 20 minutes.",
    "relevant": true,
-   "relevant_reason": "The answer directly states the required response time of 20 minutes as requested by the question.",
+   "relevant_reason": "The answer directly provides the specific response time requested in the question.",
    "correct": true,
-   "correct_reason": "The system correctly states that the response time during working hours is 20 minutes, matching the expected answer and source text."
+   "correct_reason": "The system correctly states the 20-minute response time for a portal enquiry during working hours, matching the expected answer and source passages."
   },
   {
    "question": "Why does Havenmark set a twenty-minute response standard?",
@@ -1137,7 +1137,7 @@
    "context_recall": 1.0,
    "precision_at_k": 0.25,
    "mrr": 0.5,
-   "ndcg_at_k": 0.9192,
+   "ndcg_at_k": 0.9204,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.25,
@@ -1146,29 +1146,29 @@
    "retrieved": [
     {
      "title": "havenmark_market_call.txt",
-     "similarity": 0.4416
+     "similarity": 0.4419
     },
     {
      "title": "havenmark_media_briefing.txt",
-     "similarity": 0.6122
+     "similarity": 0.6115
     },
     {
      "title": "havenmark_commercial_desk.txt",
-     "similarity": 0.5375
+     "similarity": 0.5372
     },
     {
      "title": "havenmark_team_leader_standard.txt",
-     "similarity": 0.4319
+     "similarity": 0.4344
     }
    ],
-   "answer": "Havenmark sets a twenty-minute response standard (for portal enquiries during working hours, and WhatsApp enquiries during working hours) because an enquiry answered after two hours converts at roughly a third of the rate of one answered inside twenty minutes [1, 2]. The standard exists because of that gap in conversion rate, not because faster is politer [2].",
+   "answer": "Havenmark sets a twenty-minute response standard for portal enquiries because an enquiry answered after two hours converts at roughly a third of the rate of one answered within twenty minutes [1, 2]. The standard exists because of this conversion gap, rather than to be more polite [2].",
    "not_found": false,
-   "faithful": null,
-   "faithful_reason": "judge unavailable: judge model 'models/gemini-3.5-flash-lite' failed: Error code: 429 - [{'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.5-flash-lite\\nPlease retry in 6.580589488s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'model': 'gemini-3.5-flash-lite', 'location': 'global'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '6s'}]}}]",
+   "faithful": true,
+   "faithful_reason": "The context states the standard exists because an enquiry answered after two hours converts at roughly a third of the rate, not because faster is politer.",
    "relevant": true,
-   "relevant_reason": "The answer correctly explains that the twenty-minute standard is set due to the significant drop in conversion rates for enquiries answered after two hours.",
+   "relevant_reason": "The answer correctly explains that Havenmark sets the twenty-minute standard due to the conversion rate dropping significantly for enquiries answered after two hours.",
    "correct": true,
-   "correct_reason": "The system answer correctly conveys that the standard is set because an enquiry answered after two hours converts at roughly a third of the rate of one answered inside twenty minutes."
+   "correct_reason": "The system's answer accurately conveys that enquiries answered after two hours convert at roughly a third of the rate of those answered within twenty minutes."
   },
   {
    "question": "Does Havenmark track follower counts?",
@@ -1184,7 +1184,7 @@
    "context_recall": 1.0,
    "precision_at_k": 0.5,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9679,
+   "ndcg_at_k": 0.9682,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.25,
@@ -1193,29 +1193,29 @@
    "retrieved": [
     {
      "title": "havenmark_media_briefing.txt",
-     "similarity": 0.6496
+     "similarity": 0.6499
     },
     {
      "title": "havenmark_method.txt",
-     "similarity": 0.4984
+     "similarity": 0.4992
     },
     {
      "title": "agent_faq.txt",
-     "similarity": 0.6064
+     "similarity": 0.6054
     },
     {
      "title": "havenmark_commercial_desk.txt",
-     "similarity": 0.429
+     "similarity": 0.4298
     }
    ],
-   "answer": "No, Havenmark does not track follower counts [1, 3]. Followers are not tracked because follower counts are not considered clients, the number is easy to move without moving anything that matters, and any metric that can be improved without improving the business will eventually be improved instead of the business [1, 3].",
+   "answer": "No, Havenmark does not track follower counts [1]. The firm does not track them because the number can be moved without moving anything that matters, and any metric that can be improved without improving the business will eventually be improved instead of the business [1, 3, 4].",
    "not_found": false,
    "faithful": true,
-   "faithful_reason": "The context explicitly confirms that Havenmark does not track follower counts because they are easy to move without moving anything that matters [1, 3].",
+   "faithful_reason": "The context explicitly states that Havenmark does not track follower counts and explains why.",
    "relevant": true,
-   "relevant_reason": "The answer directly addresses the question by stating that Havenmark does not track follower counts and providing the reasoning behind this policy.",
+   "relevant_reason": "The answer directly addresses the question and provides specific evidence from the text explaining why Havenmark does not track follower counts.",
    "correct": true,
-   "correct_reason": "The system correctly states that follower counts are not tracked and includes the reasons provided in the source context."
+   "correct_reason": "The system correctly states that Havenmark does not track follower counts and includes the core reasoning that the metric can be changed without impacting the business."
   },
   {
    "question": "What happens to a post that cites a figure without a source?",
@@ -1231,7 +1231,7 @@
    "context_recall": 1.0,
    "precision_at_k": 0.75,
    "mrr": 0.5,
-   "ndcg_at_k": 0.9317,
+   "ndcg_at_k": 0.9312,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.5,
@@ -1240,29 +1240,29 @@
    "retrieved": [
     {
      "title": "havenmark_media_briefing.txt",
-     "similarity": 0.4228
+     "similarity": 0.4235
     },
     {
      "title": "havenmark_media_briefing.txt",
-     "similarity": 0.5802
+     "similarity": 0.58
     },
     {
      "title": "havenmark_paid_advertising_policy.txt",
-     "similarity": 0.4518
+     "similarity": 0.4519
     },
     {
      "title": "compliance_casebook.txt",
-     "similarity": 0.4641
+     "similarity": 0.4633
     }
    ],
-   "answer": "A post that cites a figure without a source is taken down within one working day of being flagged [1, 2, 4]. This is classified as a Major compliance finding rather than an editorial note [1, 2].",
+   "answer": "If a post cites a figure without a source, it is taken down within one working day of being flagged [1, 2]. This is classified as a Major compliance finding, rather than an editorial note [1, 2].",
    "not_found": false,
    "faithful": true,
-   "faithful_reason": "The answer correctly states that such a post is taken down within one working day and is a Major compliance finding, supported by documents 1, 2, and 4.",
+   "faithful_reason": "The context states that a post citing a figure without a source is taken down within one working day of being flagged and is a Major compliance finding [1, 2].",
    "relevant": true,
-   "relevant_reason": "The answer directly addresses what happens to a post citing a figure without a source by stating it is taken down within one working day.",
+   "relevant_reason": "The answer directly addresses the question by stating that the post is taken down within one working day based on the provided text [1, 2].",
    "correct": true,
-   "correct_reason": "The system's answer accurately conveys both key facts: that the post is taken down within one working day of being flagged and that it is classified as a Major compliance finding."
+   "correct_reason": "The system answer accurately conveys all key facts from the source passage, including the removal timeframe and the classification as a Major compliance finding."
   },
   {
    "question": "What documents are required at the offer stage for a rental case versus a sales case?",
@@ -1278,7 +1278,7 @@
    "context_recall": 0.5,
    "precision_at_k": 0.25,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9997,
+   "ndcg_at_k": 0.9998,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.25,
@@ -1287,29 +1287,29 @@
    "retrieved": [
     {
      "title": "transaction_checklist.txt",
-     "similarity": 0.664
+     "similarity": 0.6641
     },
     {
      "title": "commercial_checklist.txt",
-     "similarity": 0.614
+     "similarity": 0.6137
     },
     {
      "title": "havenmark_rental_playbook.txt",
-     "similarity": 0.5303
+     "similarity": 0.5321
     },
     {
      "title": "tenancy_faq.txt",
-     "similarity": 0.5772
+     "similarity": 0.5765
     }
    ],
-   "answer": "Based on the transaction checklist, the documents required at the offer stage are:\n\n* **Rental Case:**\n  * Letter of Intent (LOI) [1]\n  * Good faith deposit receipt (one month rent) [1]\n\n* **Sales Case:**\n  * Option to Purchase (OTP) [1]\n  * Option fee receipt (1% of purchase price) [1]",
+   "answer": "Based on the provided documents, the required documents at the offer stage differ depending on whether the case is a rental or a sale:\n\n**Rental Case Documents (Offer Stage):**\n*   **New Residential:** Letter of Intent (LOI) and a good faith deposit receipt (one month rent) [1].\n*   **Commercial Lease:** Letter of Offer (LOO) and a good faith deposit receipt (one month gross rent) [2].\n\n**Sales Case Documents (Offer Stage):**\n*   **New Residential:** Option to Purchase (OTP) and an option fee receipt (1% of purchase price) [1].\n*   **Commercial Sale:** Offer to Purchase and a deposit receipt (5% of purchase price) [2].",
    "not_found": false,
-   "faithful": null,
-   "faithful_reason": "judge unavailable: judge model 'models/gemini-3.5-flash-lite' failed: Error code: 429 - [{'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.5-flash-lite\\nPlease retry in 17.050242486s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.5-flash-lite'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '17s'}]}}]",
-   "relevant": null,
-   "relevant_reason": "judge unavailable: judge model 'models/gemini-3.5-flash-lite' failed: Error code: 429 - [{'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.5-flash-lite\\nPlease retry in 15.445136927s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.5-flash-lite'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '15s'}]}}]",
-   "correct": null,
-   "correct_reason": "judge unavailable: judge model 'models/gemini-3.5-flash-lite' failed: Error code: 429 - [{'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.5-flash-lite\\nPlease retry in 13.847780368s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.5-flash-lite'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '13s'}]}}]"
+   "faithful": true,
+   "faithful_reason": "The required documents for both rental and sales cases (residential and commercial) at the offer stage are directly supported by sources [1] and [2].",
+   "relevant": true,
+   "relevant_reason": "The answer clearly lists the required documents for both rental and sales cases at the offer stage based on the provided text.",
+   "correct": true,
+   "correct_reason": "The system correctly identifies the core documents for both rental and sales cases at the offer stage."
   },
   {
    "question": "What is the standard commission for a residential sale where the seller is represented?",
@@ -1334,29 +1334,29 @@
    "retrieved": [
     {
      "title": "transaction_checklist.txt",
-     "similarity": 0.5648
+     "similarity": 0.5647
     },
     {
      "title": "commercial_checklist.txt",
-     "similarity": 0.5116
+     "similarity": 0.5128
     },
     {
      "title": "ec_portfolio.txt",
-     "similarity": 0.6102
+     "similarity": 0.6092
     },
     {
      "title": "havenmark_commercial_desk.txt",
-     "similarity": 0.4175
+     "similarity": 0.4174
     }
    ],
-   "answer": "Based on the provided documents, the standard commission for a residential sale where the seller is represented is 2% of the transacted price [1].",
+   "answer": "The standard commission for a residential sale where the seller is represented is 2% of the transacted price, which is payable on completion [1].",
    "not_found": false,
    "faithful": true,
-   "faithful_reason": "The context states under the COMMISSION sheet in [1] that for a residential sale where the seller is represented, the standard rate is 2% of the transacted price.",
+   "faithful_reason": "Context [1] explicitly states that for a residential sale where the seller is represented, the standard rate is 2% of the transacted price, payable on completion.",
    "relevant": true,
-   "relevant_reason": "The answer directly states the standard commission percentage for a seller-represented residential sale as found in the documents.",
+   "relevant_reason": "The answer directly states the standard commission percentage for a represented seller as 2% of the transacted price, matching the question.",
    "correct": true,
-   "correct_reason": "The system answer correctly identifies the standard commission as 2% of the transacted price based on the source text."
+   "correct_reason": "The system answer accurately conveys the key facts of 2% of the transacted price payable on completion as stated in the expected answer."
   },
   {
    "question": "How long is the option period for a residential sale, and how long from acceptance to completion?",
@@ -1372,7 +1372,7 @@
    "context_recall": 1.0,
    "precision_at_k": 1.0,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9994,
+   "ndcg_at_k": 0.9997,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.25,
@@ -1381,29 +1381,29 @@
    "retrieved": [
     {
      "title": "transaction_checklist.txt",
-     "similarity": 0.6011
+     "similarity": 0.6025
     },
     {
      "title": "commercial_checklist.txt",
-     "similarity": 0.5246
+     "similarity": 0.5236
     },
     {
      "title": "commercial_checklist.txt",
-     "similarity": 0.5126
+     "similarity": 0.5141
     },
     {
      "title": "transaction_checklist.txt",
-     "similarity": 0.4576
+     "similarity": 0.4584
     }
    ],
-   "answer": "Based on the provided documents under the TIMELINE sheet for residential sales:\n\n* **Option period (Offer to acceptance):** 21 calendar days [1]\n* **Acceptance to completion:** 8 to 12 weeks [1]",
+   "answer": "For a residential sale, the option period (offer to acceptance) is 21 calendar days, and the period from acceptance to completion is 8 to 12 weeks [1].",
    "not_found": false,
    "faithful": true,
-   "faithful_reason": "The option period and acceptance to completion timeline for residential sales are explicitly stated in context [1].",
+   "faithful_reason": "The context under Sheet: TIMELINE in document [1] states that for a residential sale, offer to acceptance is 21 calendar days and acceptance to completion is 8 to 12 weeks.",
    "relevant": true,
-   "relevant_reason": "The answer directly addresses both parts of the question by citing the option period and acceptance-to-completion timeline from the documents.",
+   "relevant_reason": "The answer directly addresses both the option period and the time from acceptance to completion using the provided citation.",
    "correct": true,
-   "correct_reason": "The system answer correctly identifies the 21 calendar days option period and 8 to 12 weeks from acceptance to completion."
+   "correct_reason": "The system correctly identifies both the 21-calendar-day option period and the 8-to-12-week completion timeframe."
   },
   {
    "question": "When must an agent disclose that they represent both sides of a transaction?",
@@ -1419,7 +1419,7 @@
    "context_recall": 1.0,
    "precision_at_k": 1.0,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9861,
+   "ndcg_at_k": 0.9863,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.5,
@@ -1432,25 +1432,25 @@
     },
     {
      "title": "commercial_checklist.txt",
-     "similarity": 0.4628
+     "similarity": 0.4636
     },
     {
      "title": "transaction_checklist.txt",
-     "similarity": 0.5628
+     "similarity": 0.5623
     },
     {
      "title": "tenancy_faq.txt",
-     "similarity": 0.4826
+     "similarity": 0.4805
     }
    ],
-   "answer": "An agent must provide written disclosure signed by both parties before an offer is made [1, 2].",
+   "answer": "An agent must provide a written disclosure that is signed by both parties before any offer is made [1, 2, 3].",
    "not_found": false,
    "faithful": true,
-   "faithful_reason": "The context explicitly states that an agent representing both sides must provide a written disclosure signed by both parties before an offer is made [1, 2].",
-   "relevant": null,
-   "relevant_reason": "judge unavailable: judge model 'models/gemini-3.5-flash-lite' failed: Error code: 429 - [{'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.5-flash-lite\\nPlease retry in 6.796255565s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.5-flash-lite'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '6s'}]}}]",
-   "correct": null,
-   "correct_reason": "judge unavailable: judge model 'models/gemini-3.5-flash-lite' failed: Error code: 429 - [{'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.5-flash-lite\\nPlease retry in 5.326931866s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.5-flash-lite'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '5s'}]}}]"
+   "faithful_reason": "The context explicitly states that when an agent represents both sides, a written disclosure signed by both parties is required before an offer is made [1, 2, 3].",
+   "relevant": true,
+   "relevant_reason": "The answer correctly states that an agent must provide a signed written disclosure before any offer is made.",
+   "correct": true,
+   "correct_reason": "The system correctly states that the disclosure must be written, signed by both parties, and made before an offer is made."
   },
   {
    "question": "Which financing checkpoints block an Option to Purchase from being issued?",
@@ -1466,7 +1466,7 @@
    "context_recall": 1.0,
    "precision_at_k": 1.0,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9999,
+   "ndcg_at_k": 1.0,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.25,
@@ -1475,29 +1475,29 @@
    "retrieved": [
     {
      "title": "transaction_checklist.txt",
-     "similarity": 0.6332
+     "similarity": 0.6325
     },
     {
      "title": "commercial_checklist.txt",
-     "similarity": 0.5442
+     "similarity": 0.5435
     },
     {
      "title": "transaction_checklist.txt",
-     "similarity": 0.4539
+     "similarity": 0.4527
     },
     {
      "title": "havenmark_market_call.txt",
-     "similarity": 0.4883
+     "similarity": 0.4871
     }
    ],
-   "answer": "Based on the provided documents, the financing checkpoints that must be completed before an OTP is issued (acting as a blocking checkpoint owned by the buyer agent) are:\n\n* In-principle approval sighted [1]\n* Loan-to-value confirmed against property type [1]",
+   "answer": "Based on the provided documents, the financing checkpoints that are \"Blocking\" and must occur before an Option to Purchase (OTP) is issued are:\n\n*   In-principle approval sighted [1]\n*   Loan-to-value confirmed against property type [1]",
    "not_found": false,
    "faithful": true,
-   "faithful_reason": "Context [1] explicitly lists \"In-principle approval sighted\" and \"Loan-to-value confirmed against property type\" as blocking checkpoints occurring \"Before OTP is issued\" owned by the buyer agent.",
+   "faithful_reason": "Document [1] lists \"In-principle approval sighted\" and \"Loan-to-value confirmed against property type\" as blocking checkpoints before an OTP is issued.",
    "relevant": true,
-   "relevant_reason": "The answer directly identifies the financing checkpoints blocking an OTP using evidence from the documents.",
+   "relevant_reason": "The answer correctly identifies the financing checkpoints that block an Option to Purchase based on the provided document.",
    "correct": true,
-   "correct_reason": "The system answer correctly identifies both required financing checkpoints from the source passages."
+   "correct_reason": "The system correctly identifies both required financing checkpoints that must occur before an OTP is issued."
   },
   {
    "question": "Which handover inventory category does not require a photograph?",
@@ -1522,29 +1522,29 @@
    "retrieved": [
     {
      "title": "compliance_casebook.txt",
-     "similarity": 0.4912
+     "similarity": 0.4911
     },
     {
      "title": "havenmark_market_call_august.txt",
-     "similarity": 0.3612
+     "similarity": 0.3578
     },
     {
      "title": "tenancy_faq.txt",
-     "similarity": 0.4543
+     "similarity": 0.4523
     },
     {
      "title": "havenmark_rental_playbook.txt",
-     "similarity": 0.4157
+     "similarity": 0.415
     }
    ],
-   "answer": "Based on the provided documents, keys are the one handover category that does not require a photograph [1].",
+   "answer": "Keys are the one handover inventory category that does not require a photograph [1].",
    "not_found": false,
    "faithful": true,
    "faithful_reason": "Context [1] explicitly states that keys are the one handover category with no photograph requirement.",
    "relevant": true,
-   "relevant_reason": "The answer correctly identifies keys as the handover category not requiring a photograph based on the documents.",
+   "relevant_reason": "The answer correctly identifies keys as the handover inventory category that does not require a photograph based on the provided text.",
    "correct": true,
-   "correct_reason": "The system correctly identifies that keys do not require a photograph based on the source text."
+   "correct_reason": "The system correctly identifies that keys do not require a photograph, matching the key fact from the source text."
   },
   {
    "question": "Which project in the portfolio has the earliest expected TOP, and what is its indicative psf?",
@@ -1560,7 +1560,7 @@
    "context_recall": 1.0,
    "precision_at_k": 1.0,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9795,
+   "ndcg_at_k": 0.9797,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.25,
@@ -1573,25 +1573,25 @@
     },
     {
      "title": "launch_portfolio.txt",
-     "similarity": 0.5963
+     "similarity": 0.5959
     },
     {
      "title": "launch_portfolio.txt",
-     "similarity": 0.7039
+     "similarity": 0.704
     },
     {
      "title": "havenmark_market_call.txt",
-     "similarity": 0.4795
+     "similarity": 0.4808
     }
    ],
-   "answer": "Based on the provided documents, the project with the earliest expected TOP depends on whether you are looking at the Executive Condominium (EC) portfolio or the Residential New Launches portfolio:\n\n* **EC Portfolio:** **Copperleaf Rise** has the earliest expected TOP in the EC portfolio at **Q4 2027**, with an indicative PSF of **S$1,470 - S$1,590** [1]. \n* **Residential New Launches Portfolio:** **Wrenfield Park** has the earliest expected TOP in the portfolio at **Q1 2027**, with an indicative PSF of **S$1,880 - S$2,040** [2, 3].",
+   "answer": "Based on the provided documents, there are two projects tied for the earliest expected TOP:\n\n*   **Wrenfield Park** (D23) has an expected TOP of Q1 2027 and an indicative PSF starting at S$1,880 [2, 3, 4].\n*   **Copperleaf Rise** (D27) is noted as the earliest TOP in the EC portfolio at Q4 2027, with an indicative PSF of S$1,470 - S$1,590 [1].",
    "not_found": false,
-   "faithful": true,
-   "faithful_reason": "The context confirms Copperleaf Rise has the earliest EC TOP (Q4 2027, S$1,470-S$1,590) and Wrenfield Park has the earliest launch TOP (Q1 2027, S$1,880-S$2,040).",
-   "relevant": null,
-   "relevant_reason": "judge unavailable: judge model 'models/gemini-3.5-flash-lite' failed: Error code: 429 - [{'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.5-flash-lite\\nPlease retry in 26.041601508s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.5-flash-lite'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '26s'}]}}]",
-   "correct": null,
-   "correct_reason": "judge unavailable: judge model 'models/gemini-3.5-flash-lite' failed: Error code: 429 - [{'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.5-flash-lite\\nPlease retry in 24.295034447s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.5-flash-lite'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '24s'}]}}]"
+   "faithful": false,
+   "faithful_reason": "The answer claims there are two projects tied for earliest expected TOP, but Wrenfield Park (Q1 2027) is strictly earlier than Copperleaf Rise (Q4 2027).",
+   "relevant": true,
+   "relevant_reason": "The answer correctly identifies the projects with the earliest expected TOP and their respective indicative PSF based on the documents.",
+   "correct": false,
+   "correct_reason": "The system incorrectly included Copperleaf Rise instead of solely identifying Wrenfield Park as having the earliest expected TOP."
   },
   {
    "question": "How many units does Marrow Gardens have and how many of those are dual-key?",
@@ -1607,7 +1607,7 @@
    "context_recall": 1.0,
    "precision_at_k": 1.0,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9988,
+   "ndcg_at_k": 0.9987,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.25,
@@ -1616,29 +1616,29 @@
    "retrieved": [
     {
      "title": "launch_portfolio.txt",
-     "similarity": 0.582
+     "similarity": 0.5814
     },
     {
      "title": "havenmark_market_call.txt",
-     "similarity": 0.3992
+     "similarity": 0.3993
     },
     {
      "title": "havenmark_market_call_august.txt",
-     "similarity": 0.3915
+     "similarity": 0.3911
     },
     {
      "title": "district_guide.txt",
-     "similarity": 0.3458
+     "similarity": 0.3461
     }
    ],
-   "answer": "Marrow Gardens has 480 units, and that count includes 32 dual-key units [1].",
+   "answer": "Marrow Gardens has 480 units, which includes 32 dual-key units [1].",
    "not_found": false,
    "faithful": true,
-   "faithful_reason": "The context states that Marrow Gardens has 480 units and includes 32 dual-key units [1].",
+   "faithful_reason": "The context states that Marrow Gardens has 480 units, including 32 dual-key units [1].",
    "relevant": true,
-   "relevant_reason": "The answer correctly states that Marrow Gardens has 480 units, including 32 dual-key units, as supported by the text.",
+   "relevant_reason": "The answer correctly states that Marrow Gardens has 480 units with 32 dual-key units as asked.",
    "correct": false,
-   "correct_reason": "The system answer fails because the source passages and expected answer mention dual-key pricing and count details that are either missing or unsupported by the provided source text."
+   "correct_reason": "The system answer fails to mention the pricing information for dual-key units that was included in the expected answer."
   },
   {
    "question": "Which stacks at Kestrel Bay actually face the waterfront?",
@@ -1663,29 +1663,29 @@
    "retrieved": [
     {
      "title": "launch_portfolio.txt",
-     "similarity": 0.4741
+     "similarity": 0.4707
     },
     {
      "title": "havenmark_market_call.txt",
-     "similarity": 0.4304
+     "similarity": 0.4294
     },
     {
      "title": "havenmark_market_call.txt",
-     "similarity": 0.471
+     "similarity": 0.47
     },
     {
      "title": "havenmark_market_call_august.txt",
-     "similarity": 0.4095
+     "similarity": 0.4088
     }
    ],
-   "answer": "Based on the provided documents, stacks 04 through 09 at Kestrel Bay face the waterfront (while stacks 01 to 03 face the service road) [1].",
+   "answer": "At Kestrel Bay, only stacks 04 through 09 are waterfront facing [1]. Stacks 01 to 03 face the service road [1, 2].",
    "not_found": false,
    "faithful": true,
-   "faithful_reason": "Document [1] states that Kestrel Bay's waterfront facing is for stacks 04 through 09 only.",
+   "faithful_reason": "The context states that for Kestrel Bay, stacks 04 through 09 are waterfront facing and stacks 01 to 03 face the service road.",
    "relevant": true,
-   "relevant_reason": "The answer directly identifies stacks 04 through 09 as facing the waterfront based on the provided documents.",
+   "relevant_reason": "The answer directly identifies which stacks face the waterfront at Kestrel Bay based on the provided text.",
    "correct": true,
-   "correct_reason": "The system answer correctly identifies that stacks 04 through 09 face the waterfront and includes the detail about stacks 01 to 03."
+   "correct_reason": "The system correctly identifies that stacks 04 through 09 face the waterfront and stacks 01 to 03 face the service road."
   },
   {
    "question": "Which project has the highest indicative psf, and what should agents expect from it?",
@@ -1710,29 +1710,29 @@
    "retrieved": [
     {
      "title": "launch_portfolio.txt",
-     "similarity": 0.5312
+     "similarity": 0.5315
     },
     {
      "title": "launch_portfolio.txt",
-     "similarity": 0.6215
+     "similarity": 0.622
     },
     {
      "title": "ec_portfolio.txt",
-     "similarity": 0.5109
+     "similarity": 0.5116
     },
     {
      "title": "havenmark_market_call.txt",
-     "similarity": 0.5007
+     "similarity": 0.5018
     }
    ],
-   "answer": "Based on the provided documents, **Portland Hollow** has the highest indicative PSF in the portfolio [1, 2]. \n\nAgents should expect a longer sales runway, as this is not a volume project [1, 2].",
+   "answer": "Portland Hollow has the highest indicative PSF in the portfolio [1, 2]. Agents should expect a longer sales runway for this project, as it is not a volume project [1, 2].",
    "not_found": false,
-   "faithful": null,
-   "faithful_reason": "judge unavailable: judge model 'models/gemini-3.5-flash-lite' failed: Error code: 429 - [{'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.5-flash-lite\\nPlease retry in 38.186613608s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'model': 'gemini-3.5-flash-lite', 'location': 'global'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '38s'}]}}]",
-   "relevant": null,
-   "relevant_reason": "judge unavailable: judge model 'models/gemini-3.5-flash-lite' failed: Error code: 429 - [{'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.5-flash-lite\\nPlease retry in 36.580996309s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.5-flash-lite'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '36s'}]}}]",
+   "faithful": true,
+   "faithful_reason": "The context explicitly states that Portland Hollow has the highest indicative PSF and that agents should expect a longer sales runway because it is not a volume project.",
+   "relevant": true,
+   "relevant_reason": "The answer correctly identifies Portland Hollow as having the highest indicative PSF and states agents should expect a longer sales runway.",
    "correct": null,
-   "correct_reason": "judge unavailable: judge model 'models/gemini-3.5-flash-lite' failed: Error code: 429 - [{'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.5-flash-lite\\nPlease retry in 34.902823443s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.5-flash-lite'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '34s'}]}}]"
+   "correct_reason": "judge unavailable: judge model 'models/gemini-3.5-flash-lite' failed: Error code: 429 - [{'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.5-flash-lite\\nPlease retry in 54.441954053s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.5-flash-lite'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '54s'}]}}]"
   },
   {
    "question": "Does the standard residential sale commission rate apply to new launches?",
@@ -1757,29 +1757,29 @@
    "retrieved": [
     {
      "title": "launch_portfolio.txt",
-     "similarity": 0.5888
+     "similarity": 0.5883
     },
     {
      "title": "ec_portfolio.txt",
-     "similarity": 0.6852
+     "similarity": 0.6842
     },
     {
      "title": "ec_portfolio.txt",
-     "similarity": 0.4552
+     "similarity": 0.4554
     },
     {
      "title": "transaction_checklist.txt",
-     "similarity": 0.5456
+     "similarity": 0.5459
     }
    ],
-   "answer": "I couldn't generate an answer right now (Error code: 429 - [{'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.5-flash-lite\\nPlease retry in 13.428906321s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.5-flash-lite'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '13s'}]}}]). Your documents are still indexed \u2014 please try again shortly.",
-   "not_found": true,
-   "faithful": null,
-   "faithful_reason": "judge unavailable: judge model 'models/gemini-3.5-flash-lite' failed: Error code: 429 - [{'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.5-flash-lite\\nPlease retry in 11.79211361s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'model': 'gemini-3.5-flash-lite', 'location': 'global'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '11s'}]}}]",
-   "relevant": null,
-   "relevant_reason": "judge unavailable: judge model 'models/gemini-3.5-flash-lite' failed: Error code: 429 - [{'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.5-flash-lite\\nPlease retry in 10.206505291s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.5-flash-lite'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '10s'}]}}]",
-   "correct": null,
-   "correct_reason": "judge unavailable: judge model 'models/gemini-3.5-flash-lite' failed: Error code: 429 - [{'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.5-flash-lite\\nPlease retry in 8.710662438s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.5-flash-lite'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '8s'}]}}]"
+   "answer": "No, the standard residential sale rate does not apply to new launches. For new launches, the commission structure is set by the developer [1]. For executive condominiums, the commission is also set by the developer and differs from both the standard residential sale rate and the private new launch rate [2, 3].",
+   "not_found": false,
+   "faithful": true,
+   "faithful_reason": "The context explicitly states that new launch commission is set by the developer and not covered by the standard residential sale rate [1, 2, 3].",
+   "relevant": true,
+   "relevant_reason": "The answer directly addresses the question by stating that the standard commission rate does not apply to new launches and explains who sets the rate instead.",
+   "correct": true,
+   "correct_reason": "The system correctly states that the standard residential sale rate does not apply to new launches and that the commission is set by the developer."
   },
   {
    "question": "Who owns each module in the outreach blueprint and how often does each run?",
@@ -1795,7 +1795,7 @@
    "context_recall": 1.0,
    "precision_at_k": 0.5,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9943,
+   "ndcg_at_k": 0.9939,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.25,
@@ -1808,25 +1808,25 @@
     },
     {
      "title": "havenmark_paid_advertising_policy.txt",
-     "similarity": 0.4502
+     "similarity": 0.4481
     },
     {
      "title": "havenmark_client_data_policy.txt",
-     "similarity": 0.4408
+     "similarity": 0.4425
     },
     {
      "title": "havenmark_referral_programme.txt",
-     "similarity": 0.481
+     "similarity": 0.4814
     }
    ],
-   "answer": "Based on the outreach blueprint, the ownership and cadence for each module are as follows:\n\n* **Module A (Market Call):** \n  * **Owner:** Team Leader [1]\n  * **Cadence:** Monthly, first Tuesday [1]\n\n* **Module B (Unit Study):** \n  * **Owner:** Rotating (every agent at Frame stage or above) [1]\n  * **Cadence:** Weekly [1]\n\n* **Module C (Answer Post):** \n  * **Owner:** All agents [1]\n  * **Cadence:** Daily [1]\n\n* **Module D (Case Clinic):** \n  * **Owner:** Practice Committee [1]\n  * **Cadence:** Monthly, inside Market Call [1]",
+   "answer": "Based on the outreach blueprint, the ownership and cadence for each module are as follows:\n\n*   **Module A \u2014 Market Call:** Owned by the Team Leader; runs monthly on the first Tuesday [1].\n*   **Module B \u2014 Unit Study:** Owned by a rotating agent at the Frame stage or above; runs weekly [1].\n*   **Module C \u2014 Answer Post:** Owned by all agents; runs daily [1].\n*   **Module D \u2014 Case Clinic:** Owned by the Practice Committee; runs monthly inside the Market Call [1].",
    "not_found": false,
    "faithful": true,
-   "faithful_reason": "Every module's owner and cadence is explicitly supported by the outreach blueprint text.",
+   "faithful_reason": "Every module's ownership and cadence are accurately supported by Slides 2, 3, 4, 5, and 7 of the outreach blueprint [1].",
    "relevant": true,
-   "relevant_reason": "The answer clearly lists the owner and cadence for each of the four modules in the outreach blueprint.",
+   "relevant_reason": "The answer directly addresses who owns each module and its cadence using information from the context.",
    "correct": true,
-   "correct_reason": "The system answer correctly identifies the owner and cadence for all modules in the outreach blueprint, matching the expected answer."
+   "correct_reason": "The system answer correctly identifies the ownership and cadence for all four modules as detailed in the expected answer."
   },
   {
    "question": "What is the conversion path measured in the outreach blueprint?",
@@ -1842,7 +1842,7 @@
    "context_recall": 1.0,
    "precision_at_k": 0.5,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9811,
+   "ndcg_at_k": 0.9809,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.25,
@@ -1851,29 +1851,29 @@
    "retrieved": [
     {
      "title": "outreach_blueprint.txt",
-     "similarity": 0.5882
+     "similarity": 0.5888
     },
     {
      "title": "havenmark_paid_advertising_policy.txt",
-     "similarity": 0.3972
+     "similarity": 0.3962
     },
     {
      "title": "havenmark_client_data_policy.txt",
-     "similarity": 0.385
+     "similarity": 0.3856
     },
     {
      "title": "havenmark_media_briefing.txt",
-     "similarity": 0.545
+     "similarity": 0.5447
     }
    ],
-   "answer": "Based on the outreach blueprint, the conversion path is measured as follows:\n\nPost -> Enquiry -> Response within 20 minutes -> Viewing -> Offer [1]\n\nThis conversion path is measured at every arrow [1].",
+   "answer": "The conversion path is measured at every arrow in the following sequence: Post -> Enquiry -> Response within 20 minutes -> Viewing -> Offer [1].",
    "not_found": false,
    "faithful": true,
-   "faithful_reason": "The conversion path and its measurement at every arrow are directly stated in Slide 6 of the outreach blueprint.",
+   "faithful_reason": "The conversion path and its measurement are directly supported by Slide 6 of the outreach blueprint.",
    "relevant": true,
-   "relevant_reason": "The answer directly identifies the conversion path measured in the outreach blueprint as \"Post -> Enquiry -> Response within 20 minutes -> Viewing -> Offer\".",
+   "relevant_reason": "The answer directly identifies the conversion path measured in the outreach blueprint as the sequence from Post to Offer.",
    "correct": true,
-   "correct_reason": "The system correctly identifies the conversion path and states that it is measured at every arrow, matching the expected answer."
+   "correct_reason": "The system answer includes the exact conversion path and mentions that it is measured at every arrow."
   },
   {
    "question": "What does the outreach blueprint explicitly not cover?",
@@ -1889,7 +1889,7 @@
    "context_recall": 1.0,
    "precision_at_k": 0.75,
    "mrr": 0.5,
-   "ndcg_at_k": 0.9279,
+   "ndcg_at_k": 0.9271,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.25,
@@ -1898,29 +1898,29 @@
    "retrieved": [
     {
      "title": "havenmark_client_data_policy.txt",
-     "similarity": 0.3729
+     "similarity": 0.3735
     },
     {
      "title": "havenmark_paid_advertising_policy.txt",
-     "similarity": 0.45
+     "similarity": 0.4476
     },
     {
      "title": "outreach_blueprint.txt",
-     "similarity": 0.4481
+     "similarity": 0.4471
     },
     {
      "title": "havenmark_media_briefing.txt",
-     "similarity": 0.4608
+     "similarity": 0.4613
     }
    ],
-   "answer": "Based on the outreach blueprint, the items explicitly not covered are:\n\n* Paid advertising (which has separate budget approval) [3]\n* Co-broke listings (which are governed by Pathway Part C) [3]\n* Client data handling (which is governed by the compliance policy) [3]",
+   "answer": "The outreach blueprint explicitly does not cover the following:\n\n*   **Paid advertising:** This is subject to a separate budget approval [2, 3].\n*   **Co-broke listings:** These are governed by Pathway Part C [3].\n*   **Client data handling:** This is governed by the compliance policy [3].",
    "not_found": false,
    "faithful": true,
-   "faithful_reason": "The outreach blueprint in document [3] explicitly lists paid advertising, co-broke listings, and client data handling as what it does not cover.",
-   "relevant": null,
-   "relevant_reason": "judge unavailable: judge model 'models/gemini-3.5-flash-lite' failed: Error code: 429 - [{'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.5-flash-lite\\nPlease retry in 27.909378756s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.5-flash-lite'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '27s'}]}}]",
-   "correct": null,
-   "correct_reason": "judge unavailable: judge model 'models/gemini-3.5-flash-lite' failed: Error code: 429 - [{'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.5-flash-lite\\nPlease retry in 26.222924654s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.5-flash-lite'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '26s'}]}}]"
+   "faithful_reason": "Document [3] (outreach_blueprint.txt, Slide 8) explicitly lists paid advertising, co-broke listings, and client data handling as what the blueprint does not cover.",
+   "relevant": true,
+   "relevant_reason": "The answer directly lists what the outreach blueprint explicitly does not cover, matching the question.",
+   "correct": true,
+   "correct_reason": "The system correctly identifies all three exclusions covered in the expected answer."
   },
   {
    "question": "What were Havenmark's 1H 2026 results versus 1H 2025?",
@@ -1936,7 +1936,7 @@
    "context_recall": 1.0,
    "precision_at_k": 0.5,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9912,
+   "ndcg_at_k": 0.9915,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.25,
@@ -1945,29 +1945,29 @@
    "retrieved": [
     {
      "title": "havenmark_market_call.txt",
-     "similarity": 0.6899
+     "similarity": 0.6895
     },
     {
      "title": "launch_portfolio.txt",
-     "similarity": 0.5508
+     "similarity": 0.5476
     },
     {
      "title": "havenmark_market_call_august.txt",
-     "similarity": 0.6425
+     "similarity": 0.6411
     },
     {
      "title": "ec_portfolio.txt",
-     "similarity": 0.4429
+     "similarity": 0.4431
     }
    ],
-   "answer": "Based on Havenmark's firm-wide data comparing 1H 2026 to 1H 2025:\n\n* **Total transacted cases:** Increased from 214 to 268 (+25.2%) [1].\n* **Residential sales cases:** Increased from 131 to 172 (+31.3%) [1].\n* **Residential rental cases:** Increased from 83 to 96 (+15.7%) [1].\n* **Average commission per case:** Increased from S$9,140 to S$10,320 (+12.9%) [1].\n* **Agents at Frame stage or above:** Increased from 38 to 47 (+23.7%) [1].\n* **Median days from listing to offer:** Fell from 38 days in 1H 2025 to 31 days in 1H 2026 [1].",
+   "answer": "Compared to 1H 2025, Havenmark's 1H 2026 firm-wide results were as follows:\n\n*   **Total transacted cases:** 268 (up 25.2% from 214) [1]\n*   **Residential sales cases:** 172 (up 31.3% from 131) [1]\n*   **Residential rental cases:** 96 (up 15.7% from 83) [1]\n*   **Average commission per case:** S$10,320 (up 12.9% from S$9,140) [1]\n*   **Agents at Frame stage or above:** 47 (up 23.7% from 38) [1]\n*   **Median days from listing to offer:** Fell to 31 days from 38 days in 1H 2025 [1]",
    "not_found": false,
    "faithful": true,
-   "faithful_reason": "Every factual claim about Havenmark's 1H 2026 versus 1H 2025 results is directly supported by the text in document [1].",
+   "faithful_reason": "All factual claims regarding 1H 2026 versus 1H 2025 results are directly supported by the text in document [1].",
    "relevant": true,
-   "relevant_reason": "The answer directly addresses Havenmark's 1H 2026 results compared to 1H 2025 by providing specific metrics on cases, commissions, agent growth, and days to offer.",
+   "relevant_reason": "The answer directly provides Havenmark's 1H 2026 results compared to 1H 2025 across multiple specific metrics as requested.",
    "correct": true,
-   "correct_reason": "The system's answer accurately conveys all the key facts regarding total transacted cases and average commission growth."
+   "correct_reason": "The system correctly identified that total transacted cases were 268 versus 214 (up 25.2%) and average commission per case rose 12.9% from S$9,140 to S$10,320."
   },
   {
    "question": "What are the July 2026 Projects of the Month listed in the Market Call?",
@@ -1983,7 +1983,7 @@
    "context_recall": 0.3333,
    "precision_at_k": 1.0,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9986,
+   "ndcg_at_k": 0.9984,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.5,
@@ -1992,29 +1992,29 @@
    "retrieved": [
     {
      "title": "havenmark_market_call.txt",
-     "similarity": 0.5988
+     "similarity": 0.5991
     },
     {
      "title": "havenmark_market_call.txt",
-     "similarity": 0.5464
+     "similarity": 0.5468
     },
     {
      "title": "havenmark_market_call_august.txt",
-     "similarity": 0.6058
+     "similarity": 0.6069
     },
     {
      "title": "havenmark_market_call_september.txt",
-     "similarity": 0.5905
+     "similarity": 0.5903
     }
    ],
-   "answer": "Based on the provided documents, the July 2026 Projects of the Month (POM) are:\n\n* **POM 1** \u2014 Wrenfield Park (District 23 / D23) [1]\n* **POM 2** \u2014 Kestrel Bay (District 15 / D15) [1]",
+   "answer": "The July 2026 Projects of the Month (POM) are:\n*   **POM 1:** Wrenfield Park (D23) [1]\n*   **POM 2:** Kestrel Bay (D15) [1]",
    "not_found": false,
    "faithful": true,
-   "faithful_reason": "The context explicitly lists Wrenfield Park (D23) and Kestrel Bay (D15) as the July 2026 Projects of the Month.",
+   "faithful_reason": "The context for July 2026 explicitly lists Wrenfield Park (D23) and Kestrel Bay (D15) as the Projects of the Month.",
    "relevant": true,
-   "relevant_reason": "The answer correctly identifies the July 2026 Projects of the Month listed in the Market Call as Wrenfield Park and Kestrel Bay.",
+   "relevant_reason": "The answer directly provides the July 2026 Projects of the Month listed in the Market Call.",
    "correct": true,
-   "correct_reason": "The system correctly identifies both Wrenfield Park (D23) and Kestrel Bay (D15) as the July Projects of the Month."
+   "correct_reason": "The system correctly identified both Wrenfield Park (D23) and Kestrel Bay (D15) as the July 2026 Projects of the Month."
   },
   {
    "question": "What is the starting psf and preview date for Kestrel Bay?",
@@ -2030,7 +2030,7 @@
    "context_recall": 1.0,
    "precision_at_k": 1.0,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9958,
+   "ndcg_at_k": 0.9957,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.25,
@@ -2039,29 +2039,29 @@
    "retrieved": [
     {
      "title": "havenmark_market_call.txt",
-     "similarity": 0.5533
+     "similarity": 0.5523
     },
     {
      "title": "havenmark_market_call_august.txt",
-     "similarity": 0.498
+     "similarity": 0.4974
     },
     {
      "title": "launch_portfolio.txt",
-     "similarity": 0.5864
+     "similarity": 0.5831
     },
     {
      "title": "havenmark_market_call.txt",
-     "similarity": 0.5649
+     "similarity": 0.5642
     }
    ],
-   "answer": "Based on the provided documents, the starting psf for Kestrel Bay is S$2,380, and the preview opens on 19 July 2026 [1].",
+   "answer": "The preview for Kestrel Bay opens on 19 July 2026, with a starting psf of S$2,380 [1].",
    "not_found": false,
-   "faithful": true,
-   "faithful_reason": "The starting psf of S$2,380 and the preview date of 19 July 2026 for Kestrel Bay are explicitly stated in document [1].",
+   "faithful": null,
+   "faithful_reason": "judge unavailable: judge model 'models/gemini-3.5-flash-lite' failed: Error code: 429 - [{'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.5-flash-lite\\nPlease retry in 5.243163518s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'model': 'gemini-3.5-flash-lite', 'location': 'global'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '5s'}]}}]",
    "relevant": null,
-   "relevant_reason": "judge unavailable: judge model 'models/gemini-3.5-flash-lite' failed: Error code: 429 - [{'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.5-flash-lite\\nPlease retry in 32.14336161s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.5-flash-lite'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '32s'}]}}]",
+   "relevant_reason": "judge unavailable: judge model 'models/gemini-3.5-flash-lite' failed: Error code: 429 - [{'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.5-flash-lite\\nPlease retry in 3.444959318s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.5-flash-lite'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '3s'}]}}]",
    "correct": null,
-   "correct_reason": "judge unavailable: judge model 'models/gemini-3.5-flash-lite' failed: Error code: 429 - [{'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.5-flash-lite\\nPlease retry in 30.534201752s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.5-flash-lite'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '30s'}]}}]"
+   "correct_reason": "judge unavailable: judge model 'models/gemini-3.5-flash-lite' failed: Error code: 429 - [{'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.5-flash-lite\\nPlease retry in 1.811079797s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.5-flash-lite'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '1s'}]}}]"
   },
   {
    "question": "How many properties are on the Havenmark July 2026 Luxury slide, and which district has the most?",
@@ -2077,7 +2077,7 @@
    "context_recall": 1.0,
    "precision_at_k": 1.0,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9948,
+   "ndcg_at_k": 0.9947,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.25,
@@ -2086,29 +2086,29 @@
    "retrieved": [
     {
      "title": "havenmark_market_call.txt",
-     "similarity": 0.6623
+     "similarity": 0.6612
     },
     {
      "title": "havenmark_market_call_august.txt",
-     "similarity": 0.7089
+     "similarity": 0.708
     },
     {
      "title": "havenmark_market_call.txt",
-     "similarity": 0.7076
+     "similarity": 0.7069
     },
     {
      "title": "havenmark_market_call_august.txt",
-     "similarity": 0.6082
+     "similarity": 0.6076
     }
    ],
-   "answer": "I couldn't generate an answer right now (Error code: 429 - [{'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.5-flash-lite\\nPlease retry in 9.67575673s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.5-flash-lite'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '9s'}]}}]). Your documents are still indexed \u2014 please try again shortly.",
-   "not_found": true,
+   "answer": "The Havenmark July 2026 Luxury slide lists 5 properties, and District 09 has the most listings with two of the five [1].",
+   "not_found": false,
    "faithful": null,
-   "faithful_reason": "judge unavailable: judge model 'models/gemini-3.5-flash-lite' failed: Error code: 429 - [{'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.5-flash-lite\\nPlease retry in 8.01265552s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'model': 'gemini-3.5-flash-lite', 'location': 'global'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '8s'}]}}]",
+   "faithful_reason": "judge unavailable: judge model 'models/gemini-3.5-flash-lite' failed: Error code: 429 - [{'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.5-flash-lite\\nPlease retry in 51.810130362s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'model': 'gemini-3.5-flash-lite', 'location': 'global'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '51s'}]}}]",
    "relevant": null,
-   "relevant_reason": "judge unavailable: judge model 'models/gemini-3.5-flash-lite' failed: Error code: 429 - [{'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.5-flash-lite\\nPlease retry in 6.418772451s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.5-flash-lite'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '6s'}]}}]",
-   "correct": false,
-   "correct_reason": "The system returned an API rate limit error message instead of the expected answer."
+   "relevant_reason": "judge unavailable: judge model 'models/gemini-3.5-flash-lite' failed: Error code: 429 - [{'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.5-flash-lite\\nPlease retry in 50.278135821s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.5-flash-lite'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '50s'}]}}]",
+   "correct": null,
+   "correct_reason": "judge unavailable: judge model 'models/gemini-3.5-flash-lite' failed: Error code: 429 - [{'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.5-flash-lite\\nPlease retry in 48.75934226s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.5-flash-lite'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '48s'}]}}]"
   },
   {
    "question": "Two documents give a psf figure for Kestrel Bay. Which are they, and do the figures agree?",
@@ -2124,7 +2124,7 @@
    "context_recall": 1.0,
    "precision_at_k": 1.0,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9952,
+   "ndcg_at_k": 0.9953,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.5,
@@ -2133,7 +2133,7 @@
    "retrieved": [
     {
      "title": "launch_portfolio.txt",
-     "similarity": 0.4735
+     "similarity": 0.4702
     },
     {
      "title": "havenmark_market_call.txt",
@@ -2141,21 +2141,21 @@
     },
     {
      "title": "havenmark_market_call_august.txt",
-     "similarity": 0.4031
+     "similarity": 0.4032
     },
     {
      "title": "havenmark_market_call.txt",
-     "similarity": 0.4972
+     "similarity": 0.4969
     }
    ],
-   "answer": "Based on the provided documents, two sources give a psf figure for Kestrel Bay:\n\n1. **Source [1]** (`launch_portfolio.txt`) lists the indicative PSF for Kestrel Bay as **S$2,380 - S$2,520** [1].\n2. **Source [2]** (`havenmark_market_call.txt`) states that the starting psf for Kestrel Bay is **S$2,380** [2].\n\n**Do the figures agree?** \nYes, they agree. The starting psf of S$2,380 mentioned in Source [2] matches the lower end of the indicative PSF band (S$2,380 - S$2,520) provided in Source [1].",
+   "answer": "The two documents that provide a psf figure for Kestrel Bay are [1] and [2]. The figures agree, as both indicate a starting price of S$2,380 psf [1, 2].",
    "not_found": false,
    "faithful": true,
-   "faithful_reason": "Both documents correctly provide the matching psf figures for Kestrel Bay as found in the context.",
+   "faithful_reason": "Document [1] lists the indicative PSF as S$2,380 - S$2,520 and Document [2] states the starting PSF is S$2,380.",
    "relevant": true,
-   "relevant_reason": "The answer correctly identifies the two documents providing the psf figures and accurately analyzes that they agree.",
+   "relevant_reason": "The answer correctly identifies the two documents containing the psf figure and confirms that they agree on the S$2,380 psf starting price.",
    "correct": true,
-   "correct_reason": "The system correctly identifies both psf figures and notes that they agree at the lower bound."
+   "correct_reason": "The system correctly identifies that both documents give a psf figure and that they agree on the starting price of S$2,380 psf."
   },
   {
    "question": "Portland Hollow's entry psf and the Bayshore Road land price are both quoted. Which is higher and where does each appear?",
@@ -2171,7 +2171,7 @@
    "context_recall": 1.0,
    "precision_at_k": 1.0,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9733,
+   "ndcg_at_k": 0.973,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.5,
@@ -2180,29 +2180,29 @@
    "retrieved": [
     {
      "title": "havenmark_market_call.txt",
-     "similarity": 0.6566
+     "similarity": 0.6556
     },
     {
      "title": "launch_portfolio.txt",
-     "similarity": 0.5791
+     "similarity": 0.5761
     },
     {
      "title": "havenmark_market_call_august.txt",
-     "similarity": 0.6083
+     "similarity": 0.6064
     },
     {
      "title": "launch_portfolio.txt",
-     "similarity": 0.625
+     "similarity": 0.624
     }
    ],
-   "answer": "Portland Hollow's indicative psf is higher than the Bayshore Road land price [1]. \n\nHere is where each appears based on the documents:\n* **Portland Hollow's indicative entry psf (S$3,120 psf):** Appears in Section 4 (Land and Supply Note) of `havenmark_market_call.txt` [1] and in `launch_portfolio.txt` [2].\n* **Bayshore Road land price (S$1,388 psf per plot ratio):** Appears in Section 4 (Land and Supply Note) of `havenmark_market_call.txt` [1].",
+   "answer": "Portland Hollow's indicative entry price is S$3,120 psf [1], while the Bayshore Road parcel closed at S$1,388 psf per plot ratio [1]. Therefore, Portland Hollow's entry psf is higher. Both figures appear in Section 4 of the `havenmark_market_call.txt` document [1].",
    "not_found": false,
    "faithful": true,
-   "faithful_reason": "Both figures and their exact locations in the text are correctly identified without any unsupported claims.",
+   "faithful_reason": "Both values and their locations in Section 4 of havenmark_market_call.txt are explicitly supported by the context.",
    "relevant": true,
-   "relevant_reason": "The answer correctly identifies Portland Hollow's entry psf as higher and accurately lists the documents and sections where each figure appears.",
+   "relevant_reason": "The answer correctly identifies Portland Hollow's entry psf as higher and specifies that both figures appear in Section 4 of the document.",
    "correct": true,
-   "correct_reason": "The system correctly identifies that Portland Hollow's entry psf is higher and accurately states where each appears based on the sources."
+   "correct_reason": "The system correctly identifies that Portland Hollow's entry psf is higher and states where each appears based on the source text."
   },
   {
    "question": "A case reached three viewings with nothing signed. What does the method say, and what happened in the case clinic?",
@@ -2218,7 +2218,7 @@
    "context_recall": 1.0,
    "precision_at_k": 1.0,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9877,
+   "ndcg_at_k": 0.9876,
    "hit_rate_at_k": 1,
    "exact_context_recall": 0.5,
    "exact_precision_at_k": 0.5,
@@ -2227,29 +2227,29 @@
    "retrieved": [
     {
      "title": "havenmark_method.txt",
-     "similarity": 0.5714
+     "similarity": 0.5715
     },
     {
      "title": "havenmark_method.txt",
-     "similarity": 0.4397
+     "similarity": 0.4398
     },
     {
      "title": "havenmark_market_call_september.txt",
-     "similarity": 0.4197
+     "similarity": 0.4198
     },
     {
      "title": "compliance_casebook.txt",
-     "similarity": 0.5632
+     "similarity": 0.5628
     }
    ],
-   "answer": "According to the method, any case where the client has signed nothing after three viewings is escalated to the team leader, because three viewings without a document is considered a qualification problem rather than a stock problem [1]. \n\nRegarding the case clinic, the provided documents do not mention a case involving three viewings with nothing signed.",
+   "answer": "According to the method, any case where a client has signed nothing after three viewings is escalated to the team leader, as three viewings without a document is considered a qualification problem rather than a stock problem [1, 2].\n\nIn the case clinic, two specific cases were discussed:\n*   **Case E:** A buyer requested to be released from an option after the cooling period had passed. The agent provided the consequences in writing before the client made a decision, and the file recorded the advice with its date; no finding was made [3].\n*   **Case F:** An agent quoted a rental figure from a portal listing (an asking rent) instead of a signed lease (a transacted rent). This was escalated the same day, and the client was re-advised before the offer [3].",
    "not_found": false,
-   "faithful": null,
-   "faithful_reason": "judge unavailable: judge model 'models/gemini-3.5-flash-lite' failed: Error code: 429 - [{'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.5-flash-lite\\nPlease retry in 27.277533263s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'model': 'gemini-3.5-flash-lite', 'location': 'global'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '27s'}]}}]",
-   "relevant": null,
-   "relevant_reason": "judge unavailable: judge model 'models/gemini-3.5-flash-lite' failed: Error code: 429 - [{'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.5-flash-lite\\nPlease retry in 25.591922495s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'model': 'gemini-3.5-flash-lite', 'location': 'global'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '25s'}]}}]",
-   "correct": null,
-   "correct_reason": "judge unavailable: judge model 'models/gemini-3.5-flash-lite' failed: Error code: 429 - [{'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.5-flash-lite\\nPlease retry in 24.002091456s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'model': 'gemini-3.5-flash-lite', 'location': 'global'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '24s'}]}}]"
+   "faithful": true,
+   "faithful_reason": "The answer accurately reflects the method's escalation rule for three viewings and correctly summarizes Case E and Case F from the case clinic in the context.",
+   "relevant": true,
+   "relevant_reason": "The answer correctly addresses what the method says about three viewings with nothing signed, and details the cases from the case clinic.",
+   "correct": false,
+   "correct_reason": "The system answer describes Case E and Case F instead of the expected Case A and its financing root cause."
   },
   {
    "question": "A co-broke split was disputed after an offer. What rule applies and how was it decided?",
@@ -2265,7 +2265,7 @@
    "context_recall": 1.0,
    "precision_at_k": 0.5,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9696,
+   "ndcg_at_k": 0.9691,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.5,
@@ -2278,25 +2278,25 @@
     },
     {
      "title": "havenmark_pathway.txt",
-     "similarity": 0.6117
+     "similarity": 0.6098
     },
     {
      "title": "commercial_checklist.txt",
-     "similarity": 0.4026
+     "similarity": 0.4011
     },
     {
      "title": "transaction_checklist.txt",
-     "similarity": 0.3982
+     "similarity": 0.3975
     }
    ],
-   "answer": "Based on the provided sources, the following rules and decisions apply to a co-broke split disputed after an offer:\n\n* **Rule:** The default split is fifty-fifty unless agreed otherwise in writing before the first viewing [2]. A co-broke split renegotiated after an offer is made is not recognized [2] and is considered a critical compliance finding [2]. \n* **Decision:** In Case B of the July case clinic, where a co-broke split was disputed after an offer was made, the Practice Committee found for the default fifty-fifty split because the renegotiation was not agreed in writing before the first viewing [1].",
+   "answer": "Regarding a disputed co-broke split after an offer, the following rules and decisions apply:\n\n*   **Applicable Rule:** The default split is fifty-fifty (50/50) between the listing side and the buyer side [2]. This default split remains unless it is otherwise agreed upon in writing *before* the first viewing [2]. A split that is renegotiated after an offer has been made is not recognized [2].\n*   **Decision/Finding:** In a specific case where a co-broke split was disputed after an offer was made, the Practice Committee found for the default fifty-fifty split because the renegotiation had not been agreed to in writing before the first viewing [1].\n\nAdditionally, a co-broke split changed after an offer is classified as a \"Critical\" compliance finding [2]. In the event of a dispute, the situation should be escalated to the Practice Committee within 2 working days [3, 4].",
    "not_found": false,
    "faithful": true,
-   "faithful_reason": "Every factual claim about the rule and Case B decision is directly supported by sources [1] and [2].",
+   "faithful_reason": "Every factual claim is directly supported by the provided text in documents [1], [2], [3], and [4].",
    "relevant": true,
-   "relevant_reason": "The answer directly addresses the rule and the decision regarding the disputed co-broke split based on the provided sources.",
+   "relevant_reason": "The answer correctly identifies both the applicable 50/50 default rule and how the Practice Committee decided the dispute.",
    "correct": true,
-   "correct_reason": "The system correctly identifies that the default fifty-fifty split applies and was decided by the Practice Committee based on the lack of a prior written agreement."
+   "correct_reason": "The system correctly identifies that the default 50/50 split applies and that the Practice Committee found for the default split due to lack of prior written agreement."
   },
   {
    "question": "The twenty-minute response standard appears in more than one document. What is the rule and its stated justification?",
@@ -2311,39 +2311,39 @@
    "expected": "Portal and WhatsApp enquiries must be answered within 20 minutes in working hours, justified because an enquiry answered after two hours converts at roughly a third of the rate.",
    "context_recall": 1.0,
    "precision_at_k": 0.25,
-   "mrr": 1.0,
-   "ndcg_at_k": 0.9972,
+   "mrr": 0.5,
+   "ndcg_at_k": 0.9497,
    "hit_rate_at_k": 1,
-   "exact_context_recall": 0.5,
-   "exact_precision_at_k": 0.25,
+   "exact_context_recall": 1.0,
+   "exact_precision_at_k": 0.5,
    "exact_mrr": 1.0,
    "exact_hit_rate_at_k": 1,
    "retrieved": [
     {
+     "title": "havenmark_market_call.txt",
+     "similarity": 0.3853
+    },
+    {
      "title": "havenmark_media_briefing.txt",
-     "similarity": 0.5937
+     "similarity": 0.5941
     },
     {
      "title": "agent_faq.txt",
-     "similarity": 0.5452
+     "similarity": 0.543
     },
     {
      "title": "havenmark_pathway.txt",
-     "similarity": 0.4257
-    },
-    {
-     "title": "havenmark_practice_committee_charter.txt",
-     "similarity": 0.5017
+     "similarity": 0.426
     }
    ],
-   "answer": "Based on the provided documents, the response time standards and their justifications are as follows:\n\n**The Rule:**\n* Portal enquiry: 20 minutes during working hours, 12 hours otherwise [1].\n* WhatsApp enquiry: 20 minutes during working hours [1].\n\n**The Stated Justification:**\nAn enquiry answered after two hours converts at roughly a third of the rate of one answered inside twenty minutes. The standard exists because of that gap in conversion rates, rather than because faster is considered politer [1] or merely as good manners [2].",
+   "answer": "The twenty-minute response standard applies to portal enquiries during working hours and WhatsApp enquiries during working hours [2].\n\nThe stated justification for this standard is that an enquiry answered after two hours converts at roughly a third of the rate of one answered within twenty minutes [1, 2]. Therefore, the standard exists because of this conversion gap rather than as a matter of politeness or good manners [2, 3].",
    "not_found": false,
    "faithful": true,
-   "faithful_reason": "The rule and its justification are fully supported by documents [1] and [2].",
+   "faithful_reason": "The rule and its justification are fully supported by documents [1], [2], and [3].",
    "relevant": true,
-   "relevant_reason": "The answer correctly identifies the twenty-minute rule for portal and WhatsApp enquiries and cites the specific conversion-rate justification from the documents.",
+   "relevant_reason": "The answer correctly identifies the twenty-minute response rule for portal and WhatsApp enquiries and provides its stated conversion-rate justification.",
    "correct": true,
-   "correct_reason": "The system correctly identifies the 20-minute rule for enquiries and its conversion-rate justification."
+   "correct_reason": "The system answer correctly identifies the twenty-minute rule for working hours and its justification based on the conversion rate drop after two hours."
   },
   {
    "question": "What is One Sophia's entry price in psf and its rental yield projection for 2029?",
@@ -2359,7 +2359,7 @@
    "context_recall": 1.0,
    "precision_at_k": 1.0,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9998,
+   "ndcg_at_k": 0.9997,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.25,
@@ -2368,29 +2368,29 @@
    "retrieved": [
     {
      "title": "on_Sophia_pptx.txt",
-     "similarity": 0.7451
+     "similarity": 0.743
     },
     {
      "title": "on_Sophia_pptx.txt",
-     "similarity": 0.7162
+     "similarity": 0.7157
     },
     {
      "title": "on_Sophia_pptx.txt",
-     "similarity": 0.7877
+     "similarity": 0.789
     },
     {
      "title": "ec_portfolio.txt",
-     "similarity": 0.4853
+     "similarity": 0.4869
     }
    ],
-   "answer": "Based on the provided documents, One Sophia's entry price is $2846psf (up) [1], and its projected high rental is $10psf in 2029, which translates to a 4.2% rental yield (RY) [1].",
+   "answer": "One Sophia's safe entry price is $2846psf and up [1], [2]. Its rental yield projection for 2029 is 4.2% RY, based on a high rental of $10psf [1].",
    "not_found": false,
    "faithful": true,
-   "faithful_reason": "The context in Slide 21 explicitly states the entry price of $2846psf up and a rental projection of $10psf in 2029 resulting in a 4.2% rental yield.",
-   "relevant": null,
-   "relevant_reason": "judge unavailable: judge model 'models/gemini-3.5-flash-lite' failed: Error code: 429 - [{'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.5-flash-lite\\nPlease retry in 29.366595144s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.5-flash-lite'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '29s'}]}}]",
-   "correct": null,
-   "correct_reason": "judge unavailable: judge model 'models/gemini-3.5-flash-lite' failed: Error code: 429 - [{'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.5-flash-lite\\nPlease retry in 27.715446358s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.5-flash-lite'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '27s'}]}}]"
+   "faithful_reason": "Context [1] explicitly states One Sophia's entry price is $2846psf up and its 2029 rental yield projection is 4.2% RY.",
+   "relevant": true,
+   "relevant_reason": "The answer directly provides both the entry price of $2846psf and the 2029 rental yield projection of 4.2%.",
+   "correct": true,
+   "correct_reason": "The system's answer accurately captures both the entry price of $2846psf and up and the 2029 rental yield projection of 4.2% based on a $10psf rental."
   },
   {
    "question": "How many residential, office, and shop units does One Sophia have?",
@@ -2406,7 +2406,7 @@
    "context_recall": 0.5,
    "precision_at_k": 0.75,
    "mrr": 1.0,
-   "ndcg_at_k": 0.995,
+   "ndcg_at_k": 0.9953,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.25,
@@ -2415,29 +2415,29 @@
    "retrieved": [
     {
      "title": "on_Sophia_pptx.txt",
-     "similarity": 0.768
+     "similarity": 0.7706
     },
     {
      "title": "on_Sophia_pptx.txt",
-     "similarity": 0.6097
+     "similarity": 0.6092
     },
     {
      "title": "launch_portfolio.txt",
-     "similarity": 0.4565
+     "similarity": 0.4571
     },
     {
      "title": "havenmark_rental_playbook.txt",
-     "similarity": 0.3047
+     "similarity": 0.3074
     }
    ],
-   "answer": "Based on the provided documents, One Sophia has:\n* 122 office units [1]\n* 367 resi units [1]\n* 127 shops [1]",
+   "answer": "One Sophia is a 3-in-1 mixed development that has:\n*   122 office units [1]\n*   367 residential units [1]\n*   127 shops [1]",
    "not_found": false,
    "faithful": true,
-   "faithful_reason": "The context in Slide 10 explicitly states 122 office units, 367 resi units, and 127 shops for One Sophia.",
+   "faithful_reason": "The context in Slide 10 of document [1] states that One Sophia has 122 office units, 367 resi units, and 127 shops.",
    "relevant": true,
-   "relevant_reason": "The answer correctly extracts the count of residential, office, and shop units from the provided documents.",
-   "correct": true,
-   "correct_reason": "The system correctly identifies all three required unit counts for One Sophia."
+   "relevant_reason": "The answer correctly lists the exact number of office, residential, and shop units as requested.",
+   "correct": null,
+   "correct_reason": "judge unavailable: judge model 'models/gemini-3.5-flash-lite' failed: Error code: 429 - [{'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.5-flash-lite\\nPlease retry in 4.250088819s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'model': 'gemini-3.5-flash-lite', 'location': 'global'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '4s'}]}}]"
   },
   {
    "question": "What does the One Sophia briefing give as the rental yield and entry price rationale?",
@@ -2462,29 +2462,29 @@
    "retrieved": [
     {
      "title": "on_Sophia_pptx.txt",
-     "similarity": 0.7877
+     "similarity": 0.7859
     },
     {
      "title": "on_Sophia_pptx.txt",
-     "similarity": 0.6785
+     "similarity": 0.6773
     },
     {
      "title": "on_Sophia_pptx.txt",
-     "similarity": 0.7303
+     "similarity": 0.7311
     },
     {
      "title": "havenmark_paid_advertising_policy.txt",
-     "similarity": 0.493
+     "similarity": 0.4916
     }
    ],
-   "answer": "Based on the provided documents, the One Sophia summary and pricing rationale include:\n\n* **Entry Price:** Right Entry Price providing a safe entry at **$2846psf up** [1].\n* **Rental Yield:** High Rental projected at **$10psf in 2029**, which equals a **4.2% RY** (Rental Yield) [1].",
+   "answer": "The One Sophia briefing provides the following rationale regarding rental yield and entry price:\n\n*   **Rental Yield:** It projects a high rental of $10psf in 2029, which equals a 4.2% RY [1].\n*   **Entry Price:** It describes the entry price as a \"safe entry\" of $2846psf and up [1].",
    "not_found": false,
    "faithful": true,
-   "faithful_reason": "The entry price and rental yield figures are directly supported by Slide 21 of the context.",
+   "faithful_reason": "The context in Slide 21 explicitly states the rental yield of 4.2% ($10psf in 2029) and the entry price rationale (\"safe entry $2846psf up\").",
    "relevant": true,
-   "relevant_reason": "The answer directly provides the exact entry price and rental yield rationale requested in the question.",
+   "relevant_reason": "The answer directly provides the rental yield and entry price rationale mentioned in the One Sophia briefing.",
    "correct": true,
-   "correct_reason": "The system correctly identifies both the entry price and the rental yield with their exact figures as stated in the source passages."
+   "correct_reason": "The system correctly identifies both the $2846 psf entry price and the $10 psf rental leading to a 4.2% rental yield."
   },
   {
    "question": "The One Sophia briefing shows a commission of 2.5%. Is that Havenmark's standard rate for a commercial sale?",
@@ -2500,7 +2500,7 @@
    "context_recall": 0.5,
    "precision_at_k": 0.5,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9843,
+   "ndcg_at_k": 0.9847,
    "hit_rate_at_k": 1,
    "exact_context_recall": 0.5,
    "exact_precision_at_k": 0.5,
@@ -2509,29 +2509,29 @@
    "retrieved": [
     {
      "title": "on_Sophia_pptx.txt",
-     "similarity": 0.5776
+     "similarity": 0.5799
     },
     {
      "title": "on_Sophia_pptx.txt",
-     "similarity": 0.5911
+     "similarity": 0.5917
     },
     {
      "title": "havenmark_market_call_september.txt",
-     "similarity": 0.5701
+     "similarity": 0.5736
     },
     {
      "title": "havenmark_commercial_desk.txt",
-     "similarity": 0.5401
+     "similarity": 0.5404
     }
    ],
    "answer": "I couldn't find this in your documents.",
    "not_found": true,
    "faithful": true,
-   "faithful_reason": "The context does not contain information about Havenmark's standard rate for a commercial sale.",
-   "relevant": true,
-   "relevant_reason": "The model correctly stated it could not find Havenmark's standard commercial commission rate in the provided documents.",
+   "faithful_reason": "The provided context does not contain information about Havenmark's standard rate for a commercial sale, so stating that it couldn't be found is correct.",
+   "relevant": false,
+   "relevant_reason": "The question asks about information from the One Sophia briefing, so the answer should have been found rather than stating it couldn't be found.",
    "correct": false,
-   "correct_reason": "The system failed to answer the question, falsely claiming the information was not in the documents."
+   "correct_reason": "The system failed to find the information and stated it couldn't find it, missing the correct answer."
   },
   {
    "question": "What is Havenmark's position on using external web search to answer client questions?",
@@ -2556,7 +2556,7 @@
    "retrieved": [
     {
      "title": "havenmark_media_briefing.txt",
-     "similarity": 0.6847
+     "similarity": 0.686
     },
     {
      "title": "havenmark_media_briefing.txt",
@@ -2564,14 +2564,14 @@
     },
     {
      "title": "havenmark_client_data_policy.txt",
-     "similarity": 0.5836
+     "similarity": 0.5826
     },
     {
      "title": "havenmark_referral_programme.txt",
-     "similarity": 0.5085
+     "similarity": 0.5071
     }
    ],
-   "answer": "I couldn't generate an answer right now (Error code: 429 - [{'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.5-flash-lite\\nPlease retry in 15.579544094s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.5-flash-lite'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '15s'}]}}]). Your documents are still indexed \u2014 please try again shortly.",
+   "answer": "I couldn't find this in your documents.",
    "not_found": true,
    "correct": true,
    "faithful": null,
@@ -2600,19 +2600,19 @@
    "retrieved": [
     {
      "title": "launch_portfolio.txt",
-     "similarity": 0.5202
+     "similarity": 0.5142
     },
     {
      "title": "havenmark_market_call_september.txt",
-     "similarity": 0.5581
+     "similarity": 0.5574
     },
     {
      "title": "havenmark_market_call.txt",
-     "similarity": 0.5776
+     "similarity": 0.5761
     },
     {
      "title": "havenmark_market_call_august.txt",
-     "similarity": 0.5553
+     "similarity": 0.5515
     }
    ],
    "answer": "I couldn't find this in your documents.",
@@ -2648,15 +2648,15 @@
     },
     {
      "title": "havenmark_pathway.txt",
-     "similarity": 0.5455
+     "similarity": 0.5462
     },
     {
      "title": "havenmark_referral_programme.txt",
-     "similarity": 0.4547
+     "similarity": 0.4565
     },
     {
      "title": "havenmark_team_leader_standard.txt",
-     "similarity": 0.4488
+     "similarity": 0.4519
     }
    ],
    "answer": "I couldn't find this in your documents.",
