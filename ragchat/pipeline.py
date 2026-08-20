@@ -628,6 +628,13 @@ def ask(
             }
             for i, c in enumerate(pool[: min(2, len(pool))])
         ]
+    # Stop the clock HERE. What follows is two judge calls that exist to fill
+    # the scorecard, not to answer the question — and on a slow provider they
+    # cost more than the answer did (measured: 10.1s of grading against 7.8s of
+    # answering). Counting them made a graded answer look twice as slow as the
+    # not-found path, which returns before this point and always did report the
+    # honest number. The UI renders this as "Answered in".
+    answer_ms = (time.time() - t0) * 1000
     eval_d = _eval_answer(effective_query, answer, context, cfg)
     # Enrich the eval dict with the retrieval top-similarity and end-to-end
     # latency so the UI can render a self-contained, readable performance block
@@ -635,12 +642,12 @@ def ask(
     if eval_d is not None:
         sims = [c["similarity"] for c in pool if c.get("similarity") is not None]
         eval_d["top_sim"] = round(max(sims), 4) if sims else None
-        eval_d["latency_ms"] = round((time.time() - t0) * 1000)
+        eval_d["latency_ms"] = round(answer_ms)
     return {
         "answer": answer,
         "not_found": False,
         "citations": citations,
-        "eval_line": _build_eval_line(eval_d, pool, (time.time() - t0) * 1000),
+        "eval_line": _build_eval_line(eval_d, pool, answer_ms),
         "eval": eval_d,
         # The passages this answer was ACTUALLY built from. The benchmark's
         # faithfulness judge needs them, and reconstructing them by re-running
