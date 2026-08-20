@@ -1292,6 +1292,22 @@ def list_presets():
     return {"presets": PRESETS, "keys": list(PRESET_KEYS), "index_keys": list(INDEX_KEYS)}
 
 
+def _db_region() -> str | None:
+    """The cloud region in the database host, and nothing else from it.
+
+    Every round trip to Postgres was measured at ~420ms from the deployed
+    function — the cost of crossing an ocean, not of any query. Answering "are
+    these two in the same place?" needs the region and only the region, so this
+    matches the region out of the hostname rather than reporting the host: the
+    endpoint id is a credential-adjacent detail and /api/health is public.
+    """
+    import re as _re
+
+    url = settings.pg_url or settings.db_url or ""
+    m = _re.search(r"((?:us|eu|ap|sa|ca|me|af)-[a-z]+-\d)", url)
+    return m.group(1) if m else None
+
+
 def _chunks_estimate() -> int | None:
     """Roughly how many chunk rows exist, or None off the Postgres backend.
 
@@ -1977,6 +1993,8 @@ def health():
         # you whether a value came from the file or from a save made months ago.
         "config_overridden": _overridden_keys(),
         "chunks_estimate": _chunks_estimate(),
+        "db_region": _db_region(),
+        "function_region": os.environ.get("VERCEL_REGION"),
         "effective_config": cfg_info,
         "judge": judge_info,
         "embedding_models_by_provider": discovery,
