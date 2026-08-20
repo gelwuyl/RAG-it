@@ -1116,6 +1116,8 @@ html[data-kind="guest"] .identity-hint .hint-badge { display: inline-block; }
   letter-spacing: var(--tracking-telemetry); text-transform: uppercase;
   color: var(--faint);
 }
+.score-aside { flex-wrap: wrap; }
+.score-aside-pair { display: inline-flex; align-items: baseline; gap: 7px; }
 .score-aside strong {
   color: var(--text); font-variant-numeric: tabular-nums; font-weight: 700;
 }

@@ -643,6 +643,10 @@ def ask(
         sims = [c["similarity"] for c in pool if c.get("similarity") is not None]
         eval_d["top_sim"] = round(max(sims), 4) if sims else None
         eval_d["latency_ms"] = round(answer_ms)
+        # What grading added on top. Reported separately rather than folded
+        # in: the reader waits for both, so hiding one would be the same
+        # dishonesty in the other direction.
+        eval_d["grade_ms"] = round((time.time() - t0) * 1000 - answer_ms)
     return {
         "answer": answer,
         "not_found": False,

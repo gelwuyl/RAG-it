@@ -2236,7 +2236,19 @@ function renderScorecard(metrics, runMode) {
   if (live && live.latency_ms != null) {
     const t = document.createElement("div");
     t.className = "score-aside";
-    t.innerHTML = `<span>Answered in</span><strong>${(live.latency_ms / 1000).toFixed(1)}s</strong>`;
+    // Two numbers, not one. `latency_ms` is the answer; the grading that fills
+    // the bars above costs its own time and the reader waits for it too, so
+    // folding it into "Answered in" overstated the answer and dropping it
+    // understated the wait. Both are shown, and the second is the honest price
+    // of the first.
+    const secs = (ms) => `${(ms / 1000).toFixed(1)}s`;
+    t.innerHTML =
+      `<span class="score-aside-pair"><span>Answered in</span>` +
+      `<strong>${secs(live.latency_ms)}</strong></span>` +
+      (live.grade_ms != null && live.grade_ms > 0
+        ? `<span class="score-aside-pair"><span>then graded in</span>` +
+          `<strong>${secs(live.grade_ms)}</strong></span>`
+        : "");
     el.appendChild(t);
   }
 
