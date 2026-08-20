@@ -19,6 +19,7 @@ later brings your work with you.
 |---|---|---|
 | **Frontend** | Vanilla JS + Vite, 3 pages | Landing (`/`), workspace (`/app`), build write-up (`/built`). No framework, no runtime dependencies. |
 | **Backend** | FastAPI, one Vercel function | Every route in a single serverless function. 60s ceiling, frozen the instant it responds. |
+| **Hosting** | Vercel, pinned to `sin1` | The function runs in the same region as the database. Across the Pacific a round trip cost 420ms; alongside it, 3ms. |
 | **App database** | Neon Postgres + SQLAlchemy | Users, documents, chats, messages, saved settings, benchmark runs. |
 | **Vector store** | pgvector in the same Neon database | One fixed `vector(768)` column shared by every model. Chroma swaps in for local dev behind one dispatch module. |
 | **Chunking** | Recursive splitter, 512 tokens, 75 overlap | Splits on paragraph → sentence → word. Size is in **tokens**, not characters. |
@@ -27,7 +28,7 @@ later brings your work with you.
 | **Retrieval** | Vector + keyword, fused by RRF (k=60) | Two searches at once. Postgres full-text on Neon, in-process BM25 on Chroma. Always on — not a setting. |
 | **Reranker** | Cohere `rerank-v3.5` (OpenRouter) | **One** call re-orders the whole candidate pool against the question. Not one call per passage. |
 | **Deep search** | Literal scan of stored document text | Reads every document word for word and returns every literal match. Per-question, never a saved setting. |
-| **Generation** | `models/gemini-3.5-flash-lite` (Google AI Studio) | Writes the answer from the retrieved passages, with inline citations. |
+| **Generation** | `models/gemma-4-26b-a4b-it` (Google AI Studio) | Writes the answer from the retrieved passages, with inline citations. Kept over `gemini-3.5-flash-lite`, which scored 6.5 points lower on the golden set for no speed gain. |
 | **Judges** | Same model, LLM-as-judge | Scores each answer for faithfulness and relevancy. A judge that fails reports `ungraded`, never `failed`. |
 | **Evaluation** | 56 golden questions over 27 documents | The scored result **ships with the app** — nobody runs a benchmark to see it. |
 | **CI gate** | GitHub Actions on push to main | Fails the build if retrieval regresses against a committed baseline. Passes loudly when a provider is down. |

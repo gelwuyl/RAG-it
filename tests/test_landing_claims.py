@@ -70,3 +70,43 @@ def test_the_vector_dimension_claim_matches_the_invariant():
         f"the page advertises {tiles} dimensions, embedding_dim() returns "
         f"{embedding_dim()}"
     )
+
+
+# --- the README makes the same kind of claim ------------------------------
+#
+# The stack table names the two models that are actually shipped. That went
+# stale within one commit: config.yaml was reverted from flash-lite back to
+# gemma and the table kept advertising flash-lite, because nothing connected
+# the sentence to the file it describes. Same fix as the tiles above.
+
+
+def _shipped(key: str) -> str:
+    import yaml
+
+    cfg = yaml.safe_load((ROOT / "config.yaml").read_text(encoding="utf-8"))
+    return cfg["generation"]["llm_model"] if key == "llm" else cfg["embedding"]["model"]
+
+
+def _readme_row(label: str) -> str:
+    text = (ROOT / "README.md").read_text(encoding="utf-8")
+    m = re.search(rf"^\|\s\*\*{label}\*\*\s\|([^|]*)\|", text, re.MULTILINE)
+    assert m, f"the README stack table has no **{label}** row any more"
+    return m.group(1)
+
+
+def test_the_readme_names_the_model_that_actually_ships():
+    model = _shipped("llm")
+    cell = _readme_row("Generation")
+    assert model in cell, (
+        f"README advertises {cell.strip()!r} but config.yaml ships {model!r} "
+        f"— update the Generation row in README.md"
+    )
+
+
+def test_the_readme_names_the_embedding_model_that_actually_ships():
+    model = _shipped("emb")
+    cell = _readme_row("Embeddings")
+    assert model in cell, (
+        f"README advertises {cell.strip()!r} but config.yaml ships {model!r} "
+        f"— update the Embeddings row in README.md"
+    )
