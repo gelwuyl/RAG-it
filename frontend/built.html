@@ -21,7 +21,7 @@
         }
       })();
     </script>
-    <link rel="stylesheet" href="/landing.css?v=11" />
+    <link rel="stylesheet" href="/landing.css?v=12" />
   </head>
   <body class="flows">
     <button id="theme-toggle" class="theme-toggle" type="button"
@@ -100,8 +100,14 @@
         </p>
 
         <div class="lessons">
+          <div class="trace-note is-headline">
+            <span class="trace-key">The server was an ocean away</span>
+            <p>Every trip to the database took 420ms — on a table with 240 rows.
+              Not a slow query: the code ran in Virginia and the data lived in
+              Singapore. Moving them together made it 3ms.</p>
+          </div>
           <div class="trace-note">
-            <span class="trace-key">Sign-in · 8.4s → 0.95s</span>
+            <span class="trace-key">Sign-in · 8.4s → 0.05s</span>
             <p>It was building the workspace, copying sample files and tidying
               up after old visitors. Only the first was asked for.</p>
           </div>
@@ -109,6 +115,11 @@
             <span class="trace-key">Setup checks · 18 → 0 per sign-in</span>
             <p>The database layout was re-verified before every single
               operation. The comment above it claimed it happened once.</p>
+          </div>
+          <div class="trace-note">
+            <span class="trace-key">Deleting a file · 2.7s → 0.08s</span>
+            <p>Three round trips, and two rounds of clever fixes that changed
+              nothing — because the distance was the cost, not the work.</p>
           </div>
           <div class="trace-note">
             <span class="trace-key">Are-you-there pings · one per request</span>

@@ -129,36 +129,32 @@ Everything §2 listed is landed. Kept here as a map of where each decision lives
 | 2.5 phase 5 sweep | `38bd468` | `frontend/styles.css`, `frontend/landing.css` |
 | 2.6 deep search | `a1c20cd` | `ragchat/deepsearch.py` |
 
-### Measured on the deployment (2026-08-18)
+### Measured on the deployment (2026-08-19)
 
 ```
-                        WARM              COLD (first request after idle/deploy)
-guest sign-in           2.1s wire         25-31s
-  server side           1.57s
-guest-seed (deferred)   11.6s             18s      <- off the critical path
-/api/auth/status        0.3-0.5s
+                     BEFORE (function in iad1)    NOW (function in sin1)
+guest sign-in        0.93s                        0.05 - 0.31s
+guest-seed           9.2s                         0.46s
+document list        0.94s                        0.065s
+document delete      2.74s                        0.08s
+  chunk delete       1335ms                       17ms
+per round trip       ~420ms                       ~3ms
 ```
 
-Sign-in went 8.4s -> 2.1s by doing only what the visitor asked for: it is one
-INSERT and a cookie now, and POST /api/auth/guest-seed copies the sample
-documents and runs the cleanup backstop afterwards.
+**The distance was the cost, not the code.** `X-Vercel-Id` read `sin1::iad1` —
+the request arrived at the Singapore edge and the function then ran in US East,
+while the database is in Singapore. Every round trip crossed the Pacific twice,
+on a chunks table holding 240 rows.
 
-THE COLD NUMBER IS THE ONE THAT GETS REPORTED AS "the app is slow", and it is
-not our code. `python -X importtime -c "import ragchat.app"` is 1.25s locally,
-so the other ~24s is platform: the Vercel function unpacking and starting, plus
-Neon's compute resuming from autosuspend (free tier suspends after ~5 minutes
-idle). The levers are Neon's autosuspend setting and Vercel's, not this repo.
+`"regions": ["sin1"]` in vercel.json fixed it. Everything before that — the
+schema-check memoisation, dropping pool_pre_ping, sharing the engine, the
+delete index — was real but was shaving milliseconds off operations dominated
+by a 420ms ocean crossing. Two rounds of application-level reasoning about the
+delete path were both wrong for that reason.
 
-What the repo CAN do about it, and does: the identity skeleton paints from the
-`ragchat_kind` cookie at ~30ms and now shows a neutral button-shaped
-placeholder even for a first-time visitor with no cookie, so the top-right
-corner is never empty while the backend wakes up.
-
-Still on the table warm: 1.57s of server time for a single INSERT, and 3.7s for
-the reap backstop. Both are per-operation Neon costs and the per-phase numbers
-are constant to within a few ms across runs, which points at connection setup
-rather than work. Connection reuse is the next measurement. `guest-login` and
-`guest-seed` both return `timings_ms`.
+If the database ever moves, move this with it. `GET /api/health` reports
+`function_region`; `db_region` is null because the injected hostname carries no
+region, so latency is the signal.
 
 ### Two things that need doing OUTSIDE the repo
 

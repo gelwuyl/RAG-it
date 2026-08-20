@@ -625,3 +625,10 @@ a.card-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 3
 
 /* The number itself carries the accent, so the rule reads as coming FROM it. */
 .flows .section-num { color: var(--primary-ink); }
+
+
+/* The one lesson on the build page worth reading first: the distance was the
+   cost, not the code. Accent rule and a touch more weight; nothing else on
+   that grid competes. */
+.lessons .trace-note.is-headline { border-top: 2px solid var(--primary); }
+.lessons .trace-note.is-headline .trace-key { color: var(--primary-ink); }
