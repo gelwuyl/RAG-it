@@ -924,13 +924,29 @@ def delete_document(
     user: User = Depends(authn.get_current_user),
     db: Session = Depends(get_session),
 ):
+    # Timed and reported, for the same reason guest-login is: deleting one
+    # document measured 2.7s on the deployment against 0.9s for a plain list,
+    # and two rounds of reasoning about which part was slow were both wrong.
+    # Durations only.
+    t0 = time.time()
     doc = db.get(Document, doc_id)
     if not doc or doc.user_id != user.id:
         raise HTTPException(status_code=404, detail="Document not found")
+    t_lookup = time.time()
     delete_document_chunks(user.id, doc.id)
+    t_chunks = time.time()
     db.delete(doc)
     db.commit()
-    return {"ok": True}
+    t_row = time.time()
+    return {
+        "ok": True,
+        "timings_ms": {
+            "lookup_ms": round((t_lookup - t0) * 1000),
+            "chunks_ms": round((t_chunks - t_lookup) * 1000),
+            "row_ms": round((t_row - t_chunks) * 1000),
+            "total_ms": round((t_row - t0) * 1000),
+        },
+    }
 
 
 @app.post("/api/documents/prune")
@@ -1274,6 +1290,29 @@ def list_presets():
     from .presets import INDEX_KEYS, PRESET_KEYS, PRESETS
 
     return {"presets": PRESETS, "keys": list(PRESET_KEYS), "index_keys": list(INDEX_KEYS)}
+
+
+def _chunks_estimate() -> int | None:
+    """Roughly how many chunk rows exist, or None off the Postgres backend.
+
+    From pg_class.reltuples, which the planner maintains, rather than COUNT(*)
+    — counting a large table to report its size would make the health endpoint
+    slow for exactly the deployments where the number matters.
+    """
+    if (getattr(settings, "vector_backend", "") or "").lower() != "neon":
+        return None
+    try:
+        from sqlalchemy import text as _text
+
+        from .store_neon import _get_engine
+
+        with _get_engine().connect() as conn:
+            row = conn.execute(
+                _text("SELECT reltuples::bigint FROM pg_class WHERE relname = 'chunks'")
+            ).fetchone()
+        return int(row[0]) if row and row[0] is not None else None
+    except Exception:
+        return None
 
 
 def _overridden_keys() -> dict:
@@ -1937,6 +1976,7 @@ def health():
         # row fully replaces the file, and effective_config alone cannot tell
         # you whether a value came from the file or from a save made months ago.
         "config_overridden": _overridden_keys(),
+        "chunks_estimate": _chunks_estimate(),
         "effective_config": cfg_info,
         "judge": judge_info,
         "embedding_models_by_provider": discovery,
