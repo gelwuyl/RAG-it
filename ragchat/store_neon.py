@@ -88,6 +88,19 @@ _engine: Engine | None = None
 
 
 def _get_engine() -> Engine:
+    """The engine for the chunks table — SHARED with the app database when both
+    point at the same server, which on the deployment they always do.
+
+    They were two independent pools to one Neon database. That doubles the
+    connections a warm instance holds and halves how often either gets reused,
+    so the vector pool — touched only by uploads, deletes and asks — was
+    routinely handing out a connection that had aged past pool_recycle. Every
+    such call then paid a fresh TCP and TLS handshake to Neon, which is most of
+    why deleting one document measured 2.7s for what is three round trips.
+
+    Falls back to its own engine when the URLs genuinely differ, which is the
+    case a separate PG_DATABASE_URL exists to support.
+    """
     global _engine
     if _engine is None:
         url = settings.pg_url
@@ -96,10 +109,15 @@ def _get_engine() -> Engine:
                 "VECTOR_BACKEND=neon requires PG_DATABASE_URL (or DATABASE_URL) "
                 "to be set, but it is empty."
             )
-        # Same trade as the app database (see ragchat/db.py): pre_ping costs a
-        # network round trip on every checkout, and pool_recycle achieves what
-        # it was guarding against without one.
-        _engine = create_engine(url, pool_pre_ping=False, pool_recycle=240)
+        if url == settings.db_url:
+            from .db import engine as app_engine
+
+            _engine = app_engine
+        else:
+            # Same trade as the app database (see ragchat/db.py): pre_ping costs
+            # a network round trip on every checkout, and pool_recycle achieves
+            # what it was guarding against without one.
+            _engine = create_engine(url, pool_pre_ping=False, pool_recycle=240)
     return _engine
 
 
@@ -182,6 +200,15 @@ def _ensure_table(conn) -> None:
         text(
             "CREATE INDEX IF NOT EXISTS chunks_user_model_fp_idx "
             "ON chunks (user_id, embedding_model, fingerprint)"
+        )
+    )
+    # Deleting a document filters on (user_id, doc_id), which the index above
+    # can only serve by its first column — so it scanned every chunk the user
+    # owns to find the handful belonging to one file.
+    conn.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS chunks_user_doc_idx "
+            "ON chunks (user_id, doc_id)"
         )
     )
     # Last: only mark it done once every statement above has succeeded, or a

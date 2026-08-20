@@ -259,3 +259,55 @@ def test_an_abandoned_running_row_does_not_hold_the_pane_hostage(client, monkeyp
 
     assert stuck.status == "cancelled", "the abandoned row was left running"
     assert body["status"] != "running", body["status"]
+
+
+def test_a_cancelled_row_does_not_blank_the_pane_forever(client, monkeypatch):
+    """The state a refresh could not clear.
+
+    Retiring an abandoned "running" row served the published result once, then
+    left a "cancelled" row behind as the caller's most recent. The next load
+    found it, left it alone because it was no longer running, and rendered
+    "Benchmark cancelled." over an empty pane — permanently, because the state
+    was in the database rather than the page.
+    """
+    import ragchat.app as rapp
+    from eval.published import load
+
+    if not load():
+        pytest.skip("no published run committed yet")
+
+    _as_account(client)
+
+    class _Cancelled:
+        id, status, error = "old", "cancelled", None
+        total, completed = 56, 0
+        results = metrics = config = indexed_files = None
+        updated_at = started_at = 0.0
+        retrieval_only = False
+
+    monkeypatch.setattr(rapp, "_active_run", lambda db, user: _Cancelled())
+    body = json.loads(_body(client))
+    assert body["status"] == "done", body["status"]
+    assert body["published"] is True
+    assert body["metrics"], "the pane would render empty"
+
+
+def test_an_errored_row_falls_through_too(client, monkeypatch):
+    import ragchat.app as rapp
+    from eval.published import load
+
+    if not load():
+        pytest.skip("no published run committed yet")
+
+    _as_account(client)
+
+    class _Errored:
+        id, error = "bad", "provider exploded"
+        status = "error"
+        total, completed = 56, 3
+        results = metrics = config = indexed_files = None
+        updated_at = started_at = 0.0
+        retrieval_only = False
+
+    monkeypatch.setattr(rapp, "_active_run", lambda db, user: _Errored())
+    assert json.loads(_body(client))["published"] is True

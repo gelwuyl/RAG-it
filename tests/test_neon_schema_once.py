@@ -94,3 +94,41 @@ def test_a_changed_target_dimension_re_runs_the_check(monkeypatch):
     after = _Conn()
     sn._ensure_table(after)
     assert after.executed, "a dimension change skipped the drift check"
+
+
+def test_the_vector_store_shares_the_app_engine_when_it_is_the_same_database(monkeypatch):
+    """Two pools to one Neon database halves how often either connection gets
+    reused, so the vector pool — touched only by uploads, deletes and asks —
+    routinely handed out one that had aged past pool_recycle and paid a fresh
+    TLS handshake. That was most of a 2.7s document delete."""
+    import ragchat.db as _db
+
+    monkeypatch.setattr(sn, "_engine", None)
+    monkeypatch.setattr(sn.settings, "pg_url", "postgresql://same/db")
+    monkeypatch.setattr(sn.settings, "db_url", "postgresql://same/db")
+    assert sn._get_engine() is _db.engine
+
+
+def test_it_keeps_its_own_engine_when_the_databases_differ(monkeypatch):
+    """A separate PG_DATABASE_URL exists to point the vector store somewhere
+    else; sharing then would silently send chunks to the wrong server."""
+    import ragchat.db as _db
+
+    monkeypatch.setattr(sn, "_engine", None)
+    monkeypatch.setattr(sn.settings, "pg_url", "postgresql://vectors/db")
+    monkeypatch.setattr(sn.settings, "db_url", "postgresql://app/db")
+    made = {}
+    monkeypatch.setattr(sn, "create_engine", lambda url, **k: made.setdefault("url", url) or "ENGINE")
+    assert sn._get_engine() != _db.engine
+    assert made["url"] == "postgresql://vectors/db"
+
+
+def test_the_delete_path_gets_its_own_index():
+    """Deleting a document filters on (user_id, doc_id). The other index starts
+    with user_id and then goes to columns the delete does not filter on, so it
+    scanned every chunk the user owns."""
+    import inspect
+
+    src = inspect.getsource(sn._ensure_table)
+    assert "chunks_user_doc_idx" in src
+    assert "(user_id, doc_id)" in src

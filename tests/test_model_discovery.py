@@ -288,3 +288,36 @@ def test_reset_returns_config_yaml_to_being_the_source():
         assert clear_config_override("pipeline") is False
     finally:
         clear_config_override("pipeline")
+
+
+def test_the_one_time_reset_runs_once_and_then_never_again():
+    """A startup step that discarded saved settings on EVERY deploy would be
+    far worse than the stale-override problem it exists to fix."""
+    from dataclasses import replace
+
+    from ragchat.app import _CONFIG_RESET_MARKER, _retire_stale_config_override
+    from ragchat.config import load_config, save_config_override
+    from ragchat.db import clear_config_override, get_config_override
+
+    clear_config_override("pipeline")
+    clear_config_override(_CONFIG_RESET_MARKER)
+    shipped = load_config()
+    try:
+        # A deployment sitting on a save from months ago.
+        save_config_override(replace(shipped, top_k=shipped.top_k + 2))
+        assert load_config().top_k != shipped.top_k
+
+        _retire_stale_config_override()
+        assert load_config().top_k == shipped.top_k, "the stale override survived"
+        assert get_config_override(_CONFIG_RESET_MARKER) is not None
+
+        # A deliberate save AFTER the marker must survive every later boot.
+        save_config_override(replace(shipped, top_k=shipped.top_k + 5))
+        _retire_stale_config_override()
+        _retire_stale_config_override()
+        assert load_config().top_k == shipped.top_k + 5, (
+            "a later, deliberate save was discarded"
+        )
+    finally:
+        clear_config_override("pipeline")
+        clear_config_override(_CONFIG_RESET_MARKER)

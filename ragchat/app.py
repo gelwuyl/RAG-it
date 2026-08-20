@@ -176,6 +176,7 @@ def require_account(user: User = Depends(authn.get_current_user)) -> User:
 def startup() -> None:
     init_db()
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    _retire_stale_config_override()
     # Single-user mode: ensure the built-in local account exists so the UI
     # can sign itself in without any form (auth flow per PRD is deferred).
     db = SessionLocal()
@@ -197,6 +198,39 @@ def startup() -> None:
             db.commit()
     finally:
         db.close()
+
+
+# A stored Settings save fully replaces config.yaml, and the deployment was
+# sitting on one from months ago: top_k 6 where the file says 4, and the old
+# generation model where the file now names gemini-3.5-flash-lite. Editing the
+# file changed nothing, and the only fix was a button somebody had to press.
+#
+# This clears that row ONCE, on the first boot after this ships, then records a
+# marker so it never runs again — a startup step that silently discarded saved
+# settings on every deploy would be far worse than the problem it fixes.
+#
+# Anything saved AFTER this marker is written is a deliberate choice and is left
+# alone. "Reset to shipped defaults" in Settings remains the way to undo those.
+_CONFIG_RESET_MARKER = "reset_to_shipped_2026_08"
+
+
+def _retire_stale_config_override() -> None:
+    from .db import clear_config_override, get_config_override, set_config_override
+
+    try:
+        if get_config_override(_CONFIG_RESET_MARKER) is not None:
+            return
+        cleared = clear_config_override("pipeline")
+        set_config_override(_CONFIG_RESET_MARKER, "done")
+        if cleared:
+            log.info(
+                "config: discarded the stored override; config.yaml is live "
+                "(llm_model=%s)", load_config().llm_model,
+            )
+    except Exception:
+        # A deployment that cannot reach its database yet must still boot; the
+        # next cold start retries, and the marker makes that safe.
+        log.exception("config: one-time override reset failed")
 
 
 # ---------- helpers ----------
@@ -1627,6 +1661,19 @@ def get_eval(
         run.status = "cancelled"
         run.updated_at = time.time()
         db.commit()
+        run = None
+
+    # ...and any row that is not DONE must not hide the published result either.
+    #
+    # Retiring the running row above fixed the pane for exactly one request and
+    # then broke it permanently: the row is still the caller's most recent, so
+    # the next page load found it, saw "cancelled" rather than "running", left
+    # it alone, and rendered "Benchmark cancelled." over an empty pane. A
+    # refresh could never clear it, because the state lived in the database.
+    #
+    # A run only earns the pane by having something to show. Cancelled, errored
+    # and abandoned rows have nothing, so they fall through like no run at all.
+    if run is not None and run.status != "done":
         run = None
 
     payload = _run_payload(run)
