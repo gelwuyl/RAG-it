@@ -396,3 +396,21 @@ def test_a_broken_web_tool_falls_through_to_the_refusal(two_tools):
     res = _ask2(two_tools)
     assert two_tools["web_calls"] == 1
     assert res["not_found"] is True
+
+
+def test_tools_used_names_the_tools_and_not_the_citations(two_tools):
+    """It shipped as [1].
+
+    `ask()` already had a local called `used` holding the citation markers
+    parsed out of the answer, and the tool list was given the same name — so a
+    perfectly ordinary answer citing [1] overwrote the record of which tools
+    had run. Both are small lists, neither is type-checked, and nothing failed.
+    """
+    two_tools["answers"] = [_pl.NOT_FOUND_ANSWER, "Both [1] and [2] agree."]
+    res = _ask2(two_tools)
+    assert res["eval"]["tools_used"] == ["deep", "web"], res["eval"]["tools_used"]
+
+
+def test_an_answer_that_needed_no_tool_reports_none_used(two_tools):
+    res = _ask2(two_tools, grade=False)
+    assert res["eval"]["tools_used"] == []

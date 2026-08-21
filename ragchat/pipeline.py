@@ -674,7 +674,7 @@ def ask(
     # is most valuable precisely when the ranker is confident, because that is
     # when nobody looks twice.
     extra: list[dict] = []          # passages won by a tool, in pool order
-    used: list[str] = []            # which tools have been spent
+    tools_spent: list[str] = []      # which tools have been used, in order
     escalated: str | None = None    # ...and what made the app reach for them
 
     # The tools, in the order the app is allowed to try them. DOCUMENTS FIRST is
@@ -701,9 +701,9 @@ def ask(
         """
         nonlocal escalated
         for name, tool in tools:
-            if name in used:
+            if name in tools_spent:
                 continue
-            used.append(name)
+            tools_spent.append(name)
             try:
                 found = _drop_duplicates(tool(effective_query), chunks + extra)
             except Exception:
@@ -751,7 +751,7 @@ def ask(
 
     if chunks and _nothing_relevant():
         return {
-            "answer": _refusal_text(used),
+            "answer": _refusal_text(tools_spent),
             "not_found": True,
             "citations": [],
             "eval_line": _build_eval_line(None, chunks, (time.time() - t0) * 1000),
@@ -759,7 +759,7 @@ def ask(
 
     pool = _rank_pool(effective_query, chunks, extra, cfg)
     if not pool:
-        return {"answer": _refusal_text(used), "not_found": True, "citations": []}
+        return {"answer": _refusal_text(tools_spent), "not_found": True, "citations": []}
 
     try:
         answer, context = _write_answer(effective_query, pool, history, cfg)
@@ -797,17 +797,21 @@ def ask(
 
     if _refused(answer):
         return {
-            "answer": _refusal_text(used),
+            "answer": _refusal_text(tools_spent),
             "not_found": True,
             "citations": [],
             "eval_line": _build_eval_line(None, pool, (time.time() - t0) * 1000),
         }
 
-    used = sorted(
+    # Named for what it holds. It was `used`, which silently overwrote the list
+    # of tools the escalation had spent — `tools_used` shipped as [1] instead of
+    # ["deep"], because a citation marker is also a small integer and nothing
+    # complained.
+    cited_numbers = sorted(
         {int(m) for m in re.findall(r"\[(\d+)\]", answer) if 1 <= int(m) <= len(pool)}
     )
     citations = []
-    for num in used:
+    for num in cited_numbers:
         c = pool[num - 1]
         citations.append(
             {
@@ -854,7 +858,7 @@ def ask(
         # WHICH tools were spent, not just that something was. "Searched the web"
         # and "read your documents word for word" are different claims to make
         # to a reader, and only one of them involves material that is not theirs.
-        eval_d["tools_used"] = list(used)
+        eval_d["tools_used"] = list(tools_spent)
         sims = [c["similarity"] for c in pool if c.get("similarity") is not None]
         eval_d["top_sim"] = round(max(sims), 4) if sims else None
         eval_d["latency_ms"] = round(answer_ms)

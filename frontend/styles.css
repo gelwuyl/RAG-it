@@ -399,16 +399,23 @@ html[data-kind="guest"] .identity-hint .hint-badge { display: inline-block; }
    conversation: side by side they crowd the textarea on a laptop and wrap
    unpredictably on a phone. Stacking also reads as a list of tools, which is
    what it is. */
+/* Sized to land FLUSH with the Ask button: two 18px pills plus a 4px gap is
+   40px, which is exactly #ask-btn's height. The pills are deliberately one step
+   down the type scale from the rest of the composer — they are labels on
+   controls, not content, and at 12px the stack overshot the button it sits
+   beside and left a band of dead space above the textarea. */
 .tool-switches {
-  display: inline-flex; flex-direction: column; gap: 5px;
-  flex-shrink: 0; align-self: flex-end; padding-bottom: 1px;
+  display: inline-flex; flex-direction: column; gap: 4px;
+  flex-shrink: 0; align-self: flex-end;
 }
 .tool-row { display: inline-flex; align-items: center; gap: 4px; }
-.tool-row .switch-btn { flex: 1; text-align: center; }
-#deep-toggle, #web-toggle { min-width: 0; white-space: nowrap; }
-/* The two labels differ in width; matching them stops the ? marks from
-   zig-zagging down the column. */
-.tool-row .switch-btn { min-width: 104px; }
+#deep-toggle, #web-toggle { white-space: nowrap; }
+/* Equal widths, or the ? marks zig-zag down the column. */
+.tool-row .switch-btn {
+  flex: 1; text-align: center; min-width: 104px;
+  font-size: var(--text-nano);
+  height: 18px; padding: 0 9px; line-height: 1;
+}
 
 /* ---------- panes grid ----------
 
@@ -1094,10 +1101,9 @@ html[data-kind="guest"] .identity-hint .hint-badge { display: inline-block; }
 .ask-form textarea {
   flex: 1; min-width: 0; resize: none; font-size: 15px;
   border-radius: var(--r-md); max-height: 140px; line-height: 1.5;
-  /* Tall enough that two stacked switches sit beside the box rather than
-     towering over it. Two 24px pills + 5px gap + padding is ~69px; the box
-     matches so the composer still reads as one block. */
-  min-height: 68px;
+  /* Just taller than the 40px control column beside it, so the composer reads
+     as one block without a band of empty box above the text. */
+  min-height: 44px;
 }
 #ask-btn { padding: 10px 20px; }
 
