@@ -1992,37 +1992,6 @@ function evalVerdict(evalData) {
   return { state: "grounded", word: "Grounded" };
 }
 
-// Where this answer's retrieval sits against the last benchmark run.
-//
-// A bare "top similarity 0.60" is unreadable without knowing what good looks
-// like on THIS corpus — 0.60 is strong on one set of documents and weak on
-// another. The benchmark already establishes that distribution over 46
-// questions with known answers, and until now the two numbers sat in different
-// panes with nothing connecting them. Percentile is the plainest link: it needs
-// no understanding of cosine similarity to read.
-//
-// Returns null when there is nothing honest to compare against — no run, a
-// retrieval-only run with no similarities recorded, or a guest (who cannot run
-// a benchmark, so "run one to compare" would be an instruction they cannot
-// follow).
-function benchmarkPercentile(topSim) {
-  if (topSim == null || state.isGuest) return null;
-  const results = state.evalData?.results;
-  if (!Array.isArray(results) || !results.length) return null;
-
-  const sims = [];
-  for (const r of results) {
-    const best = (r.retrieved || [])
-      .map((c) => c.similarity)
-      .filter((x) => typeof x === "number");
-    if (best.length) sims.push(Math.max(...best));
-  }
-  // Too few points and a percentile is theatre rather than information.
-  if (sims.length < 5) return null;
-  const below = sims.filter((x) => x < topSim).length;
-  return { pct: Math.round((below / sims.length) * 100), n: sims.length };
-}
-
 // Build the per-answer quality readout: one ~20px composite indicator that
 // expands to the full detail on click.
 //
@@ -2601,10 +2570,9 @@ async function loadEval() {
 }
 
 function renderEval(data) {
-  // Kept so a per-answer readout can place itself against the run's
-  // distribution (benchmarkPercentile). The Evaluation pane and the answer
-  // readout used to share no state at all, which is why the two sets of numbers
-  // read as unrelated.
+  // Kept so renderScorecard can draw each answer against the published run.
+  // The Evaluation pane and the answer readout used to share no state at all,
+  // which is why the two sets of numbers read as unrelated.
   state.evalData = data;
   const statusEl = $("eval-status");
   if (!data || data.status === "none") {
