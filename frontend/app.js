@@ -2316,31 +2316,42 @@ $("excerpt-close").onclick = () => {
 
 // ---------- evaluation tab (right) ----------
 
-// RAGAS-style metric targets (IDEA.md §11). Used to render the scorecard bars
-// and the pass/fail colouring.
+// What the benchmark measures, in the order a question passes through it.
 //
-// MRR, NDCG@k and Hit rate@k were here and are not. They are classic
-// information-retrieval metrics that predate RAGAS by decades, and showing
-// nine bars under one framework's name was both a small lie and three more
-// rows than a reader needs to answer "is this answer normal?". The harness
-// still computes them — they separate a RANKING problem from a RETRIEVAL one,
-// which is exactly the diagnosis you want when a number moves — and the CI
-// gate still watches their exact_* counterparts. They are gone from the PANE,
-// not from the measurement.
-// Each metric leads with what it MEASURES, and keeps its formal name underneath.
-// "Context Recall 49%" tells you nothing unless you already know the framework;
-// "Found the right passages" tells you what got worse when it drops. The formal
-// name stays because it is the searchable term, and dropping it would leave
-// anyone who does know RAGAS unable to map the scorecard onto it — it is also
-// the accented half, because it is the one a reader is most likely to want to
-// look up.
+// GROUPED, because nine bars in a flat list invite the wrong reading — that
+// they are nine views of one thing. They are not. Retrieval asks whether the
+// right passage came back at all; ranking asks whether it came back near the
+// TOP; generation asks whether the answer built from it was any good. A number
+// can fall in one group and be fine in the others, and knowing which group
+// moved is the whole diagnosis.
+//
+// The groups also make the framework honest. RAGAS covers context recall,
+// context precision, faithfulness, answer relevancy and answer correctness —
+// which spans retrieval AND generation. MRR, NDCG@k and Hit rate@k are classic
+// information-retrieval metrics that predate it by decades, and the not-found
+// rate is this app's own. Calling all nine "RAGAS" was a small overclaim; the
+// headers say what each actually is.
+//
+// Each row leads with what it MEASURES and keeps the formal name underneath.
+// "Context Recall 49%" tells a visitor nothing; "Found the right passages"
+// tells them what got worse. The formal name is the accented half: it is the
+// searchable term, and at 11px mono it is the smallest text in the pane.
+const EVAL_GROUPS = {
+  retrieval: { label: "Retrieval", sub: "Did the right passage come back?" },
+  ranking: { label: "Ranking", sub: "Did it come back near the top?" },
+  generation: { label: "Generation", sub: "Was the answer any good?" },
+};
+
 const EVAL_TARGETS = {
-  context_recall: { label: "Found the right passages", sub: "Context Recall", target: 0.80, higher: true },
-  precision_at_k: { label: "Sent mostly relevant text", sub: "Precision@k", target: 0.70, higher: true },
-  faithfulness: { label: "Stuck to the sources", sub: "Faithfulness", target: 0.90, higher: true },
-  answer_relevancy: { label: "Answered what was asked", sub: "Answer relevancy", target: 0.85, higher: true },
-  answer_correctness: { label: "Matched the expected answer", sub: "Answer correctness", target: 0.80, higher: true },
-  not_found_rate_unanswerables: { label: "Admitted when it could not answer", sub: "Not-found rate", target: 0.90, higher: true },
+  context_recall: { group: "retrieval", label: "Found the right passages", sub: "Context Recall", target: 0.80, higher: true },
+  precision_at_k: { group: "retrieval", label: "Sent mostly relevant text", sub: "Precision@k", target: 0.70, higher: true },
+  mrr: { group: "ranking", label: "Best passage ranked high", sub: "MRR", target: 0.65, higher: true },
+  ndcg_at_k: { group: "ranking", label: "Good overall ordering", sub: "NDCG@k", target: 0.70, higher: true },
+  hit_rate_at_k: { group: "ranking", label: "Right passage made the cut", sub: "Hit rate@k", target: 0.80, higher: true },
+  faithfulness: { group: "generation", label: "Stuck to the sources", sub: "Faithfulness", target: 0.90, higher: true },
+  answer_relevancy: { group: "generation", label: "Answered what was asked", sub: "Answer relevancy", target: 0.85, higher: true },
+  answer_correctness: { group: "generation", label: "Matched the expected answer", sub: "Answer correctness", target: 0.80, higher: true },
+  not_found_rate_unanswerables: { group: "generation", label: "Admitted when it could not answer", sub: "Not-found rate", target: 0.90, higher: true },
 };
 
 function fmtPct(v) {
@@ -2392,10 +2403,24 @@ function renderScorecard(metrics, runMode) {
   let shown = 0;
   let anyLive = false;
 
+  // Emitted as the group CHANGES rather than looped per group, so a metric the
+  // published run does not carry cannot leave an empty heading behind it.
+  let openGroup = null;
   for (const [key, t] of Object.entries(EVAL_TARGETS)) {
     const bench = metrics ? metrics[key] : null;
     if (bench == null) continue;
     shown++;
+
+    if (t.group && t.group !== openGroup) {
+      openGroup = t.group;
+      const g = EVAL_GROUPS[t.group];
+      const head = document.createElement("div");
+      head.className = "score-group";
+      head.innerHTML =
+        `<span class="score-group-name">${g.label}</span>` +
+        `<span class="score-group-sub">${g.sub}</span>`;
+      el.appendChild(head);
+    }
 
     const field = Object.keys(LIVE_TO_BENCHMARK).find(
       (f) => LIVE_TO_BENCHMARK[f] === key,

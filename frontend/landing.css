@@ -313,8 +313,12 @@ section { padding: 88px 0; }
    the type scale, and the flow reflows to one column on a phone. The old
    980-wide viewBox could only scroll sideways. */
 
+/* 62ch is the measure for a column of body text. These are one- or two-sentence
+   openers under a section label, with a lot of air around them, and at 62ch
+   they broke into a narrow ribbon against the full-width rules above and below.
+   Wider reads as deliberate rather than as text that ran out. */
 .pipeline-intro {
-  max-width: 62ch; color: var(--muted); margin-bottom: 40px;
+  max-width: 82ch; color: var(--muted); margin-bottom: 40px;
   font-size: var(--text-content); line-height: var(--lh-content);
 }
 

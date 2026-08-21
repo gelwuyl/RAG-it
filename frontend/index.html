@@ -22,7 +22,7 @@
         }
       })();
     </script>
-    <link rel="stylesheet" href="/landing.css?v=12" />
+    <link rel="stylesheet" href="/landing.css?v=13" />
   </head>
   <body>
     <button id="theme-toggle" class="theme-toggle" type="button"
@@ -108,142 +108,11 @@
       </div>
     </section>
 
-    <!-- ====================== 01 · the pipeline ===================== -->
-    <section>
-      <div class="wrap">
-        <div class="section-label">
-          <span class="section-num">01</span>
-          <span class="section-name">The pipeline</span>
-        </div>
-
-        <p class="pipeline-intro">
-          A question does not go straight to a language model. It passes through
-          five stages — and each one is shaped by a constraint of running this on
-          one serverless function.
-        </p>
-
-        <!-- The pipeline diagram and the architecture notes, together.
-             This used to be a horizontal SVG here and a separate key/value
-             "Architecture" section further down, which meant the constraint
-             that explains a stage sat four screens away from the stage. Running
-             vertically puts each note in the gutter beside the box it belongs
-             to, and lets the whole thing reflow to one column on a phone —
-             something a fixed 980-wide viewBox could only scroll sideways.
-
-             Drawn in CSS rather than SVG: boxes are text that wraps and scales
-             with the type, and the connectors are a 1px pseudo-element plus a
-             border-triangle arrowhead. No path data to keep in sync. -->
-        <div class="trace">
-          <div class="trace-rail">
-            <!-- Dashed, indented: indexing is an input to retrieval, not a
-                 stage a question passes through. Matches the dashed edge the
-                 old SVG used for the same reason. -->
-            <div class="trace-step is-aside">
-              <div class="trace-box">
-                <span class="trace-id">Input</span>
-                <span class="trace-label">Index
-                  <span class="trace-sub">chunked + embedded</span></span>
-              </div>
-            </div>
-            <div class="trace-step">
-              <div class="trace-box">
-                <span class="trace-id">Stage 01</span>
-                <span class="trace-label">Rewrite
-                  <span class="trace-sub">sharpen the query</span></span>
-              </div>
-            </div>
-            <div class="trace-step">
-              <div class="trace-box">
-                <span class="trace-id">Stage 02</span>
-                <span class="trace-label">Retrieve
-                  <span class="trace-sub">vector + BM25</span></span>
-              </div>
-            </div>
-            <div class="trace-step">
-              <div class="trace-box">
-                <span class="trace-id">Stage 03</span>
-                <span class="trace-label">Rerank
-                  <span class="trace-sub">cross-encoder rescore</span></span>
-              </div>
-            </div>
-            <div class="trace-step is-live">
-              <div class="trace-box">
-                <span class="trace-id">Stage 04</span>
-                <span class="trace-label">Generate
-                  <span class="trace-sub">answer + citations</span></span>
-              </div>
-            </div>
-            <div class="trace-step">
-              <div class="trace-box">
-                <span class="trace-id">Stage 05</span>
-                <span class="trace-label">Judge
-                  <span class="trace-sub">grade the answer</span></span>
-              </div>
-            </div>
-          </div>
-
-          <div class="trace-notes">
-            <div class="trace-note">
-              <span class="trace-key">Embeddings</span>
-              <p>One fixed <code>vector(768)</code> column shared by every model,
-                so models swap without a migration. The config fingerprint
-                changes with them and invalidates stale chunks.</p>
-            </div>
-            <div class="trace-note">
-              <span class="trace-key">Model output</span>
-              <p>Reasoning models emit a thinking trace. It is stripped before
-                the rewrite is used — otherwise 1,400 characters of deliberation
-                become the search query.</p>
-            </div>
-            <div class="trace-note">
-              <span class="trace-key">Storage</span>
-              <p>Neon Postgres with <code>pgvector</code> is both the application
-                database and the vector store. Chroma swaps in for local
-                development behind a single dispatch module.</p>
-            </div>
-            <div class="trace-note">
-              <span class="trace-key">Configuration</span>
-              <p>How wide the net is cast is re-read from the database on every
-                request, so tuning it takes effect on the next question with no
-                redeploy.</p>
-            </div>
-            <div class="trace-note">
-              <span class="trace-key">Runtime</span>
-              <p>One FastAPI serverless function. The repo directory is read-only
-                and the process freezes the instant a response is sent, so every
-                writable byte goes to the database.</p>
-            </div>
-            <div class="trace-note">
-              <span class="trace-key">Fail open</span>
-              <p>A judge that times out is a broken grader, not a bad answer. It
-                reports <code>ungraded</code> — never <code>failed</code>, which
-                would be a confident false claim about your documents.</p>
-            </div>
-          </div>
-        </div>
-
-        <!-- The three architecture facts that belong to no single stage. -->
-        <div class="platform">
-          <div>
-            <span class="trace-key">Benchmarks · long jobs</span>
-            <p>A background thread would be frozen the moment the response is
-              sent, so the benchmark is sliced: bounded steps, each committing
-              before it returns.</p>
-          </div>
-          <div>
-            <span class="trace-key">Interface · frontend</span>
-            <p>Vanilla JavaScript. No framework, no runtime dependencies, two
-              entry points and one stylesheet.</p>
-          </div>
-        </div>
-      </div>
-    </section>
-
     <!-- ===================== 02 · metric tiles ====================== -->
     <section>
       <div class="wrap">
         <div class="section-label">
-          <span class="section-num">02</span>
+          <span class="section-num">01</span>
           <span class="section-name">By the numbers</span>
         </div>
         <p class="pipeline-intro">
@@ -253,6 +122,18 @@
           vocabulary, different facts, so retrieval has to discriminate rather
           than recognise a topic. The scored result ships with the app; nobody
           has to run it.
+        </p>
+        <!-- Said out loud rather than only in the <meta> description, which no
+             reader ever sees. And said precisely: RAGAS covers the generation
+             side and part of retrieval, while MRR, NDCG and hit rate are
+             ordinary information-retrieval metrics that predate it by decades.
+             Calling all nine "RAGAS" was a small overclaim. -->
+        <p class="pipeline-intro">
+          Answers are scored with <strong>RAGAS-style generation metrics</strong>
+          — faithfulness, relevancy, correctness — and retrieval with the
+          classic ones it is usually measured by. Nine readings in three groups:
+          did the right passage come back, did it come back near the top, and
+          was the answer built from it any good.
         </p>
         <!-- Structural facts, verifiable from the repo and TESTED against it
              (tests/test_landing_claims.py) — the corpus count said 10 for as
@@ -280,6 +161,21 @@
             <span class="tile-id">A4</span>
             <span class="tile-num">1</span>
             <span class="tile-label">Serverless function</span>
+          </div>
+        </div>
+
+        <!-- The three architecture facts that belong to no single stage. -->
+        <div class="platform">
+          <div>
+            <span class="trace-key">Benchmarks · long jobs</span>
+            <p>A background thread would be frozen the moment the response is
+              sent, so the benchmark is sliced: bounded steps, each committing
+              before it returns.</p>
+          </div>
+          <div>
+            <span class="trace-key">Interface · frontend</span>
+            <p>Vanilla JavaScript. No framework, no runtime dependencies, two
+              entry points and one stylesheet.</p>
           </div>
         </div>
 

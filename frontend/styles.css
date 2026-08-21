@@ -1112,6 +1112,22 @@ html[data-kind="guest"] .identity-hint .hint-badge { display: inline-block; }
 .eval-status { line-height: 1.45; }
 .eval-status:empty { display: none; }
 .eval-scorecard { display: flex; flex-direction: column; gap: 11px; }
+/* Group heading. Nine bars in a flat list read as nine views of one thing; they
+   are three different questions, and which group moved is the diagnosis. The
+   question sits under the name in plain language, because "Ranking" alone
+   assumes the reader already knows what it is ranking. */
+.score-group {
+  display: flex; flex-direction: column; gap: 1px;
+  margin-top: 6px; padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.score-group:first-child { margin-top: 0; padding-top: 0; border-top: none; }
+.score-group-name {
+  font-family: var(--font-mono); font-size: var(--text-micro);
+  letter-spacing: var(--tracking-telemetry); text-transform: uppercase;
+  color: var(--text);
+}
+.score-group-sub { font-size: var(--text-nano); color: var(--faint); }
 /* The evidence, folded. Styled as a quiet control rather than a heading: it is
    an invitation, not a section the eye has to step over on the way down. */
 .eval-details { margin-top: 14px; border-top: 1px solid var(--border); }

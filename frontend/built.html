@@ -21,7 +21,7 @@
         }
       })();
     </script>
-    <link rel="stylesheet" href="/landing.css?v=12" />
+    <link rel="stylesheet" href="/landing.css?v=13" />
   </head>
   <body class="flows">
     <button id="theme-toggle" class="theme-toggle" type="button"
@@ -44,11 +44,128 @@
       </div>
     </header>
 
-    <!-- ================== 01 · measuring the thing ================== -->
+    <!-- ================== 01 · the pipeline itself ================== -->
     <section>
       <div class="wrap">
         <div class="section-label">
           <span class="section-num">01</span>
+          <span class="section-name">The pipeline</span>
+        </div>
+
+        <p class="pipeline-intro">
+          A question does not go straight to a language model. It passes through
+          five stages, and each one is shaped by a constraint of running this on
+          one serverless function. This used to open the landing page — it
+          belongs here, with the rest of the reasoning.
+        </p>
+
+        <!-- The pipeline diagram and the architecture notes, together.
+             This used to be a horizontal SVG here and a separate key/value
+             "Architecture" section further down, which meant the constraint
+             that explains a stage sat four screens away from the stage. Running
+             vertically puts each note in the gutter beside the box it belongs
+             to, and lets the whole thing reflow to one column on a phone —
+             something a fixed 980-wide viewBox could only scroll sideways.
+
+             Drawn in CSS rather than SVG: boxes are text that wraps and scales
+             with the type, and the connectors are a 1px pseudo-element plus a
+             border-triangle arrowhead. No path data to keep in sync. -->
+        <div class="trace">
+          <div class="trace-rail">
+            <!-- Dashed, indented: indexing is an input to retrieval, not a
+                 stage a question passes through. Matches the dashed edge the
+                 old SVG used for the same reason. -->
+            <div class="trace-step is-aside">
+              <div class="trace-box">
+                <span class="trace-id">Input</span>
+                <span class="trace-label">Index
+                  <span class="trace-sub">chunked + embedded</span></span>
+              </div>
+            </div>
+            <div class="trace-step">
+              <div class="trace-box">
+                <span class="trace-id">Stage 01</span>
+                <span class="trace-label">Rewrite
+                  <span class="trace-sub">sharpen the query</span></span>
+              </div>
+            </div>
+            <div class="trace-step">
+              <div class="trace-box">
+                <span class="trace-id">Stage 02</span>
+                <span class="trace-label">Retrieve
+                  <span class="trace-sub">vector + BM25</span></span>
+              </div>
+            </div>
+            <div class="trace-step">
+              <div class="trace-box">
+                <span class="trace-id">Stage 03</span>
+                <span class="trace-label">Rerank
+                  <span class="trace-sub">cross-encoder rescore</span></span>
+              </div>
+            </div>
+            <div class="trace-step is-live">
+              <div class="trace-box">
+                <span class="trace-id">Stage 04</span>
+                <span class="trace-label">Generate
+                  <span class="trace-sub">answer + citations</span></span>
+              </div>
+            </div>
+            <div class="trace-step">
+              <div class="trace-box">
+                <span class="trace-id">Stage 05</span>
+                <span class="trace-label">Judge
+                  <span class="trace-sub">grade the answer</span></span>
+              </div>
+            </div>
+          </div>
+
+          <div class="trace-notes">
+            <div class="trace-note">
+              <span class="trace-key">Embeddings</span>
+              <p>One fixed <code>vector(768)</code> column shared by every model,
+                so models swap without a migration. The config fingerprint
+                changes with them and invalidates stale chunks.</p>
+            </div>
+            <div class="trace-note">
+              <span class="trace-key">Model output</span>
+              <p>Reasoning models emit a thinking trace. It is stripped before
+                the rewrite is used — otherwise 1,400 characters of deliberation
+                become the search query.</p>
+            </div>
+            <div class="trace-note">
+              <span class="trace-key">Storage</span>
+              <p>Neon Postgres with <code>pgvector</code> is both the application
+                database and the vector store. Chroma swaps in for local
+                development behind a single dispatch module.</p>
+            </div>
+            <div class="trace-note">
+              <span class="trace-key">Configuration</span>
+              <p>How wide the net is cast is re-read from the database on every
+                request, so tuning it takes effect on the next question with no
+                redeploy.</p>
+            </div>
+            <div class="trace-note">
+              <span class="trace-key">Runtime</span>
+              <p>One FastAPI serverless function. The repo directory is read-only
+                and the process freezes the instant a response is sent, so every
+                writable byte goes to the database.</p>
+            </div>
+            <div class="trace-note">
+              <span class="trace-key">Fail open</span>
+              <p>A judge that times out is a broken grader, not a bad answer. It
+                reports <code>ungraded</code> — never <code>failed</code>, which
+                would be a confident false claim about your documents.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================== 02 · measuring the thing ================== -->
+    <section>
+      <div class="wrap">
+        <div class="section-label">
+          <span class="section-num">02</span>
           <span class="section-name">Measuring retrieval</span>
         </div>
 
@@ -91,7 +208,7 @@
     <section>
       <div class="wrap">
         <div class="section-label">
-          <span class="section-num">02</span>
+          <span class="section-num">03</span>
           <span class="section-name">What only production taught</span>
         </div>
         <p class="pipeline-intro">
@@ -152,6 +269,25 @@
               given it. One question went from right to "I couldn't find
               this".</p>
           </div>
+          <div class="trace-note">
+            <span class="trace-key">The door was unlocked</span>
+            <p>One address, no password, and you were signed in — to an account
+              holding real documents. Nothing pointed at it any more, which is
+              exactly why nobody had looked at it.</p>
+          </div>
+          <div class="trace-note">
+            <span class="trace-key">A perfect, empty workspace</span>
+            <p>After a search-engine change, returning visitors saw their files
+              listed and ready while every question came back empty. It looked
+              right and was hollow underneath. Fresh visitors were fine, which
+              is why testing missed it.</p>
+          </div>
+          <div class="trace-note">
+            <span class="trace-key">The ruler, again</span>
+            <p>A new search engine scored 0.31 where the old one scored 0.90 —
+              and was fine. It was being measured with the old one's yardstick.
+              Same mistake as the first card, a year of lessons apart.</p>
+          </div>
         </div>
       </div>
     </section>
@@ -160,7 +296,7 @@
     <section>
       <div class="wrap">
         <div class="section-label">
-          <span class="section-num">03</span>
+          <span class="section-num">04</span>
           <span class="section-name">Shaped by one constraint</span>
         </div>
         <p class="pipeline-intro">
@@ -187,11 +323,56 @@
       </div>
     </section>
 
+    <!-- ============== 05 · what it does on its own ================== -->
+    <section>
+      <div class="wrap">
+        <div class="section-label">
+          <span class="section-num">05</span>
+          <span class="section-name">When it comes up short</span>
+        </div>
+        <p class="pipeline-intro">
+          Searching your documents can fail two ways: nothing close enough comes
+          back, or the model reads what did and says the answer isn't there.
+          Both used to end the same way — a shrug. Now they are where the app
+          starts working.
+        </p>
+
+        <div class="cards cards-3">
+          <div class="card">
+            <h3 class="card-title">It reads everything, word for word</h3>
+            <p class="card-text">Ordinary search ranks, and whatever falls below
+              the cut may as well not exist. So when ranking comes up short the
+              app reads every document you own, literally, looking for your
+              exact words. It costs no AI call at all — and nothing on a
+              question that was already answered.</p>
+          </div>
+          <div class="card">
+            <h3 class="card-title">A model picks the tool</h3>
+            <p class="card-text">"This should be in their documents, the search
+              just missed it" and "this could never have been in a private file"
+              need different answers, and no rule can tell them apart. A second,
+              faster model decides — in about
+              <strong>0.7 seconds</strong>, and it got all twelve test cases
+              right. It can improve the choice; it can never block one.</p>
+          </div>
+          <div class="card">
+            <h3 class="card-title">The web stays switched off</h3>
+            <p class="card-text">The promise is answers from <em>your</em>
+              documents. An app that quietly searched the web whenever yours
+              fell short would be grounded only most of the time. So it is off
+              until you turn it on — and then it is the last resort, after both
+              searches, with everything it finds labelled as coming from
+              outside.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- =================== 04 · left undone ========================= -->
     <section>
       <div class="wrap">
         <div class="section-label">
-          <span class="section-num">04</span>
+          <span class="section-num">06</span>
           <span class="section-name">Deliberately unfinished</span>
         </div>
         <div class="cards cards-3">
@@ -206,14 +387,15 @@
             <h3 class="card-title">Word-for-word search does nothing here</h3>
             <p class="card-text">With six sample passages, ordinary search
               already returns all of them — there is nothing left to rescue. It
-              earns its place on real document sets.</p>
+              earns its place on real document sets, which is an honest limit
+              rather than a bug to chase.</p>
           </div>
           <div class="card">
-            <h3 class="card-title">Tools it chooses between</h3>
-            <p class="card-text">It now reaches for the word-for-word scan by
-              itself when ordinary search comes up short, and tells you it did.
-              But it is picking from one tool. Real choosing needs a second
-              thing worth choosing.</p>
+            <h3 class="card-title">It chooses, but only once</h3>
+            <p class="card-text">A model now picks which tool to reach for, and
+              picks well. What it cannot do is look at what came back and change
+              its mind — and a server that freezes the moment it answers cannot
+              hold an open-ended loop to let it.</p>
           </div>
         </div>
       </div>
