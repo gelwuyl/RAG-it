@@ -522,11 +522,24 @@ def logout(response: Response):
 
 @app.post("/api/auth/local-login")
 def local_login(response: Response, db: Session = Depends(get_session)):
-    """Single-user mode: sign in as the built-in local account without a form.
+    """Single-user DEV convenience: become the built-in local account, no form.
 
-    Auth (Google OAuth / local accounts) is deferred per PRD; this keeps the
-    multi-user plumbing intact so it can be turned back on later.
+    DISABLED wherever real sign-in exists, and that is not a nicety.
+
+    This route takes no credentials and hands back a full non-guest session for
+    an account that, on the live deployment, held the owner's actual business
+    documents. Anyone who knew the path could read and delete them. It also
+    walked straight past the signed-in-only gate on web search, so it handed out
+    a metered third-party quota as well.
+
+    It survived because the frontend stopped calling it long ago and nothing
+    pointed at it any more — an unauthenticated endpoint nobody uses is exactly
+    the kind that stops being looked at. `oauth_configured()` is the right
+    signal: where Google sign-in exists there is a real way in and no reason for
+    this one; where it does not, this is local development.
     """
+    if authn.oauth_configured():
+        raise HTTPException(status_code=404, detail="Not found")
     user = (
         db.query(User)
         .filter(User.provider == "password", User.sub == LOCAL_USERNAME)
