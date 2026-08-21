@@ -29,6 +29,7 @@ const state = {
   // the reader widening it deliberately.
   deepSearch: true,
   webSearch: false,
+  answerEvalId: null,   // which answer's readings the benchmark bars show
   webAvailable: false,   // server-reported: needs a key AND an account
   // Documents + folders currently in the workspace. Only the COUNT is kept:
   // it is what the empty conversation needs to say something true, and holding
@@ -1898,6 +1899,11 @@ async function openChat(chatId) {
   for (const m of chat.messages) {
     const el = appendMessage(m.role, m.content, m.citations || [], false,
       m.eval_line || "", m.eval_data || null, m.id);
+    // Restore the "these bars are yours" marker across a re-render. state holds
+    // the truth; the class is only how it is drawn.
+    if (m.id && m.id === state.answerEvalId) {
+      el?.querySelector(".eval-chip")?.classList.add("is-shown");
+    }
     // Reloaded into a thread whose last answer was still being graded: ask for
     // the verdict again rather than leaving it spinning. Grading is idempotent,
     // so this costs nothing when it has already finished.
@@ -2106,8 +2112,17 @@ function buildEvalBlock(evalData, evalLine) {
 
 // Put one answer's readings on the benchmark bars and mark which chip they came
 // from, so the pane is never ambiguous about whose numbers are on screen.
-function showAnswerOnScorecard(evalData, chip) {
+function showAnswerOnScorecard(evalData, chip, messageId = null) {
   state.answerEval = evalData;
+  // WHICH answer owns the bars, held in state rather than only as a class on a
+  // chip. The class alone was the bug behind "grading…" sticking forever: the
+  // chat list refreshes right after an answer lands, which re-renders the whole
+  // thread and takes the marker with it — so eleven seconds later, when the
+  // verdicts arrived, nothing believed the bars belonged to that answer and
+  // they stayed waiting until a reload. Ownership has to outlive the DOM that
+  // displays it.
+  state.answerEvalId =
+    messageId || chip?.closest(".msg")?.dataset.messageId || null;
   // Exactly one chip is marked, so it is never ambiguous which answer the bars
   // belong to once a conversation has several.
   for (const c of document.querySelectorAll(".eval-chip.is-shown")) {
@@ -2141,9 +2156,10 @@ async function fetchGrade(chatId, messageId, msgEl) {
       document.querySelector(`.msg[data-message-id="${messageId}"]`) || msgEl;
     if (!el || !el.isConnected) return;
 
-    // Does this answer currently own the bars? Asked BEFORE the chip is
-    // rebuilt, because the rebuild drops the marker that answers it.
-    const wasShown = !!el.querySelector(".eval-chip.is-shown");
+    // Does this answer own the bars? Asked of STATE, not of the DOM. A class on
+    // a chip does not survive the thread re-render that follows every answer,
+    // and reading it here is what left the bars stuck on "grading…".
+    const ownsBars = state.answerEvalId === messageId;
 
     // Rebuild this answer's chip in place. A :last-child lookup would attach
     // the verdict to whatever answer happens to be last by the time the judges
@@ -2154,8 +2170,8 @@ async function fetchGrade(chatId, messageId, msgEl) {
     // Move the bars only if they were already showing this answer. If the
     // reader has since asked something else, updating the pane underneath them
     // would label a newer answer with an older answer's verdict.
-    if (wasShown) {
-      showAnswerOnScorecard(graded, el.querySelector(".eval-chip"));
+    if (ownsBars) {
+      showAnswerOnScorecard(graded, el.querySelector(".eval-chip"), messageId);
     }
   } catch (err) {
     // A failed grade leaves the answer ungraded, which is a state the UI
@@ -2236,7 +2252,11 @@ $("ask-form").onsubmit = async (e) => {
     //
     // The chip comes from the element just appended rather than a :last-child
     // lookup, which would break the moment anything else is appended after it.
-    if (result.eval) showAnswerOnScorecard(result.eval, msg?.querySelector(".eval-chip"));
+    if (result.eval) {
+      showAnswerOnScorecard(
+        result.eval, msg?.querySelector(".eval-chip"), result.message_id || null,
+      );
+    }
     // Not awaited: the answer is already readable, and the reader is free to
     // type the next question while the judges work.
     if (result.eval?.pending && result.message_id) {
@@ -2468,7 +2488,17 @@ function renderScorecard(metrics, runMode) {
           ? `this answer ${livePct}% · benchmark ${benchPct}%`
           : waiting
             ? `benchmark ${benchPct}% · waiting on the judge`
-            : `benchmark ${benchPct}%`
+            : field
+              ? `benchmark ${benchPct}%`
+              // Six of the nine can never carry a live reading, and saying so
+              // where the question arises beats leaving a row that looks
+              // broken. They need a KNOWN answer to score against: precision,
+              // MRR, NDCG and hit rate all ask "was the right passage
+              // returned", which nobody can judge for a question the corpus
+              // has no golden answer for. Correctness needs an expected
+              // answer; the not-found rate needs a set of deliberately
+              // unanswerable questions.
+              : `benchmark ${benchPct}% · needs a known answer`
       }</div>`;
     el.appendChild(row);
   }
@@ -2505,8 +2535,8 @@ function renderScorecard(metrics, runMode) {
   const legend = document.createElement("p");
   legend.className = "score-legend";
   legend.textContent = anyLive
-    ? "Bars show the answer just given. The tick is the benchmark across the sample corpus — a reference, not a pass mark."
-    : "Benchmark across the sample corpus. Ask a question and these bars show that answer against it.";
+    ? "Three of these can be measured on a live answer; the rest need a question whose right answer is already known, so they show the benchmark alone. The tick is that benchmark — a reference, not a pass mark."
+    : "Benchmark across the sample corpus. Ask a question and the three measurable rows show that answer against it.";
   el.appendChild(legend);
 }
 
