@@ -14,6 +14,7 @@ ragchat/pipeline.py ingest + ask (rewrite → retrieve → rerank → generate �
 ragchat/embeddings.py  Provider-aware embedding/rerank clients (gemini | openrouter)
 ragchat/deepsearch.py  Deep search — literal scan of Document.source_text, no embeddings
 ragchat/websearch.py   Web search TOOL (Tavily) — last rung of the escalation, signed-in only
+ragchat/router.py      Picks WHICH tool to reach for — a different model from the one that writes
 ragchat/vectordb.py Dispatch to store.py (Chroma, local) or store_neon.py (pgvector)
 ragchat/db.py       SQLAlchemy models + self-healing schema init
 eval/               Golden set (56 Q, 53 answerable), corpus (27 files), judges, harness, CI gate
@@ -208,10 +209,31 @@ Three invariants hold it together, all asserted in `tests/test_escalation.py`.
    what your documents say", which is the one failure this feature must not
    have.
 
-What is still missing is real *selection*: the app decides WHEN to look harder
-and walks its tools in a FIXED order. It does not reason about which tool suits
-the question. A model choosing — and able to observe a result and choose again —
-is the remaining step.
+### The router: two models, on purpose
+
+`cfg.llm_model` writes answers. `cfg.router_model` picks tools. They are
+different models because the requirements are different, and because the
+answering model **cannot do the other job at all** — verified live against the
+endpoint, `models/gemma-4-26b-a4b-it` accepts a `tools` parameter and then
+reasons about the choice in prose without ever emitting a tool call.
+`models/gemini-3.5-flash-lite` returns one in ~0.7s.
+
+Gemma stays the writer: it scores 6.5 points higher on answer correctness, and
+nothing the router produces is ever shown to a reader.
+
+`router.choose_tool` returns None for "no opinion", and None is also what it
+returns when it fails, times out, or is unconfigured — the caller cannot tell
+and must not care. **The router can improve the choice and can never block it.**
+`_reach` guards the call as well, because a guarantee that relies on another
+module policing itself is not one.
+
+It is not asked when there is nothing to choose between (one available tool) or
+when no tool is needed at all. The happy path never pays for it.
+
+What is still missing is the observe-and-choose-again half: the router picks
+once, per escalation, and cannot look at what came back and change its mind.
+That is a loop, and a function frozen the instant it responds cannot host an
+open-ended one — it would have to be sliced the way the benchmark is.
 
 What already fits that shape:
 

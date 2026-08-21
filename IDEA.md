@@ -486,13 +486,45 @@ the UI, because it spends a metered third-party quota on a deployment anyone can
 reach without an account. Deep search has no such problem — it reads the
 visitor's own documents and costs nothing — so guests keep it.
 
+### Which tool: asked of a model, not of an `if`
+
+The order alone cannot tell *"this should be in their documents, the ranker
+missed it"* from *"this could never have been in a private document"* — so it
+paid for a full literal scan of every document before every web search.
+`ragchat/router.py` makes that a judgement about the question.
+
+**Two models, and the split is not an optimisation — it is a requirement.**
+Verified live against the endpoint with the same schema and prompt:
+
+| Model | Result |
+|---|---|
+| `models/gemma-4-26b-a4b-it` | accepts `tools`, **never calls one** — reasons about the choice in prose |
+| `models/gemini-3.5-flash-lite` | proper tool call in ~0.7s |
+
+So `llm_model` writes and `router_model` chooses. Gemma keeps the writing
+because it scores 6.5 points higher on answer correctness, and nothing the
+router produces is ever shown to a reader. Live, three runs each:
+
+```
+should be in their docs, ranker missed  -> deep  3/3   0.78s
+could never be in private docs          -> web   3/3   0.55s
+a public product they own docs for      -> deep  3/3   0.61s
+nothing retrieved at all                -> web   3/3   0.61s
+```
+
+The property that matters: **the router can improve the choice and can never
+block it.** No opinion — including failure, timeout, or being unconfigured —
+leaves the documents-first order exactly as it was, and a pick that finds
+nothing falls through to the other tool rather than shortening the ladder. It
+is not asked when there is nothing to choose between, so the happy path never
+pays for it.
+
 ### What is still missing
 
-The trigger is a **rule**, not a judgement. The app decides *when* to look
-harder and walks its tools in a fixed order; it does not reason about *which*
-tool suits the question. A model choosing between them — and able to observe a
-result and choose again — is the remaining step, and the thing that would make
-the loop genuinely agentic rather than merely automatic.
+The router picks **once**, per escalation. It cannot look at what came back and
+change its mind, which is the observe-and-choose-again half of a real agent
+loop. A function frozen the instant it responds cannot host an open-ended one;
+it would have to be sliced across requests the way the benchmark is.
 
 The constraint that shapes it: the function is frozen the instant it responds
 and `maxDuration` is 60s, so a reason/act/observe loop cannot be an open-ended
