@@ -1911,7 +1911,7 @@ fieldset legend {
      .eval-chip is the worst of the two at 25px, and it is the control that
      puts an answer's readings on the benchmark bars — the fourth beat of the
      loop the empty states walk a visitor through. */
-  .cite-chip { padding: 9px 12px; }
+  .cite-chip { padding: 10px 12px; }
   .eval-chip { padding: 10px 0; min-height: 44px; }
   .add-row input, .ask-form textarea { font-size: 16px; } /* avoid iOS zoom-on-focus */
   .field label { min-width: 0; width: 100%; }
