@@ -28,7 +28,7 @@ later brings your work with you.
 | **Retrieval** | Vector + keyword, fused by RRF (k=60) | Two searches at once. Postgres full-text on Neon, in-process BM25 on Chroma. Always on — not a setting. |
 | **Reranker** | Cohere `rerank-v3.5` (OpenRouter) | **One** call re-orders the whole candidate pool against the question. Not one call per passage. |
 | **Deep search** | Literal scan of stored document text | Reads every document word for word and returns every literal match. Per-question, never a saved setting. |
-| **Web search** | Tavily | The last rung of the escalation ladder: reached only after the documents have been searched by ranking *and* literally. Web passages are labelled in the prompt and badged in the citation. Signed-in accounts only. |
+| **Web search** | Tavily | **Off unless you turn it on.** The last rung of the escalation ladder: reached only after your documents have been searched by ranking *and* word for word. Web passages are labelled in the answer and badged in the citation. Signed-in accounts only. |
 | **Generation** | `models/gemma-4-26b-a4b-it` (Google AI Studio) | Writes the answer from the retrieved passages, with inline citations. Kept over `gemini-3.5-flash-lite`, which scored 6.5 points lower on the golden set for no speed gain. |
 | **Judges** | Same model, LLM-as-judge | Scores each answer for faithfulness and relevancy. A judge that fails reports `ungraded`, never `failed`. |
 | **Evaluation** | 56 golden questions over 27 documents | The scored result **ships with the app** — nobody runs a benchmark to see it. |
@@ -112,11 +112,15 @@ switch, because there is no trade worth offering.
 
 **The app reaches for its own tools.** When ranked search comes up short — or
 the model reads the passages and says the answer is not there — it does not
-simply refuse. It reads every document you own word for word, and if that finds
-nothing either, it may search the web. Then it tells you which of those it did,
-under the answer. Documents always come first, and anything from the web is
-labelled as such in the answer and in its citation, because it is the only
-material that is not yours.
+simply refuse. It reads every document you own word for word, and tells you it
+did, under the answer.
+
+**It does not go outside unless you let it.** Web search ships off: answers come
+from your documents, and an app that quietly searched the web whenever your
+documents fell short would be grounded only most of the time. Turn it on and the
+web becomes a last resort — after ranking, after the word-for-word read — with
+everything it finds labelled as a web source, and your own documents winning any
+disagreement.
 
 **Evaluation ships, it does not run.** 56 questions with known answers over 27
 documents, including questions the corpus deliberately cannot answer. The

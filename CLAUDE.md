@@ -159,8 +159,15 @@ and nothing about either is ever written. Neither is in
 `PipelineConfig.fingerprint()` and neither can be — they embed nothing, one
 reading `Document.source_text` directly and the other fetching over HTTP.
 
-Both default to **True** on the request: they say which tools EXIST for this
-question, not which ones must run. That decision is `ask()`'s.
+They say which tools EXIST for this question, not which ones must run — that
+decision is `ask()`'s. But the DEFAULTS differ and the difference is load
+bearing: `deep_search` is True, `web_search` is **False**.
+
+Deep search reads the user's own documents, so it is the same grounding promise
+pursued harder. The web is not their material, and an app claiming answers come
+from your documents cannot widen that silently when the documents fall short.
+Do not "fix" the asymmetry — it is the product. `tests/test_grounding_default.py`
+pins it.
 
 That column is only populated by `_stage_for_indexing` (the upload path), so any
 OTHER way a document is created has to set it too, or deep search is silently

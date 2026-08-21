@@ -48,7 +48,7 @@ is the live page at [`/built`](https://rag-gel.vercel.app/built).
 | Benchmark runs | Client-driven slices, never a background thread (§13) |
 | Mobile | Genuinely good, and a **different product shape** from desktop (§9) |
 | Tools | Deep search and web search are per-request, never stored. The app reaches for them **by itself** when it is about to refuse; a switch says whether a tool EXISTS, not whether it runs (§10) |
-| Web search | Last rung only — documents by ranking, then literally, then outside. Labelled everywhere it appears. Signed-in accounts only (§10) |
+| Web search | **Off by default** — the reader opts in. Last rung only: documents by ranking, then literally, then outside. Labelled everywhere it appears. Signed-in accounts only (§10) |
 | Grading | Runs **after** the answer is delivered, in its own request (§10) |
 
 **Visual reference:** [joeynyc/Grok-UI](https://github.com/joeynyc/Grok-UI) —
@@ -475,16 +475,31 @@ is a materially stronger statement than giving up after a ranked search.
 
 ### The switches say what is AVAILABLE, not what is on
 
-Both tools are lit by default in the composer, and pressing one takes it away.
-This inverts the usual meaning of an accent colour, deliberately: an earlier
-version lit up to mean "force this on every question", which made the unlit
-default look like a disabled feature and meant "off" did not mean off. There is
-no force-on-every-question mode any more.
+A lit switch means the app MAY reach for that tool, never that it will. This
+inverts the usual meaning of an accent colour, deliberately: an earlier version
+lit up to mean "force this on every question", which made the unlit default look
+like a disabled feature and meant "off" did not mean off. There is no
+force-on-every-question mode any more.
 
-Web search is **signed-in only**, enforced in the route rather than hidden in
-the UI, because it spends a metered third-party quota on a deployment anyone can
-reach without an account. Deep search has no such problem — it reads the
-visitor's own documents and costs nothing — so guests keep it.
+**Deep search ships lit. Web search ships dark.** The difference is the product,
+not a preference:
+
+- Deep search reads the reader's **own documents**. Reaching for it is the same
+  promise pursued harder, so it needs no permission.
+- The web is **not theirs**. This app's claim is that answers are grounded in the
+  documents you gave it, and a tool that quietly reaches outside whenever those
+  documents fall short makes the claim conditional without telling anyone.
+  "Usually grounded" is not what is on the tin. Turning it on is the reader
+  widening the promise deliberately — and even then it is the last rung,
+  labelled wherever it appears.
+
+Web search is also **signed-in only**, enforced in the route rather than hidden
+in the UI, because it spends a metered third-party quota on a deployment anyone
+can reach without an account.
+
+One consequence worth knowing: with web search off there is only one tool, so
+the router (below) is never asked and costs nothing. The default path is exactly
+the pipeline that existed before the web tool did.
 
 ### Which tool: asked of a model, not of an `if`
 

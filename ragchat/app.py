@@ -1253,12 +1253,23 @@ class AskIn(BaseModel):
     # everyone — which is exactly the bug the old web-augmentation toggle
     # actually had.
     #
-    # They default to TRUE because the point is that the APP decides. These say
-    # which tools it is allowed to consider, not which ones it must use: a tool
-    # left on still runs only when ask() is about to refuse. Switching one off
-    # is the visitor taking it away, which is the only decision left to them.
+    # They say which tools the app is allowed to CONSIDER, not which it must
+    # use: a tool left on still runs only when ask() is about to refuse.
+    #
+    # The defaults differ, and the difference is the product.
+    #
+    # Deep search is ON because it reads the visitor's OWN documents. Using it
+    # is still answering from their material — the same promise, pursued
+    # harder.
+    #
+    # Web search is OFF because it is not. This app's claim is that answers are
+    # grounded in the documents you gave it, and a tool that quietly reaches
+    # outside when the documents fall short makes that claim conditional
+    # without telling anyone. "Usually grounded" is not what is on the tin. So
+    # the third tool exists only once the reader has asked for it, and turning
+    # it on is them widening the promise deliberately.
     deep_search: bool = True
-    web_search: bool = True
+    web_search: bool = False
 
 
 @app.post("/api/chats/{chat_id}/ask")

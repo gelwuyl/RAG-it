@@ -17,13 +17,18 @@ const state = {
   seeding: null,      // in-flight sample-document copy, so the sources pane can say so
   answerEval: null,   // the answer currently drawn on the benchmark bars
   bootUsageSkipped: false, // consumes the one duplicate status fetch at boot
-  // Which tools the app is ALLOWED to reach for on the next question. True is
-  // the default for both: the point of the escalation is that the app decides,
-  // and these say what exists for it to decide between. Per-question, sent with
-  // ask, never stored — a stored toggle would be one row shared by the whole
-  // deployment (see the ask route).
+  // Which tools the app is ALLOWED to reach for on the next question. They say
+  // what exists for it to decide between, not what it must use. Per-question,
+  // sent with ask, never stored — a stored toggle would be one row shared by
+  // the whole deployment (see the ask route).
+  //
+  // Deep search on, web search OFF. Deep search reads the reader's own
+  // documents, so using it is still answering from their material. The web is
+  // not theirs, and an app whose claim is "grounded in your documents" cannot
+  // quietly widen that when the documents fall short. Turning web search on is
+  // the reader widening it deliberately.
   deepSearch: true,
-  webSearch: true,
+  webSearch: false,
   webAvailable: false,   // server-reported: needs a key AND an account
   // Documents + folders currently in the workspace. Only the COUNT is kept:
   // it is what the empty conversation needs to say something true, and holding
@@ -226,13 +231,13 @@ const GLOSSARY = {
   ],
   "web-search": [
     "Web search",
-    "Your documents come first, always. If ranked search comes up short AND " +
-    "reading every document word for word finds nothing either, the app may " +
-    "search the web rather than simply tell you it found nothing. Anything " +
-    "that comes back is labelled as a web source in the answer and in its " +
-    "citation, because it is the only material here that is not yours. " +
-    "Signed-in only, and it applies to the question you send it with — it is " +
-    "not a setting.",
+    "OFF by default, because this app answers from YOUR documents and the web " +
+    "is not one of them. Turn it on and the app may look outside — but only " +
+    "as a last resort: ranked search first, then reading every document you " +
+    "own word for word, and only if both come up empty. Anything it finds is " +
+    "labelled as a web source in the answer and in its citation, and your own " +
+    "documents win any disagreement. Signed-in only, and it applies to the " +
+    "question you send it with — it is not a setting.",
   ],
   "re-index": [
     "Re-index",
@@ -1149,7 +1154,7 @@ $("web-toggle").onclick = () => {
   syncToolToggles();
   toast(
     state.webSearch
-      ? "Web search available — used only when your documents come up short"
+      ? "Web search on — used only when your documents come up short, and always labelled"
       : "Web search off — answers come from your documents alone",
   );
 };

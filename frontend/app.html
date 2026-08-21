@@ -286,24 +286,31 @@
                  deployment-wide config, so one visitor's switch moved everyone
                  else's retrieval.
 
-                 Lit means AVAILABLE, not "in use". The app decides whether to
-                 use a tool; pressing a switch takes it away. That is the whole
-                 control the visitor has, and the only honest reading of a lit
-                 button here — an earlier version lit up to mean "force this on
-                 every question", so "off" did not mean off. -->
+                 Lit means AVAILABLE, not "in use". The app decides whether
+                 to use a tool; a switch decides whether it HAS one. That is the
+                 whole control the visitor has, and the only honest reading of a
+                 lit button here — an earlier version lit up to mean "force this
+                 on every question", so "off" did not mean off.
+
+                 Deep search starts lit, web search starts dark, and the
+                 difference is the product rather than a preference. Deep search
+                 reads the visitor's OWN documents, so reaching for it is still
+                 answering from their material. The web is not theirs, and an
+                 app that claims answers are grounded in your documents cannot
+                 quietly widen that when the documents fall short. -->
             <span class="tool-switches">
               <span class="tool-row">
                 <button id="deep-toggle" class="switch-btn on" type="button"
                   aria-pressed="true"
-                  title="Deep search is available. Press to take it away.">
+                  title="On. The app reads every document word for word when ranked search comes up short. Press to switch it off.">
                   Deep search</button>
                 <button class="term-mark" type="button" data-term="deep-search"
                   aria-expanded="false" aria-label="What does Deep search do?">?</button>
               </span>
               <span class="tool-row" id="web-row" hidden>
-                <button id="web-toggle" class="switch-btn on" type="button"
-                  aria-pressed="true"
-                  title="Web search is available. Press to take it away.">
+                <button id="web-toggle" class="switch-btn" type="button"
+                  aria-pressed="false"
+                  title="Off. Press to let the app search the web when your own documents come up short. Web sources are always labelled.">
                   Web search</button>
                 <button class="term-mark" type="button" data-term="web-search"
                   aria-expanded="false" aria-label="What does Web search do?">?</button>
@@ -626,6 +633,6 @@
       </div>
     </div>
 
-    <script type="module" src="/app.js?v=56"></script>
+    <script type="module" src="/app.js?v=57"></script>
   </body>
 </html>
