@@ -22,7 +22,45 @@ embedding:
   # guest workspace would go silent at exactly the moment the app promises
   # "your work comes with you". Guest cost is bounded by the caps in
   # ragchat/guests.py instead.
-  model: qwen/qwen3-embedding-8b
+  # SWITCHED from qwen/qwen3-embedding-8b 2026-08-21. Measured, both ways:
+  #
+  #                        qwen 8B    pplx 0.6B
+  #   cost / 1M tokens     $0.010     $0.004      (2.5x cheaper)
+  #   latency median        1.19s      0.54s
+  #   latency p90           1.83s      0.57s      (and max 5.67s vs 0.62s)
+  #   exact recall         0.9245     0.8962      (-2.8, and this is the cost)
+  #   exact hit-rate       0.9623     0.9245      (-3.8)
+  #
+  # The trade is ~3 points of raw retrieval for a third of the cost, half the
+  # latency, and — the part that does not show in a median — a FLAT tail. qwen
+  # spikes to 5.67s; pplx's worst measured call was 0.62s.
+  #
+  # The 3 points do not reach the reader. Both embedders were run through the
+  # FULL benchmark on the same code, same golden set, same judges:
+  #
+  #                        qwen 8B    pplx 0.6B
+  #   answer_correctness   0.9318     0.9286     (-0.3 — noise)
+  #   faithfulness         1.0000     1.0000
+  #   answer_relevancy     1.0000     1.0000
+  #   ungraded             12         8
+  #
+  # Retrieval recall is a PROXY. It got worse and the answers did not: a passage
+  # ranked 4th instead of 2nd still reaches the model. And deep search now
+  # rescues the misses that do matter, which the harness does not even exercise
+  # (it passes ask() no tools), so the real-world gap is smaller still.
+  #
+  # On its own calibrated scale pplx also SEPARATES true from false matches
+  # better than qwen — Youden's J 0.645 against 0.565 (eval/thresholds.json).
+  #
+  # Beware the earlier version of this comparison: the published Aug-18 run
+  # scored 0.8696, which made pplx look +5.9 better. That gap was this repo's
+  # own prompt changes, not the embedder. qwen re-run on today's code scores
+  # 0.9318. Always compare against a control on the SAME code.
+  #
+  # NOTE the cosine metrics are not comparable across embedders without
+  # recalibrating: at qwen's 0.45 threshold pplx reads as catastrophic and is
+  # not. eval/calibrate.py derives the threshold per model; pplx's is 0.27.
+  model: perplexity/pplx-embed-v1-0.6b
 generation:
   # Gemma 4 26B instruct, served by Google AI Studio's OpenAI-compatible
   # endpoint. Used for generation AND the eval LLM-as-judge.

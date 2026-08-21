@@ -23,7 +23,7 @@ later brings your work with you.
 | **App database** | Neon Postgres + SQLAlchemy | Users, documents, chats, messages, saved settings, benchmark runs. |
 | **Vector store** | pgvector in the same Neon database | One fixed `vector(768)` column shared by every model. Chroma swaps in for local dev behind one dispatch module. |
 | **Chunking** | Recursive splitter, 512 tokens, 75 overlap | Splits on paragraph → sentence → word. Size is in **tokens**, not characters. |
-| **Embeddings** | `qwen/qwen3-embedding-8b` (OpenRouter), 768-dim | Turns chunks and questions into vectors. Chosen on sustained throughput: 30/sec against Gemini's ~100/minute free-tier ceiling. |
+| **Embeddings** | `perplexity/pplx-embed-v1-0.6b` (OpenRouter), 768-dim | Turns chunks and questions into vectors. Chosen on measurement: a third of the cost of the 8B model it replaced, half the latency, and a far flatter tail — 0.62s worst case against 5.67s — for about 3 points of raw retrieval. |
 | **Question rewrite** | Generation model | Restates the question before searching, so "and the second one?" still retrieves. Reasoning traces are stripped first. |
 | **Retrieval** | Vector + keyword, fused by RRF (k=60) | Two searches at once. Postgres full-text on Neon, in-process BM25 on Chroma. Always on — not a setting. |
 | **Reranker** | Cohere `rerank-v3.5` (OpenRouter) | **One** call re-orders the whole candidate pool against the question. Not one call per passage. |

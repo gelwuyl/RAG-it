@@ -36,6 +36,7 @@ from ragchat.pipeline import (  # noqa: E402
 from ragchat.vectordb import delete_document_chunks  # noqa: E402
 from eval.metrics import (  # noqa: E402
     MATCH_THRESHOLD,
+    match_threshold,
     exact_context_recall,
     exact_hit_rate_at_k,
     exact_mrr_at_k,
@@ -207,7 +208,12 @@ def score_item(
     chunk_embs = _emb.embed_documents(final_texts) if final_texts else []
 
     k = cfg.top_k
-    cr = context_recall(chunk_embs, golden_embs)
+    # The ruler belongs to the embedder, not to the harness. Reading the module
+    # global here would measure an --embedding-model override with a threshold
+    # calibrated for a DIFFERENT model, which is how a perfectly good embedder
+    # reads as catastrophic (eval/metrics.py).
+    thr = match_threshold(cfg.embedding_model)
+    cr = context_recall(chunk_embs, golden_embs, thr)
     entry = {
         "question": question,
         "unanswerable": item["unanswerable"],
@@ -216,10 +222,10 @@ def score_item(
         "expected_source": item.get("golden_doc", ""),
         "expected": item.get("expected", ""),
         "context_recall": round(cr, 4),
-        "precision_at_k": round(precision_at_k(chunk_embs, golden_embs, k), 4),
-        "mrr": round(mrr_at_k(chunk_embs, golden_embs, k), 4),
-        "ndcg_at_k": round(ndcg_at_k(chunk_embs, golden_embs, k), 4),
-        "hit_rate_at_k": hit_rate_at_k(chunk_embs, golden_embs, k),
+        "precision_at_k": round(precision_at_k(chunk_embs, golden_embs, k, thr), 4),
+        "mrr": round(mrr_at_k(chunk_embs, golden_embs, k, thr), 4),
+        "ndcg_at_k": round(ndcg_at_k(chunk_embs, golden_embs, k, thr), 4),
+        "hit_rate_at_k": hit_rate_at_k(chunk_embs, golden_embs, k, thr),
         # Deterministic twins of the four above. No threshold, no embedding, no
         # false anything — the CI gate compares these, because the cosine ones
         # drift upward as the corpus grows (see metrics.py).
@@ -237,7 +243,7 @@ def score_item(
         pool_texts = [c["text"] for c in pool]
         pool_embs = _emb.embed_documents(pool_texts) if pool_texts else []
         entry["context_recall_at_candidate_k"] = round(
-            context_recall(pool_embs, golden_embs), 4
+            context_recall(pool_embs, golden_embs, thr), 4
         )
     if retrieval_only:
         return entry
@@ -410,7 +416,8 @@ def run_benchmark(
         print(f"Embedding model: {embedding_model}")
     print(f"Config fingerprint: {cfg.fingerprint()}")
     print(
-        f"Judge model: {judges.judge_model()} | MATCH_THRESHOLD (cosine): {MATCH_THRESHOLD}"
+        f"Judge model: {judges.judge_model()} | match threshold (cosine): "
+        f"{match_threshold(cfg.embedding_model)} for {cfg.embedding_model}"
     )
     print("Indexing corpus...")
     reset_eval_collection(cfg)

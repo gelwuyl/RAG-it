@@ -1,7 +1,7 @@
 {
  "published": true,
- "generated": "2026-08-18 23:30:56",
- "run": "20260818_233056",
+ "generated": "2026-08-21 21:21:01",
+ "run": "20260821_212101",
  "mode": "full",
  "config": {
   "chunk_size": 512,
@@ -15,25 +15,25 @@
   "reranker_provider": "openrouter",
   "query_rewrite": true,
   "llm_model": "models/gemma-4-26b-a4b-it",
-  "judge_model": "models/gemini-3.5-flash-lite",
+  "judge_model": "models/gemma-4-26b-a4b-it",
   "temperature": 0.0,
-  "embedding_model": "qwen/qwen3-embedding-8b",
+  "embedding_model": "perplexity/pplx-embed-v1-0.6b",
   "embedding_provider": "openrouter",
-  "fingerprint": "2ba2611547c8"
+  "fingerprint": "f22f9853f5cd"
  },
  "metrics": {
-  "context_recall": 0.9025,
-  "precision_at_k": 0.717,
-  "mrr": 0.9292,
-  "ndcg_at_k": 0.9833,
-  "hit_rate_at_k": 0.9811,
-  "exact_context_recall": 0.934,
-  "exact_precision_at_k": 0.2925,
-  "exact_mrr": 0.9214,
-  "exact_hit_rate_at_k": 0.9623,
-  "faithfulness": 0.9778,
-  "answer_relevancy": 0.98,
-  "answer_correctness": 0.8696,
+  "context_recall": 0.8569,
+  "precision_at_k": 0.6462,
+  "mrr": 0.9245,
+  "ndcg_at_k": 0.966,
+  "hit_rate_at_k": 0.9623,
+  "exact_context_recall": 0.8962,
+  "exact_precision_at_k": 0.2689,
+  "exact_mrr": 0.8931,
+  "exact_hit_rate_at_k": 0.9245,
+  "faithfulness": 1.0,
+  "answer_relevancy": 1.0,
+  "answer_correctness": 0.9286,
   "not_found_rate_unanswerables": 1.0,
   "context_recall_multi_doc": 0.9167,
   "n_ungraded": 8,
@@ -56,7 +56,7 @@
    "context_recall": 1.0,
    "precision_at_k": 1.0,
    "mrr": 1.0,
-   "ndcg_at_k": 1.0,
+   "ndcg_at_k": 0.9943,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.25,
@@ -65,25 +65,25 @@
    "retrieved": [
     {
      "title": "havenmark_method.txt",
-     "similarity": 0.6442
+     "similarity": 0.5084
     },
     {
      "title": "havenmark_pathway.txt",
-     "similarity": 0.5361
+     "similarity": 0.3897
     },
     {
      "title": "valuation_notes.txt",
-     "similarity": 0.427
+     "similarity": 0.218
     },
     {
-     "title": "havenmark_client_data_policy.txt",
-     "similarity": 0.3293
+     "title": "havenmark_commercial_desk.txt",
+     "similarity": 0.3307
     }
    ],
-   "answer": "The Havenmark Method in Chinese is \u6052\u5b89\u65b9\u6cd5 (H\u00e9ng'\u0101n F\u0101ngf\u01ce) [1]. In English, it is defined by four principles: Systematised, Data-led, Human, and Long-term [1].",
+   "answer": "The Havenmark Method in Chinese is \u6052\u5b89\u65b9\u6cd5, and in English, it is defined by four principles: Systematised, Data-led, Human, and Long-term [1].",
    "not_found": false,
-   "faithful": null,
-   "faithful_reason": "judge unavailable: judge returned only a reasoning block, no verdict",
+   "faithful": true,
+   "faithful_reason": "The answer accurately reflects the Chinese name and the four English principles provided in document [1].",
    "relevant": true,
    "relevant_reason": "The answer directly provides both the Chinese translation and the English definition requested in the question.",
    "correct": null,
@@ -103,7 +103,7 @@
    "context_recall": 1.0,
    "precision_at_k": 1.0,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9862,
+   "ndcg_at_k": 0.9092,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.25,
@@ -112,29 +112,29 @@
    "retrieved": [
     {
      "title": "havenmark_method.txt",
-     "similarity": 0.6689
+     "similarity": 0.5752
     },
     {
      "title": "havenmark_commercial_desk.txt",
-     "similarity": 0.6256
+     "similarity": 0.4965
     },
     {
      "title": "agent_faq.txt",
-     "similarity": 0.603
+     "similarity": 0.4548
     },
     {
      "title": "havenmark_method.txt",
-     "similarity": 0.6527
+     "similarity": 0.5525
     }
    ],
-   "answer": "Havenmark classifies clients differently depending on whether the agent is working in residential or commercial/industrial sectors:\n\n**Residential Classification**\nResidential practice follows the Havenmark Method, which classifies clients into four tiers [1, 2]:\n*   **P1:** These clients meet three specific conditions simultaneously: financing is pre-checked, the decision maker is identified, and there is a move-in or completion date within six months [1, 4]. Agents should spend their time on P1 clients first [1].\n*   **P2:** Clients that miss any one of the three P1 conditions are classified as P2, regardless of how enthusiastic they seem [1, 4]. Agents should follow up with P2 clients once every two weeks [1].\n*   **P3:** These clients are left to be nurtured automatically by the system [1].\n*   **Watch (\u89c2\u5bdf):** These are not \"bad\" clients, but rather clients for whom the timing is not yet right [1, 4]. Agents should invest no active time in Watch clients until a signal appears [1].\n\n**Commercial & Industrial Classification**\nThe commercial desk uses its own three-point scale because requirements are driven by board approvals or lease expiries rather than family move-in dates [2]:\n*   **C1:** These requirements meet three conditions at once: a stated budget (expressed as a rate per square foot per month), a stated occupation window, and a signed mandate or board paper [2].\n*   **C2:** Any requirement missing one of the three C1 conditions is classified as C2, regardless of how urgent the caller sounds [2]. These requirements are reviewed monthly [2].\n*   **Hold:** This covers requirements waiting on a lease expiry that is more than nine months away [2]. Agents should diary these to the expiry month and invest no active time before then [2].",
+   "answer": "Havenmark classifies clients differently depending on whether the agent is working in residential or commercial/industrial sectors:\n\n**Residential Classification**\nResidential practice follows the Havenmark Method, which classifies clients into four tiers [1, 2]:\n*   **P1:** Meets three specific conditions: financing is pre-checked, the decision maker is identified, and there is a move-in or completion date within six months [1, 4].\n*   **P2:** Any client who is missing even one of the three P1 conditions, regardless of how enthusiastic they sound [1, 4].\n*   **P3:** Clients who are let to be nurtured by the system automatically [1].\n*   **Watch (\u89c2\u5bdf):** Clients where the timing is not yet right [4].\n\n**Commercial and Industrial Classification**\nThe commercial desk uses its own three-point scale because requirements are driven by board approvals or lease expiries rather than move-in dates [2]:\n*   **C1:** Meets three specific conditions: a stated occupation window, a budget expressed as a rate per square foot per month, and a signed mandate or board paper [2].\n*   **C2:** Any requirement missing one of the three C1 conditions, regardless of how urgent the caller sounds [2].\n*   **Hold:** Requirements waiting on a lease expiry that is more than nine months away [2].\n\n**Time Allocation**\nAgents are instructed to prioritize their time as follows:\n*   **Residential:** Spend time on P1 clients first, follow up with P2 clients once every two weeks, let the system handle P3 clients, and invest no active time in Watch clients until a signal appears [1].\n*   **Commercial:** C2 requirements are reviewed monthly rather than fortnightly [2]. For Hold requirements, agents should diary them to the expiry month and invest no active time before then [2].",
    "not_found": false,
    "faithful": null,
    "faithful_reason": "judge unavailable: judge returned only a reasoning block, no verdict",
    "relevant": true,
-   "relevant_reason": "The answer directly addresses both parts of the question by detailing the classification tiers and the corresponding time allocation for agents in both residential and commercial sectors.",
+   "relevant_reason": "The answer directly addresses both parts of the question by detailing the residential and commercial classification tiers and the corresponding time allocation instructions.",
    "correct": true,
-   "correct_reason": "The system correctly identifies all four client tiers (P1, P2, P3, Watch) and their corresponding time allocation requirements."
+   "correct_reason": "The system correctly identifies the four client tiers and the specific time allocation rules for each."
   },
   {
    "question": "What three conditions must be met at once for a client to be graded P1?",
@@ -148,9 +148,9 @@
    "expected_source": "havenmark_method.txt",
    "expected": "Financing pre-checked, decision maker identified, and a move-in or completion date within six months. Missing any one makes them P2.",
    "context_recall": 0.5,
-   "precision_at_k": 0.25,
+   "precision_at_k": 0.5,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9988,
+   "ndcg_at_k": 0.9992,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.5,
@@ -159,19 +159,19 @@
    "retrieved": [
     {
      "title": "havenmark_method.txt",
-     "similarity": 0.5666
+     "similarity": 0.4983
     },
     {
      "title": "havenmark_method.txt",
-     "similarity": 0.4942
+     "similarity": 0.3609
     },
     {
      "title": "havenmark_commercial_desk.txt",
-     "similarity": 0.5231
+     "similarity": 0.3566
     },
     {
      "title": "agent_faq.txt",
-     "similarity": 0.5334
+     "similarity": 0.3527
     }
    ],
    "answer": "To be graded as a P1 client, the following three conditions must be met at once:\n\n*   Financing is pre-checked [1, 2].\n*   The decision maker has been identified [1, 2].\n*   There is a move-in or completion date within six months [1, 2].\n\nMissing any one of these three conditions makes the client a P2, regardless of how enthusiastic they sound [1, 2].",
@@ -197,7 +197,7 @@
    "context_recall": 1.0,
    "precision_at_k": 0.5,
    "mrr": 1.0,
-   "ndcg_at_k": 1.0,
+   "ndcg_at_k": 0.9972,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.25,
@@ -206,25 +206,25 @@
    "retrieved": [
     {
      "title": "havenmark_method.txt",
-     "similarity": 0.6077
+     "similarity": 0.4714
     },
     {
      "title": "havenmark_commercial_desk.txt",
-     "similarity": 0.5576
+     "similarity": 0.4756
     },
     {
-     "title": "havenmark_pathway.txt",
-     "similarity": 0.6143
+     "title": "havenmark_rental_playbook.txt",
+     "similarity": 0.2479
     },
     {
-     "title": "havenmark_practice_committee_charter.txt",
-     "similarity": 0.48
+     "title": "havenmark_method.txt",
+     "similarity": 0.4137
     }
    ],
    "answer": "Havenmark sets the following annual transaction targets:\n\n*   **Full-timers:** More than 18 cases per year [1].\n*   **Part-timers:** More than 6 cases per year [1].",
    "not_found": false,
-   "faithful": null,
-   "faithful_reason": "judge unavailable: judge returned only a reasoning block, no verdict",
+   "faithful": true,
+   "faithful_reason": "The answer accurately reflects the annual transaction targets for full-timers (>18) and part-timers (>6) stated in section 3.1 of document [1].",
    "relevant": true,
    "relevant_reason": "The answer directly provides the specific annual transaction targets for both full-timers and part-timers as requested.",
    "correct": null,
@@ -244,7 +244,7 @@
    "context_recall": 1.0,
    "precision_at_k": 1.0,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9942,
+   "ndcg_at_k": 0.9883,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.25,
@@ -253,29 +253,29 @@
    "retrieved": [
     {
      "title": "havenmark_method.txt",
-     "similarity": 0.6788
+     "similarity": 0.4578
     },
     {
      "title": "havenmark_pathway.txt",
-     "similarity": 0.6837
+     "similarity": 0.5244
     },
     {
      "title": "havenmark_market_call.txt",
-     "similarity": 0.6435
+     "similarity": 0.3978
     },
     {
      "title": "havenmark_commercial_desk.txt",
-     "similarity": 0.6326
+     "similarity": 0.4786
     }
    ],
-   "answer": "The target average commission per case for residential agents is not less than S$9,800 [1]. If an agent hits their case count target but falls below this commission figure, they are considered to be taking work that does not pay, and their pipeline is reviewed rather than praised [1].",
+   "answer": "The Havenmark Method sets a target average commission per case of not less than S$9,800 [1]. If an agent hits their case count target but falls below this commission figure, they are considered to be \"taking work that does not pay,\" and their pipeline is reviewed rather than praised [1].",
    "not_found": false,
    "faithful": true,
-   "faithful_reason": "The answer accurately reflects the target commission and the consequence for falling below it as stated in section 3.3 of the first document.",
+   "faithful_reason": "All claims are directly supported by section 3.3 of the first document.",
    "relevant": true,
    "relevant_reason": "The answer directly provides the specific commission amount and the consequence for falling below it.",
    "correct": true,
-   "correct_reason": "The system correctly provides the commission target and the consequence for falling below it."
+   "correct_reason": "The system correctly provides both the commission target and the consequence for falling below it."
   },
   {
    "question": "What ramp applies to new agents instead of the full annual target?",
@@ -291,7 +291,7 @@
    "context_recall": 0.5,
    "precision_at_k": 0.75,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9827,
+   "ndcg_at_k": 0.976,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.25,
@@ -300,19 +300,19 @@
    "retrieved": [
     {
      "title": "havenmark_method.txt",
-     "similarity": 0.6383
+     "similarity": 0.3611
     },
     {
      "title": "havenmark_pathway.txt",
-     "similarity": 0.5292
+     "similarity": 0.2449
     },
     {
      "title": "havenmark_team_leader_standard.txt",
-     "similarity": 0.5021
+     "similarity": 0.2271
     },
     {
      "title": "havenmark_new_agent_handbook.txt",
-     "similarity": 0.6136
+     "similarity": 0.2839
     }
    ],
    "answer": "New agents are held to a ramp rather than the full target, which consists of 4 cases in the first six months and 9 cases in months seven to twelve [1].",
@@ -338,7 +338,7 @@
    "context_recall": 1.0,
    "precision_at_k": 1.0,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9959,
+   "ndcg_at_k": 0.9964,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.25,
@@ -347,22 +347,22 @@
    "retrieved": [
     {
      "title": "havenmark_method.txt",
-     "similarity": 0.4825
+     "similarity": 0.3777
     },
     {
      "title": "havenmark_pathway.txt",
-     "similarity": 0.4678
+     "similarity": 0.3884
     },
     {
      "title": "agent_faq.txt",
-     "similarity": 0.5215
+     "similarity": 0.4115
     },
     {
      "title": "havenmark_new_agent_handbook.txt",
-     "similarity": 0.4348
+     "similarity": 0.2607
     }
    ],
-   "answer": "If an agent does not update their Friday data, they will receive no new leads the following week [1].",
+   "answer": "If an agent does not update their Friday data, they will not receive any new leads the following week [1].",
    "not_found": false,
    "faithful": true,
    "faithful_reason": "Section 4.4 of [1] explicitly states that an agent who does not update Friday data receives no new leads the following week.",
@@ -385,7 +385,7 @@
    "context_recall": 0.5,
    "precision_at_k": 0.5,
    "mrr": 1.0,
-   "ndcg_at_k": 0.954,
+   "ndcg_at_k": 0.9272,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.25,
@@ -394,29 +394,29 @@
    "retrieved": [
     {
      "title": "havenmark_method.txt",
-     "similarity": 0.5864
+     "similarity": 0.4957
     },
     {
      "title": "district_guide.txt",
-     "similarity": 0.4818
+     "similarity": 0.3752
     },
     {
      "title": "launch_portfolio.txt",
-     "similarity": 0.4621
+     "similarity": 0.3001
     },
     {
      "title": "valuation_notes.txt",
-     "similarity": 0.5649
+     "similarity": 0.5025
     }
    ],
-   "answer": "Havenmark refuses to quote a price that has not been verified against a caveat lodged in the last ninety days [1]. Additionally, agents are instructed to verify any figures against the developer's current price list before quoting them to a client [3].",
+   "answer": "Havenmark refuses to quote a price that has not been verified against a caveat lodged within the last ninety days [1].",
    "not_found": false,
    "faithful": true,
-   "faithful_reason": "Both claims are directly supported by the provided context documents [1] and [3].",
+   "faithful_reason": "Section 6.1 of document [1] explicitly states that Havenmark does not quote a price they have not verified against a caveat lodged in the last ninety days.",
    "relevant": true,
-   "relevant_reason": "The answer directly states that Havenmark refuses to quote prices that have not been verified against a caveat lodged in the last ninety days.",
+   "relevant_reason": "The answer directly identifies the specific condition under which Havenmark refuses to quote a price.",
    "correct": true,
-   "correct_reason": "The system answer correctly identifies that Havenmark refuses to quote a price that has not been verified against a caveat lodged in the last ninety days."
+   "correct_reason": "The system answer accurately reflects the requirement to verify prices against a caveat lodged within the last ninety days."
   },
   {
    "question": "What are the five stages of the Havenmark Pathway and how long does each take?",
@@ -430,9 +430,9 @@
    "expected_source": "havenmark_pathway.txt",
    "expected": "Ground (months 1-3), Frame (4-9), Roof (10-18), Beacon (19-36) and Keystone (month 37 onward).",
    "context_recall": 1.0,
-   "precision_at_k": 0.25,
+   "precision_at_k": 0.5,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9966,
+   "ndcg_at_k": 1.0,
    "hit_rate_at_k": 1,
    "exact_context_recall": 0.5,
    "exact_precision_at_k": 0.25,
@@ -441,19 +441,19 @@
    "retrieved": [
     {
      "title": "havenmark_pathway.txt",
-     "similarity": 0.7508
+     "similarity": 0.5506
     },
     {
      "title": "havenmark_new_agent_handbook.txt",
-     "similarity": 0.4624
+     "similarity": 0.3294
     },
     {
      "title": "havenmark_method.txt",
-     "similarity": 0.5922
+     "similarity": 0.3592
     },
     {
      "title": "havenmark_team_leader_standard.txt",
-     "similarity": 0.3798
+     "similarity": 0.3057
     }
    ],
    "answer": "I couldn't find this in your documents.",
@@ -479,7 +479,7 @@
    "context_recall": 1.0,
    "precision_at_k": 1.0,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9773,
+   "ndcg_at_k": 0.9486,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.25,
@@ -488,29 +488,29 @@
    "retrieved": [
     {
      "title": "havenmark_pathway.txt",
-     "similarity": 0.4208
+     "similarity": 0.3328
     },
     {
      "title": "agent_faq.txt",
-     "similarity": 0.5573
-    },
-    {
-     "title": "transaction_checklist.txt",
-     "similarity": 0.5379
+     "similarity": 0.4204
     },
     {
      "title": "ec_portfolio.txt",
-     "similarity": 0.5265
+     "similarity": 0.4019
+    },
+    {
+     "title": "havenmark_new_agent_handbook.txt",
+     "similarity": 0.4314
     }
    ],
-   "answer": "A new agent may not conduct a viewing alone before passing the Practice Test [1]. To reach this point, the agent must complete the Havenmark Foundation course (24 hours, in person) and shadow 12 viewings [1].",
+   "answer": "Before conducting a viewing alone, a new agent must:\n\n*   **Pass the Practice Test:** The agent must pass the Practice Test with a score of 80% or above [1]. Two resits are allowed [1].\n*   **Complete Shadowing:** The agent must shadow 12 viewings before running one alone [1].\n\nA new agent is not permitted to conduct a viewing alone before passing the Practice Test [1].",
    "not_found": false,
    "faithful": true,
-   "faithful_reason": "All claims are directly supported by the requirements listed in Stage 1 of the Havenmark Pathway System.",
+   "faithful_reason": "All requirements mentioned, including passing the Practice Test with 80%, allowed resits, and shadowing 12 viewings, are explicitly stated in the Havenmark Pathway System document.",
    "relevant": true,
-   "relevant_reason": "The answer directly specifies the requirements (passing the Practice Test, completing the course, and shadowing viewings) needed to conduct a viewing alone.",
+   "relevant_reason": "The answer directly lists the specific requirements (passing the Practice Test and completing shadowing) needed to conduct a viewing alone.",
    "correct": true,
-   "correct_reason": "The system answer correctly includes both passing the Practice Test and shadowing 12 viewings."
+   "correct_reason": "The system answer correctly includes both requirements: passing the Practice Test and shadowing 12 viewings."
   },
   {
    "question": "What is the pass mark for the Practice Test and how can a candidate fail despite a good total?",
@@ -524,9 +524,9 @@
    "expected_source": "havenmark_pathway.txt",
    "expected": "The pass mark is 80%, but scoring below 50% in any single section fails the whole test regardless of total.",
    "context_recall": 1.0,
-   "precision_at_k": 0.5,
+   "precision_at_k": 0.25,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9804,
+   "ndcg_at_k": 0.9933,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.25,
@@ -535,27 +535,27 @@
    "retrieved": [
     {
      "title": "havenmark_pathway.txt",
-     "similarity": 0.4896
+     "similarity": 0.3669
     },
     {
      "title": "havenmark_new_agent_handbook.txt",
-     "similarity": 0.3245
+     "similarity": 0.2967
     },
     {
      "title": "havenmark_pathway.txt",
-     "similarity": 0.3699
+     "similarity": 0.2541
     },
     {
      "title": "havenmark_new_agent_handbook.txt",
-     "similarity": 0.4695
+     "similarity": 0.276
     }
    ],
-   "answer": "The pass mark for the Practice Test is 80% [1]. A candidate can fail the whole test regardless of their total score if they score below 50% in any single section [1]. This rule exists because an agent who is strong in three sections but \"blind on the fourth\" will make the mistake that the fourth section was designed to prevent [1].",
+   "answer": "The pass mark for the Practice Test is 80% [1]. A candidate can fail the whole test regardless of their total score if they score below 50% in any single section [1]. This rule exists because an agent who is strong in three sections but \"blind\" on the fourth would make the mistake that the fourth section was designed to prevent [1].",
    "not_found": false,
    "faithful": true,
-   "faithful_reason": "All factual claims regarding the pass mark and the failure condition are directly supported by the provided context.",
+   "faithful_reason": "All factual claims regarding the pass mark and failure conditions are directly supported by the provided context.",
    "relevant": true,
-   "relevant_reason": "The answer directly addresses both parts of the question by providing the pass mark and explaining the section-specific failure rule.",
+   "relevant_reason": "The answer directly addresses both parts of the question by providing the pass mark and the condition for failing despite a high total.",
    "correct": true,
    "correct_reason": "The system correctly identifies both the 80% pass mark and the rule regarding scoring below 50% in any single section."
   },
@@ -570,11 +570,11 @@
    ],
    "expected_source": "havenmark_pathway.txt",
    "expected": "Documentation, Valuation, Financing and Conduct, each weighted equally.",
-   "context_recall": 0.5,
-   "precision_at_k": 0.25,
-   "mrr": 0.25,
-   "ndcg_at_k": 0.9383,
-   "hit_rate_at_k": 1,
+   "context_recall": 0.0,
+   "precision_at_k": 0.0,
+   "mrr": 0.0,
+   "ndcg_at_k": 0.9705,
+   "hit_rate_at_k": 0,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.25,
    "exact_mrr": 1.0,
@@ -582,19 +582,19 @@
    "retrieved": [
     {
      "title": "havenmark_pathway.txt",
-     "similarity": 0.4418
+     "similarity": 0.4084
     },
     {
      "title": "havenmark_new_agent_handbook.txt",
-     "similarity": 0.2842
+     "similarity": 0.2811
     },
     {
      "title": "havenmark_pathway.txt",
-     "similarity": 0.3169
+     "similarity": 0.2202
     },
     {
      "title": "havenmark_new_agent_handbook.txt",
-     "similarity": 0.4198
+     "similarity": 0.2825
     }
    ],
    "answer": "The four sections of the Practice Test are:\n\n*   **Section 1 \u2014 Documentation:** Which form, at which stage, signed by whom [1].\n*   **Section 2 \u2014 Valuation:** Reading caveats and adjusting for floor, facing and age [1].\n*   **Section 3 \u2014 Financing:** Loan-to-value limits and the timeline they impose [1].\n*   **Section 4 \u2014 Conduct:** What must be disclosed and when [1].",
@@ -618,9 +618,9 @@
    "expected_source": "havenmark_pathway.txt",
    "expected": "Fifty-fifty by default, and any different split must be agreed in writing before the first viewing. A split renegotiated after an offer is not recognised.",
    "context_recall": 1.0,
-   "precision_at_k": 1.0,
+   "precision_at_k": 0.5,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9984,
+   "ndcg_at_k": 0.9717,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.25,
@@ -629,19 +629,19 @@
    "retrieved": [
     {
      "title": "havenmark_pathway.txt",
-     "similarity": 0.6775
+     "similarity": 0.4551
     },
     {
      "title": "havenmark_market_call.txt",
-     "similarity": 0.5366
+     "similarity": 0.096
     },
     {
      "title": "agent_faq.txt",
-     "similarity": 0.5433
+     "similarity": 0.3652
     },
     {
      "title": "compliance_casebook.txt",
-     "similarity": 0.661
+     "similarity": 0.1748
     }
    ],
    "answer": "The default co-broke split is 50/50 between the listing side and the buyer side [1]. Any different split must be agreed upon in writing before the first viewing [1]. A split renegotiated after an offer has been made is not recognized [1].",
@@ -665,9 +665,9 @@
    "expected_source": "havenmark_pathway.txt",
    "expected": "Both agencies, both agents, the property, and the split. Missing any of the four makes it unenforceable internally.",
    "context_recall": 1.0,
-   "precision_at_k": 0.75,
+   "precision_at_k": 1.0,
    "mrr": 1.0,
-   "ndcg_at_k": 0.994,
+   "ndcg_at_k": 0.9977,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.25,
@@ -676,29 +676,29 @@
    "retrieved": [
     {
      "title": "havenmark_pathway.txt",
-     "similarity": 0.6056
+     "similarity": 0.4309
     },
     {
      "title": "havenmark_pathway.txt",
-     "similarity": 0.4499
+     "similarity": 0.3094
     },
     {
      "title": "havenmark_referral_programme.txt",
-     "similarity": 0.4954
+     "similarity": 0.2751
     },
     {
      "title": "havenmark_method.txt",
-     "similarity": 0.4389
+     "similarity": 0.2729
     }
    ],
-   "answer": "To be enforceable internally, a co-broke agreement must name the following four things:\n1. Both agencies\n2. Both agents\n3. The property\n4. The split [1]",
+   "answer": "To be enforceable internally, a co-broke agreement must name the following four things:\n\n1. Both agencies\n2. Both agents\n3. The property\n4. The split [1]",
    "not_found": false,
    "faithful": true,
    "faithful_reason": "Section C.3 of [1] explicitly states that a co-broke agreement must name both agencies, both agents, the property, and the split to be enforceable internally.",
    "relevant": true,
-   "relevant_reason": "The answer directly lists the four specific requirements requested in the question.",
+   "relevant_reason": "The answer directly and accurately lists the four specific requirements requested in the question.",
    "correct": true,
-   "correct_reason": "The system correctly identifies all four required elements specified in the source passage."
+   "correct_reason": "The system correctly identifies all four required elements: both agencies, both agents, the property, and the split."
   },
   {
    "question": "How long are Havenmark case files retained?",
@@ -712,9 +712,9 @@
    "expected_source": "havenmark_pathway.txt",
    "expected": "Seven years.",
    "context_recall": 1.0,
-   "precision_at_k": 0.75,
+   "precision_at_k": 0.5,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9878,
+   "ndcg_at_k": 0.9673,
    "hit_rate_at_k": 1,
    "exact_context_recall": 0.0,
    "exact_precision_at_k": 0.0,
@@ -723,19 +723,19 @@
    "retrieved": [
     {
      "title": "havenmark_client_data_policy.txt",
-     "similarity": 0.6496
+     "similarity": 0.4605
     },
     {
      "title": "havenmark_pathway.txt",
-     "similarity": 0.5834
+     "similarity": 0.3802
     },
     {
      "title": "havenmark_market_call_august.txt",
-     "similarity": 0.4795
+     "similarity": 0.3259
     },
     {
      "title": "havenmark_client_data_policy.txt",
-     "similarity": 0.6191
+     "similarity": 0.4074
     }
    ],
    "answer": "I couldn't find this in your documents.",
@@ -759,9 +759,9 @@
    "expected_source": "havenmark_pathway.txt",
    "expected": "Minor, Major and Critical. A Critical finding suspends the case immediately and convenes the Practice Committee within one working day.",
    "context_recall": 1.0,
-   "precision_at_k": 1.0,
+   "precision_at_k": 0.75,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9859,
+   "ndcg_at_k": 0.9465,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.25,
@@ -770,27 +770,27 @@
    "retrieved": [
     {
      "title": "havenmark_pathway.txt",
-     "similarity": 0.5027
+     "similarity": 0.2844
     },
     {
      "title": "compliance_casebook.txt",
-     "similarity": 0.6011
+     "similarity": 0.3984
     },
     {
      "title": "agent_faq.txt",
-     "similarity": 0.4404
+     "similarity": 0.2249
     },
     {
      "title": "compliance_casebook.txt",
-     "similarity": 0.5065
+     "similarity": 0.387
     }
    ],
-   "answer": "The three grades of compliance findings are Minor, Major, and Critical [1].\n\nFor the most serious grade, **Critical**, the following occurs:\n*   The case is suspended immediately [1].\n*   The Practice Committee convenes within one working day [1].",
+   "answer": "Compliance findings are graded as Minor, Major, or Critical [1].\n\nFor the most serious grade, **Critical**, the following occurs:\n*   The case is suspended immediately [1].\n*   The Practice Committee convenes within one working day [1].",
    "not_found": false,
    "faithful": true,
-   "faithful_reason": "All claims are directly supported by the text in Part E of the first document.",
+   "faithful_reason": "All claims regarding the grades and the consequences of a Critical finding are directly supported by the provided text.",
    "relevant": true,
-   "relevant_reason": "The answer directly identifies the three grades and explains the consequences for the most serious one.",
+   "relevant_reason": "The answer directly identifies the three grades and specifies the consequences for the most serious grade.",
    "correct": null,
    "correct_reason": "judge unavailable: judge returned only a reasoning block, no verdict"
   },
@@ -805,10 +805,10 @@
    ],
    "expected_source": "havenmark_pathway.txt",
    "expected": "The most junior person present - a Ground agent teaches a rule back, because teaching a rule is how you find out whether you understand it.",
-   "context_recall": 1.0,
+   "context_recall": 0.5,
    "precision_at_k": 0.25,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9954,
+   "ndcg_at_k": 0.9939,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.25,
@@ -817,19 +817,19 @@
    "retrieved": [
     {
      "title": "havenmark_pathway.txt",
-     "similarity": 0.5492
+     "similarity": 0.524
     },
     {
      "title": "agent_faq.txt",
-     "similarity": 0.3754
+     "similarity": 0.4171
     },
     {
      "title": "outreach_blueprint.txt",
-     "similarity": 0.4306
+     "similarity": 0.3472
     },
     {
      "title": "havenmark_pathway.txt",
-     "similarity": 0.3056
+     "similarity": 0.3596
     }
    ],
    "answer": "The final segment of Market Call is led by the most junior person present [1]. This segment is given to them because teaching a rule is the method used to determine whether it is actually understood [1]. Explaining a rule is considered the only reliable test of understanding because while someone can repeat a rule they have read, someone who can teach it must reconstruct why the rule exists, which reveals any gaps in their knowledge [2].",
@@ -855,7 +855,7 @@
    "context_recall": 1.0,
    "precision_at_k": 1.0,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9897,
+   "ndcg_at_k": 0.982,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.25,
@@ -864,25 +864,25 @@
    "retrieved": [
     {
      "title": "havenmark_pathway.txt",
-     "similarity": 0.7098
+     "similarity": 0.5708
     },
     {
      "title": "havenmark_new_agent_handbook.txt",
-     "similarity": 0.5542
+     "similarity": 0.3241
     },
     {
      "title": "havenmark_client_data_policy.txt",
-     "similarity": 0.59
+     "similarity": 0.4351
     },
     {
      "title": "havenmark_pathway.txt",
-     "similarity": 0.5392
+     "similarity": 0.4426
     }
    ],
-   "answer": "An agent leaving Havenmark keeps their own client relationships [1]. However, case files remain with the firm because the files carry obligations to the client that outlast the agent's employment [1].",
+   "answer": "When an agent leaves Havenmark, they keep their own client relationships [1]. However, the case files remain with the firm because the files carry obligations to the client that continue beyond the agent's employment [1].",
    "not_found": false,
    "faithful": true,
-   "faithful_reason": "The answer accurately reflects the information provided in context [1].",
+   "faithful_reason": "The answer accurately reflects the information provided in Part G of the havenmark_pathway.txt document.",
    "relevant": true,
    "relevant_reason": "The answer directly addresses both parts of the question by specifying that agents keep client relationships and the firm retains case files.",
    "correct": true,
@@ -911,19 +911,19 @@
    "retrieved": [
     {
      "title": "havenmark_pathway.txt",
-     "similarity": 0.6027
+     "similarity": 0.5021
     },
     {
      "title": "havenmark_team_leader_standard.txt",
-     "similarity": 0.4898
+     "similarity": 0.3352
     },
     {
      "title": "havenmark_pathway.txt",
-     "similarity": 0.4599
+     "similarity": 0.2847
     },
     {
      "title": "havenmark_practice_committee_charter.txt",
-     "similarity": 0.416
+     "similarity": 0.282
     }
    ],
    "answer": "A Keystone agent is assessed primarily on team retention, and only secondarily on personal transactions [1].",
@@ -949,7 +949,7 @@
    "context_recall": 1.0,
    "precision_at_k": 0.5,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9644,
+   "ndcg_at_k": 0.9723,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.25,
@@ -958,25 +958,25 @@
    "retrieved": [
     {
      "title": "havenmark_media_briefing.txt",
-     "similarity": 0.8048
+     "similarity": 0.5964
     },
     {
      "title": "havenmark_paid_advertising_policy.txt",
-     "similarity": 0.5034
+     "similarity": 0.3104
     },
     {
      "title": "havenmark_method.txt",
-     "similarity": 0.5889
+     "similarity": 0.4063
     },
     {
      "title": "havenmark_media_briefing.txt",
-     "similarity": 0.5225
+     "similarity": 0.3429
     }
    ],
    "answer": "Havenmark's three content tiers and their publication frequencies are:\n\n*   **Tier 1 \u2014 Market Read:** Published monthly on the fifteenth of each month [1].\n*   **Tier 2 \u2014 Unit Study:** Published weekly [1].\n*   **Tier 3 \u2014 Answer Post:** Published daily [1].",
    "not_found": false,
-   "faithful": null,
-   "faithful_reason": "judge unavailable: judge model 'models/gemma-4-26b-a4b-it' failed: Error code: 429 - [{'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_input_token_count, limit: 16000, model: gemma-4-26b\\nPlease retry in 20.019733071s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_input_token_count', 'quotaId': 'GenerateContentInputTokensPerModelPerMinute-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemma-4-26b'}, 'quotaValue': '16000'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '20s'}]}}]",
+   "faithful": true,
+   "faithful_reason": "All information regarding the three content tiers and their frequencies is directly stated in the context.",
    "relevant": true,
    "relevant_reason": "The answer directly identifies all three content tiers and their respective publication frequencies as requested.",
    "correct": true,
@@ -994,9 +994,9 @@
    "expected_source": "havenmark_media_briefing.txt",
    "expected": "AI may draft but may not publish. Every AI-assisted post is reviewed by a named agent who is accountable for the claim.",
    "context_recall": 1.0,
-   "precision_at_k": 0.75,
+   "precision_at_k": 0.25,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9944,
+   "ndcg_at_k": 0.995,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.25,
@@ -1005,29 +1005,29 @@
    "retrieved": [
     {
      "title": "havenmark_media_briefing.txt",
-     "similarity": 0.7168
+     "similarity": 0.6397
     },
     {
      "title": "havenmark_media_briefing.txt",
-     "similarity": 0.5627
+     "similarity": 0.4615
     },
     {
      "title": "havenmark_client_data_policy.txt",
-     "similarity": 0.4296
+     "similarity": 0.2836
     },
     {
-     "title": "compliance_casebook.txt",
-     "similarity": 0.4291
+     "title": "havenmark_method.txt",
+     "similarity": 0.3798
     }
    ],
-   "answer": "Havenmark's policy regarding AI assistance for posts includes the following rules:\n\n*   **Drafting vs. Publishing:** AI is permitted to draft posts, but it is not permitted to publish them [1].\n*   **Review Requirement:** Every post assisted by AI must be reviewed by a named agent before it is published [1]. The agent's name is recorded against the post, and that agent is held accountable for the claims made, rather than the tool [1].\n*   **Market Data:** AI must never be used to generate market figures [1]. All numbers in a Havenmark post must come from transaction records or a lodged caveat, and the source must be stated [1].\n*   **Compliance:** A post that cites a figure without a source is considered a Major compliance finding and must be taken down within one working day of being flagged [1, 2]. An example of a failure in this policy involved an AI-drafted post that went out without a named reviewer and cited a figure that could not be traced to a caveat [4].",
+   "answer": "Havenmark's policy regarding AI for writing posts includes the following rules:\n\n*   **Drafting vs. Publishing:** AI is permitted to draft posts, but it is not permitted to publish them [1].\n*   **Review Process:** Every post assisted by AI must be reviewed by a named agent before it is published [1]. That agent's name is recorded against the post, and the reviewer is held accountable for the claims made, rather than the tool [1].\n*   **Market Data:** AI must never be used to generate market figures [1]. All numbers in a Havenmark post must come from transaction records or a lodged caveat, and the source must be stated [1].\n*   **Compliance:** If a post cites a figure without providing a source, it is considered a \"Major compliance finding\" and must be taken down within one working day of being flagged [1, 2].",
    "not_found": false,
-   "faithful": null,
-   "faithful_reason": "judge unavailable: judge returned only a reasoning block, no verdict",
+   "faithful": true,
+   "faithful_reason": "Every claim in the answer is directly supported by the information provided in the context.",
    "relevant": true,
-   "relevant_reason": "The answer directly and comprehensively outlines the specific rules and requirements regarding Havenmark's use of AI for posts.",
+   "relevant_reason": "The answer directly addresses the question by outlining the specific rules and constraints regarding the use of AI for writing posts.",
    "correct": true,
-   "correct_reason": "The system answer correctly conveys both the drafting/publishing rule and the requirement for a named agent to review and be accountable for the post."
+   "correct_reason": "The system answer correctly conveys that AI may draft but not publish, and that a named agent must review the post and be held accountable."
   },
   {
    "question": "Can AI be used to generate market figures at Havenmark?",
@@ -1041,9 +1041,9 @@
    "expected_source": "havenmark_media_briefing.txt",
    "expected": "No. Every number must come from a lodged caveat or Havenmark's own transaction records, with the source stated.",
    "context_recall": 1.0,
-   "precision_at_k": 0.5,
+   "precision_at_k": 0.25,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9835,
+   "ndcg_at_k": 1.0,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.25,
@@ -1052,29 +1052,29 @@
    "retrieved": [
     {
      "title": "havenmark_media_briefing.txt",
-     "similarity": 0.6762
+     "similarity": 0.5552
     },
     {
      "title": "havenmark_method.txt",
-     "similarity": 0.528
+     "similarity": 0.3576
     },
     {
      "title": "launch_portfolio.txt",
-     "similarity": 0.4566
+     "similarity": 0.3229
     },
     {
-     "title": "valuation_notes.txt",
-     "similarity": 0.4665
+     "title": "ec_portfolio.txt",
+     "similarity": 0.2439
     }
    ],
-   "answer": "No, AI must never be used to generate market figures [1]. All numbers in a Havenmark post must come from a lodged caveat or from the company's own transaction records, and the source must be stated [1].",
+   "answer": "No, AI must never be used to generate market figures at Havenmark [1]. All numbers in a Havenmark post must come from transaction records or a lodged caveat, and the source must be stated [1].",
    "not_found": false,
    "faithful": true,
-   "faithful_reason": "The answer directly reflects the policy stated in section 3.3 of the first document.",
+   "faithful_reason": "The answer accurately reflects the AI Assistance Policy in document [1] regarding market figures and sources.",
    "relevant": true,
    "relevant_reason": "The answer directly addresses the question by stating that AI cannot be used and specifying the required sources for market figures.",
    "correct": true,
-   "correct_reason": "The system answer correctly conveys that AI cannot be used and that all numbers must come from specific sources with the source stated."
+   "correct_reason": "The system answer correctly conveys that AI cannot be used and that all numbers must come from transaction records or a lodged caveat with the source stated."
   },
   {
    "question": "What is the required response time for a portal enquiry during working hours?",
@@ -1090,7 +1090,7 @@
    "context_recall": 1.0,
    "precision_at_k": 0.5,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9891,
+   "ndcg_at_k": 0.973,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.25,
@@ -1099,29 +1099,29 @@
    "retrieved": [
     {
      "title": "havenmark_media_briefing.txt",
-     "similarity": 0.6738
+     "similarity": 0.4823
     },
     {
      "title": "havenmark_market_call.txt",
-     "similarity": 0.3749
+     "similarity": 0.206
     },
     {
      "title": "havenmark_referral_programme.txt",
-     "similarity": 0.4293
+     "similarity": 0.223
     },
     {
-     "title": "havenmark_new_agent_handbook.txt",
-     "similarity": 0.4326
+     "title": "outreach_blueprint.txt",
+     "similarity": 0.2886
     }
    ],
    "answer": "The required response time for a portal enquiry during working hours is 20 minutes [1].",
    "not_found": false,
    "faithful": true,
-   "faithful_reason": "Context [1] explicitly states that the response time for a portal enquiry during working hours is 20 minutes.",
+   "faithful_reason": "Context [1] explicitly states that the response time for a portal enquiry is 20 minutes during working hours.",
    "relevant": true,
    "relevant_reason": "The answer directly provides the specific response time requested in the question.",
    "correct": true,
-   "correct_reason": "The system correctly states the 20-minute response time for a portal enquiry during working hours, matching the expected answer and source passages."
+   "correct_reason": "The system correctly provides the 20-minute response time for working hours as specified in the source."
   },
   {
    "question": "Why does Havenmark set a twenty-minute response standard?",
@@ -1134,10 +1134,10 @@
    ],
    "expected_source": "havenmark_media_briefing.txt",
    "expected": "An enquiry answered after two hours converts at roughly a third of the rate of one answered inside twenty minutes.",
-   "context_recall": 1.0,
+   "context_recall": 0.5,
    "precision_at_k": 0.25,
    "mrr": 0.5,
-   "ndcg_at_k": 0.9204,
+   "ndcg_at_k": 0.8903,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.25,
@@ -1146,29 +1146,29 @@
    "retrieved": [
     {
      "title": "havenmark_market_call.txt",
-     "similarity": 0.4419
+     "similarity": 0.2707
     },
     {
      "title": "havenmark_media_briefing.txt",
-     "similarity": 0.6115
+     "similarity": 0.4498
     },
     {
      "title": "havenmark_commercial_desk.txt",
-     "similarity": 0.5372
+     "similarity": 0.3987
     },
     {
      "title": "havenmark_team_leader_standard.txt",
-     "similarity": 0.4344
+     "similarity": 0.3162
     }
    ],
-   "answer": "Havenmark sets a twenty-minute response standard for portal enquiries because an enquiry answered after two hours converts at roughly a third of the rate of one answered within twenty minutes [1, 2]. The standard exists because of this conversion gap, rather than to be more polite [2].",
+   "answer": "Havenmark sets a twenty-minute response standard for portal enquiries because an enquiry answered after two hours converts at roughly a third of the rate of one answered within twenty minutes [1, 2]. The standard exists because of this conversion gap, rather than simply to be more polite [2].",
    "not_found": false,
    "faithful": true,
-   "faithful_reason": "The context states the standard exists because an enquiry answered after two hours converts at roughly a third of the rate, not because faster is politer.",
+   "faithful_reason": "All claims regarding the conversion rate and the reason for the standard are directly supported by the provided text.",
    "relevant": true,
-   "relevant_reason": "The answer correctly explains that Havenmark sets the twenty-minute standard due to the conversion rate dropping significantly for enquiries answered after two hours.",
+   "relevant_reason": "The answer directly explains that the standard is driven by the significant drop in conversion rates for enquiries answered after two hours.",
    "correct": true,
-   "correct_reason": "The system's answer accurately conveys that enquiries answered after two hours convert at roughly a third of the rate of those answered within twenty minutes."
+   "correct_reason": "The system answer correctly includes the key fact that enquiries answered after two hours convert at a third of the rate of those answered within twenty minutes."
   },
   {
    "question": "Does Havenmark track follower counts?",
@@ -1184,7 +1184,7 @@
    "context_recall": 1.0,
    "precision_at_k": 0.5,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9682,
+   "ndcg_at_k": 0.8909,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.25,
@@ -1193,29 +1193,29 @@
    "retrieved": [
     {
      "title": "havenmark_media_briefing.txt",
-     "similarity": 0.6499
+     "similarity": 0.3813
     },
     {
      "title": "havenmark_method.txt",
-     "similarity": 0.4992
+     "similarity": 0.3334
+    },
+    {
+     "title": "havenmark_method.txt",
+     "similarity": 0.2606
     },
     {
      "title": "agent_faq.txt",
-     "similarity": 0.6054
-    },
-    {
-     "title": "havenmark_commercial_desk.txt",
-     "similarity": 0.4298
+     "similarity": 0.3979
     }
    ],
-   "answer": "No, Havenmark does not track follower counts [1]. The firm does not track them because the number can be moved without moving anything that matters, and any metric that can be improved without improving the business will eventually be improved instead of the business [1, 3, 4].",
+   "answer": "No, Havenmark does not track follower counts [1]. The firm does not measure them because followers are not clients and the number is easy to move without moving anything that matters [1]. Furthermore, any metric that can be improved without improving the business will eventually be improved instead of the business [4].",
    "not_found": false,
    "faithful": true,
-   "faithful_reason": "The context explicitly states that Havenmark does not track follower counts and explains why.",
+   "faithful_reason": "All claims are directly supported by the provided context documents [1] and [4].",
    "relevant": true,
-   "relevant_reason": "The answer directly addresses the question and provides specific evidence from the text explaining why Havenmark does not track follower counts.",
+   "relevant_reason": "The answer directly addresses the question by stating that Havenmark does not track follower counts and providing the reasoning.",
    "correct": true,
-   "correct_reason": "The system correctly states that Havenmark does not track follower counts and includes the core reasoning that the metric can be changed without impacting the business."
+   "correct_reason": "The system answer correctly conveys that follower counts are not tracked and includes the specific reasons provided in the expected answer."
   },
   {
    "question": "What happens to a post that cites a figure without a source?",
@@ -1229,9 +1229,9 @@
    "expected_source": "havenmark_media_briefing.txt",
    "expected": "It is taken down within one working day of being flagged, and it is treated as a Major compliance finding.",
    "context_recall": 1.0,
-   "precision_at_k": 0.75,
+   "precision_at_k": 0.5,
    "mrr": 0.5,
-   "ndcg_at_k": 0.9312,
+   "ndcg_at_k": 0.8853,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.5,
@@ -1240,29 +1240,29 @@
    "retrieved": [
     {
      "title": "havenmark_media_briefing.txt",
-     "similarity": 0.4235
+     "similarity": 0.2172
     },
     {
      "title": "havenmark_media_briefing.txt",
-     "similarity": 0.58
+     "similarity": 0.4364
     },
     {
      "title": "havenmark_paid_advertising_policy.txt",
-     "similarity": 0.4519
+     "similarity": 0.2913
     },
     {
      "title": "compliance_casebook.txt",
-     "similarity": 0.4633
+     "similarity": 0.2068
     }
    ],
-   "answer": "If a post cites a figure without a source, it is taken down within one working day of being flagged [1, 2]. This is classified as a Major compliance finding, rather than an editorial note [1, 2].",
+   "answer": "If a post cites a figure without a source, the following actions are taken:\n\n*   **Organic Posts:** The post is taken down within one working day of being flagged [1, 2]. This is classified as a Major compliance finding, rather than an editorial note [1, 2].\n*   **Paid Advertisements:** The advertisement is taken down by the agent who placed it at their own cost, and the spend is not reimbursed [3].",
    "not_found": false,
-   "faithful": true,
-   "faithful_reason": "The context states that a post citing a figure without a source is taken down within one working day of being flagged and is a Major compliance finding [1, 2].",
+   "faithful": null,
+   "faithful_reason": "judge unavailable: judge returned only a reasoning block, no verdict",
    "relevant": true,
-   "relevant_reason": "The answer directly addresses the question by stating that the post is taken down within one working day based on the provided text [1, 2].",
+   "relevant_reason": "The answer directly addresses the consequences for both organic posts and paid advertisements when a figure is cited without a source.",
    "correct": true,
-   "correct_reason": "The system answer accurately conveys all key facts from the source passage, including the removal timeframe and the classification as a Major compliance finding."
+   "correct_reason": "The system correctly identifies that the post is taken down within one working day and is classified as a Major compliance finding."
   },
   {
    "question": "What documents are required at the offer stage for a rental case versus a sales case?",
@@ -1276,9 +1276,9 @@
    "expected_source": "transaction_checklist.txt",
    "expected": "Rental needs a Letter of Intent and a good faith deposit receipt of one month's rent; sales needs an Option to Purchase and an option fee receipt of 1% of the purchase price.",
    "context_recall": 0.5,
-   "precision_at_k": 0.25,
+   "precision_at_k": 0.75,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9998,
+   "ndcg_at_k": 0.987,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.25,
@@ -1287,29 +1287,29 @@
    "retrieved": [
     {
      "title": "transaction_checklist.txt",
-     "similarity": 0.6641
+     "similarity": 0.668
     },
     {
      "title": "commercial_checklist.txt",
-     "similarity": 0.6137
+     "similarity": 0.5894
+    },
+    {
+     "title": "commercial_checklist.txt",
+     "similarity": 0.502
     },
     {
      "title": "havenmark_rental_playbook.txt",
-     "similarity": 0.5321
-    },
-    {
-     "title": "tenancy_faq.txt",
-     "similarity": 0.5765
+     "similarity": 0.4453
     }
    ],
-   "answer": "Based on the provided documents, the required documents at the offer stage differ depending on whether the case is a rental or a sale:\n\n**Rental Case Documents (Offer Stage):**\n*   **New Residential:** Letter of Intent (LOI) and a good faith deposit receipt (one month rent) [1].\n*   **Commercial Lease:** Letter of Offer (LOO) and a good faith deposit receipt (one month gross rent) [2].\n\n**Sales Case Documents (Offer Stage):**\n*   **New Residential:** Option to Purchase (OTP) and an option fee receipt (1% of purchase price) [1].\n*   **Commercial Sale:** Offer to Purchase and a deposit receipt (5% of purchase price) [2].",
+   "answer": "Based on the provided documents, the required documents at the offer stage differ depending on whether the case is residential or commercial:\n\n**New Residential Cases [1]**\n*   **Rental Case:** Letter of Intent (LOI) and a good faith deposit receipt (one month rent).\n*   **Sales Case:** Option to Purchase (OTP) and an option fee receipt (1% of purchase price).\n\n**Commercial Cases [2]**\n*   **Lease Case:** Letter of Offer (LOO) and a good faith deposit receipt (one month gross rent).\n*   **Sale Case:** Offer to Purchase and a deposit receipt (5% of purchase price).",
    "not_found": false,
-   "faithful": true,
-   "faithful_reason": "The required documents for both rental and sales cases (residential and commercial) at the offer stage are directly supported by sources [1] and [2].",
+   "faithful": null,
+   "faithful_reason": "judge unavailable: judge returned only a reasoning block, no verdict",
    "relevant": true,
-   "relevant_reason": "The answer clearly lists the required documents for both rental and sales cases at the offer stage based on the provided text.",
-   "correct": true,
-   "correct_reason": "The system correctly identifies the core documents for both rental and sales cases at the offer stage."
+   "relevant_reason": "The answer directly compares the required documents for rental and sales cases across both residential and commercial categories.",
+   "correct": null,
+   "correct_reason": "judge unavailable: judge returned only a reasoning block, no verdict"
   },
   {
    "question": "What is the standard commission for a residential sale where the seller is represented?",
@@ -1323,9 +1323,9 @@
    "expected_source": "transaction_checklist.txt",
    "expected": "2% of the transacted price, payable by the seller on completion.",
    "context_recall": 1.0,
-   "precision_at_k": 0.75,
+   "precision_at_k": 0.25,
    "mrr": 1.0,
-   "ndcg_at_k": 0.996,
+   "ndcg_at_k": 0.9954,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.25,
@@ -1334,29 +1334,29 @@
    "retrieved": [
     {
      "title": "transaction_checklist.txt",
-     "similarity": 0.5647
-    },
-    {
-     "title": "commercial_checklist.txt",
-     "similarity": 0.5128
+     "similarity": 0.3122
     },
     {
      "title": "ec_portfolio.txt",
-     "similarity": 0.6092
+     "similarity": 0.4655
     },
     {
      "title": "havenmark_commercial_desk.txt",
-     "similarity": 0.4174
+     "similarity": 0.2918
+    },
+    {
+     "title": "havenmark_market_call.txt",
+     "similarity": 0.2748
     }
    ],
-   "answer": "The standard commission for a residential sale where the seller is represented is 2% of the transacted price, which is payable on completion [1].",
+   "answer": "The standard rate for a residential sale where the seller is represented is 2% of the transacted price, which is payable on completion [1].",
    "not_found": false,
    "faithful": true,
-   "faithful_reason": "Context [1] explicitly states that for a residential sale where the seller is represented, the standard rate is 2% of the transacted price, payable on completion.",
+   "faithful_reason": "Document [1] states that for a residential sale where the seller is represented, the standard rate is 2% of the transacted price, payable on completion.",
    "relevant": true,
-   "relevant_reason": "The answer directly states the standard commission percentage for a represented seller as 2% of the transacted price, matching the question.",
+   "relevant_reason": "The answer directly provides the specific commission rate requested for the given scenario.",
    "correct": true,
-   "correct_reason": "The system answer accurately conveys the key facts of 2% of the transacted price payable on completion as stated in the expected answer."
+   "correct_reason": "The system answer correctly identifies the 2% rate and the timing of payment on completion."
   },
   {
    "question": "How long is the option period for a residential sale, and how long from acceptance to completion?",
@@ -1370,9 +1370,9 @@
    "expected_source": "transaction_checklist.txt",
    "expected": "21 calendar days for the option period, and 8 to 12 weeks from acceptance to completion.",
    "context_recall": 1.0,
-   "precision_at_k": 1.0,
+   "precision_at_k": 0.75,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9997,
+   "ndcg_at_k": 0.9716,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.25,
@@ -1381,29 +1381,29 @@
    "retrieved": [
     {
      "title": "transaction_checklist.txt",
-     "similarity": 0.6025
+     "similarity": 0.4694
     },
     {
      "title": "commercial_checklist.txt",
-     "similarity": 0.5236
+     "similarity": 0.4797
     },
     {
      "title": "commercial_checklist.txt",
-     "similarity": 0.5141
+     "similarity": 0.3979
     },
     {
-     "title": "transaction_checklist.txt",
-     "similarity": 0.4584
+     "title": "havenmark_method.txt",
+     "similarity": 0.2764
     }
    ],
-   "answer": "For a residential sale, the option period (offer to acceptance) is 21 calendar days, and the period from acceptance to completion is 8 to 12 weeks [1].",
+   "answer": "For a residential sale, the option period (from offer to acceptance) is 21 calendar days, and the duration from acceptance to completion is 8 to 12 weeks [1].",
    "not_found": false,
    "faithful": true,
-   "faithful_reason": "The context under Sheet: TIMELINE in document [1] states that for a residential sale, offer to acceptance is 21 calendar days and acceptance to completion is 8 to 12 weeks.",
+   "faithful_reason": "Both the option period and the acceptance to completion duration for residential sales are accurately stated based on the TIMELINE sheet in context [1].",
    "relevant": true,
-   "relevant_reason": "The answer directly addresses both the option period and the time from acceptance to completion using the provided citation.",
+   "relevant_reason": "The answer directly provides the specific durations requested for both the option period and the time from acceptance to completion.",
    "correct": true,
-   "correct_reason": "The system correctly identifies both the 21-calendar-day option period and the 8-to-12-week completion timeframe."
+   "correct_reason": "The system correctly provides both the 21 calendar day option period and the 8 to 12 week duration from acceptance to completion."
   },
   {
    "question": "When must an agent disclose that they represent both sides of a transaction?",
@@ -1419,38 +1419,38 @@
    "context_recall": 1.0,
    "precision_at_k": 1.0,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9863,
+   "ndcg_at_k": 1.0,
    "hit_rate_at_k": 1,
-   "exact_context_recall": 1.0,
-   "exact_precision_at_k": 0.5,
-   "exact_mrr": 0.5,
-   "exact_hit_rate_at_k": 1,
+   "exact_context_recall": 0.0,
+   "exact_precision_at_k": 0.0,
+   "exact_mrr": 0.0,
+   "exact_hit_rate_at_k": 0,
    "retrieved": [
     {
      "title": "tenancy_faq.txt",
-     "similarity": 0.6036
-    },
-    {
-     "title": "commercial_checklist.txt",
-     "similarity": 0.4636
-    },
-    {
-     "title": "transaction_checklist.txt",
-     "similarity": 0.5623
+     "similarity": 0.487
     },
     {
      "title": "tenancy_faq.txt",
-     "similarity": 0.4805
+     "similarity": 0.3785
+    },
+    {
+     "title": "compliance_casebook.txt",
+     "similarity": 0.3895
+    },
+    {
+     "title": "havenmark_referral_programme.txt",
+     "similarity": 0.4192
     }
    ],
-   "answer": "An agent must provide a written disclosure that is signed by both parties before any offer is made [1, 2, 3].",
+   "answer": "An agent is allowed to represent both you and the landlord only with a written disclosure that has been signed by both parties before any offer is made [1, 2].",
    "not_found": false,
    "faithful": true,
-   "faithful_reason": "The context explicitly states that when an agent represents both sides, a written disclosure signed by both parties is required before an offer is made [1, 2, 3].",
+   "faithful_reason": "The answer accurately reflects the requirement for written disclosure signed by both parties before an offer is made as stated in the context.",
    "relevant": true,
-   "relevant_reason": "The answer correctly states that an agent must provide a signed written disclosure before any offer is made.",
+   "relevant_reason": "The answer directly specifies the timing and requirement for disclosure, stating it must be written and signed before an offer is made.",
    "correct": true,
-   "correct_reason": "The system correctly states that the disclosure must be written, signed by both parties, and made before an offer is made."
+   "correct_reason": "The system answer correctly includes all key requirements: written disclosure, signed by both parties, and before an offer is made."
   },
   {
    "question": "Which financing checkpoints block an Option to Purchase from being issued?",
@@ -1464,9 +1464,9 @@
    "expected_source": "transaction_checklist.txt",
    "expected": "In-principle approval sighted and loan-to-value confirmed against property type - both are blocking before the OTP is issued.",
    "context_recall": 1.0,
-   "precision_at_k": 1.0,
+   "precision_at_k": 0.75,
    "mrr": 1.0,
-   "ndcg_at_k": 1.0,
+   "ndcg_at_k": 0.9984,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.25,
@@ -1475,29 +1475,29 @@
    "retrieved": [
     {
      "title": "transaction_checklist.txt",
-     "similarity": 0.6325
+     "similarity": 0.4466
     },
     {
      "title": "commercial_checklist.txt",
-     "similarity": 0.5435
+     "similarity": 0.3261
     },
     {
      "title": "transaction_checklist.txt",
-     "similarity": 0.4527
+     "similarity": 0.2405
     },
     {
      "title": "havenmark_market_call.txt",
-     "similarity": 0.4871
+     "similarity": 0.1984
     }
    ],
-   "answer": "Based on the provided documents, the financing checkpoints that are \"Blocking\" and must occur before an Option to Purchase (OTP) is issued are:\n\n*   In-principle approval sighted [1]\n*   Loan-to-value confirmed against property type [1]",
+   "answer": "Based on the provided documents, the financing checkpoints that are considered \"Blocking\" before an Option to Purchase (OTP) is issued are:\n\n*   **In-principle approval sighted** (Owner: Buyer agent) [1]\n*   **Loan-to-value confirmed against property type** (Owner: Buyer agent) [1]",
    "not_found": false,
-   "faithful": true,
-   "faithful_reason": "Document [1] lists \"In-principle approval sighted\" and \"Loan-to-value confirmed against property type\" as blocking checkpoints before an OTP is issued.",
+   "faithful": null,
+   "faithful_reason": "judge unavailable: judge returned only a reasoning block, no verdict",
    "relevant": true,
-   "relevant_reason": "The answer correctly identifies the financing checkpoints that block an Option to Purchase based on the provided document.",
+   "relevant_reason": "The answer directly identifies the specific financing checkpoints that block the issuance of an Option to Purchase.",
    "correct": true,
-   "correct_reason": "The system correctly identifies both required financing checkpoints that must occur before an OTP is issued."
+   "correct_reason": "The system correctly identifies both required financing checkpoints that must occur before the OTP is issued."
   },
   {
    "question": "Which handover inventory category does not require a photograph?",
@@ -1513,7 +1513,7 @@
    "context_recall": 0.0,
    "precision_at_k": 0.0,
    "mrr": 0.0,
-   "ndcg_at_k": 0.9854,
+   "ndcg_at_k": 0.8485,
    "hit_rate_at_k": 0,
    "exact_context_recall": 0.0,
    "exact_precision_at_k": 0.0,
@@ -1522,29 +1522,29 @@
    "retrieved": [
     {
      "title": "compliance_casebook.txt",
-     "similarity": 0.4911
+     "similarity": 0.1979
     },
     {
      "title": "havenmark_market_call_august.txt",
-     "similarity": 0.3578
+     "similarity": 0.1455
     },
     {
      "title": "tenancy_faq.txt",
-     "similarity": 0.4523
+     "similarity": 0.287
     },
     {
      "title": "havenmark_rental_playbook.txt",
-     "similarity": 0.415
+     "similarity": 0.2307
     }
    ],
-   "answer": "Keys are the one handover inventory category that does not require a photograph [1].",
+   "answer": "Keys are the only handover inventory category that does not have a photograph requirement [1].",
    "not_found": false,
    "faithful": true,
-   "faithful_reason": "Context [1] explicitly states that keys are the one handover category with no photograph requirement.",
+   "faithful_reason": "Document [1] states that keys are the one handover category with no photograph requirement.",
    "relevant": true,
-   "relevant_reason": "The answer correctly identifies keys as the handover inventory category that does not require a photograph based on the provided text.",
+   "relevant_reason": "The answer directly identifies \"Keys\" as the specific category that does not require a photograph.",
    "correct": true,
-   "correct_reason": "The system correctly identifies that keys do not require a photograph, matching the key fact from the source text."
+   "correct_reason": "The system correctly identifies that the keys category is the only one without a photograph requirement."
   },
   {
    "question": "Which project in the portfolio has the earliest expected TOP, and what is its indicative psf?",
@@ -1560,7 +1560,7 @@
    "context_recall": 1.0,
    "precision_at_k": 1.0,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9797,
+   "ndcg_at_k": 0.9963,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.25,
@@ -1569,29 +1569,29 @@
    "retrieved": [
     {
      "title": "ec_portfolio.txt",
-     "similarity": 0.6145
+     "similarity": 0.3684
     },
     {
      "title": "launch_portfolio.txt",
-     "similarity": 0.5959
+     "similarity": 0.3894
     },
     {
      "title": "launch_portfolio.txt",
-     "similarity": 0.704
+     "similarity": 0.5396
     },
     {
      "title": "havenmark_market_call.txt",
-     "similarity": 0.4808
+     "similarity": 0.2544
     }
    ],
-   "answer": "Based on the provided documents, there are two projects tied for the earliest expected TOP:\n\n*   **Wrenfield Park** (D23) has an expected TOP of Q1 2027 and an indicative PSF starting at S$1,880 [2, 3, 4].\n*   **Copperleaf Rise** (D27) is noted as the earliest TOP in the EC portfolio at Q4 2027, with an indicative PSF of S$1,470 - S$1,590 [1].",
+   "answer": "Based on the provided documents, there are two projects that share the earliest expected TOP:\n\n*   **Wrenfield Park** (D23) has an expected TOP of Q1 2027 and an indicative PSF starting at S$1,880 [2, 3, 4].\n*   **Copperleaf Rise** (D27) is noted as having the earliest TOP in the EC portfolio at Q4 2027, with an indicative PSF of S$1,470 - S$1,590 [1].",
    "not_found": false,
-   "faithful": false,
-   "faithful_reason": "The answer claims there are two projects tied for earliest expected TOP, but Wrenfield Park (Q1 2027) is strictly earlier than Copperleaf Rise (Q4 2027).",
+   "faithful": null,
+   "faithful_reason": "judge unavailable: judge returned only a reasoning block, no verdict",
    "relevant": true,
-   "relevant_reason": "The answer correctly identifies the projects with the earliest expected TOP and their respective indicative PSF based on the documents.",
-   "correct": false,
-   "correct_reason": "The system incorrectly included Copperleaf Rise instead of solely identifying Wrenfield Park as having the earliest expected TOP."
+   "relevant_reason": "The answer directly identifies the projects with the earliest expected TOP and provides their indicative PSF as requested.",
+   "correct": null,
+   "correct_reason": "judge unavailable: judge returned only a reasoning block, no verdict"
   },
   {
    "question": "How many units does Marrow Gardens have and how many of those are dual-key?",
@@ -1607,7 +1607,7 @@
    "context_recall": 1.0,
    "precision_at_k": 1.0,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9987,
+   "ndcg_at_k": 1.0,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.25,
@@ -1616,29 +1616,29 @@
    "retrieved": [
     {
      "title": "launch_portfolio.txt",
-     "similarity": 0.5814
+     "similarity": 0.3924
     },
     {
      "title": "havenmark_market_call.txt",
-     "similarity": 0.3993
+     "similarity": 0.2267
     },
     {
      "title": "havenmark_market_call_august.txt",
-     "similarity": 0.3911
+     "similarity": 0.1817
     },
     {
      "title": "district_guide.txt",
-     "similarity": 0.3461
+     "similarity": 0.1654
     }
    ],
    "answer": "Marrow Gardens has 480 units, which includes 32 dual-key units [1].",
    "not_found": false,
    "faithful": true,
-   "faithful_reason": "The context states that Marrow Gardens has 480 units, including 32 dual-key units [1].",
+   "faithful_reason": "The context explicitly states Marrow Gardens has 480 units, including 32 dual-key units.",
    "relevant": true,
-   "relevant_reason": "The answer correctly states that Marrow Gardens has 480 units with 32 dual-key units as asked.",
-   "correct": false,
-   "correct_reason": "The system answer fails to mention the pricing information for dual-key units that was included in the expected answer."
+   "relevant_reason": "The answer directly provides both the total number of units and the specific number of dual-key units requested.",
+   "correct": null,
+   "correct_reason": "judge unavailable: judge returned only a reasoning block, no verdict"
   },
   {
    "question": "Which stacks at Kestrel Bay actually face the waterfront?",
@@ -1654,7 +1654,7 @@
    "context_recall": 1.0,
    "precision_at_k": 0.75,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9952,
+   "ndcg_at_k": 0.9578,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.25,
@@ -1663,29 +1663,29 @@
    "retrieved": [
     {
      "title": "launch_portfolio.txt",
-     "similarity": 0.4707
+     "similarity": 0.2598
     },
     {
      "title": "havenmark_market_call.txt",
-     "similarity": 0.4294
+     "similarity": 0.2805
     },
     {
      "title": "havenmark_market_call.txt",
-     "similarity": 0.47
+     "similarity": 0.322
     },
     {
      "title": "havenmark_market_call_august.txt",
-     "similarity": 0.4088
+     "similarity": 0.1985
     }
    ],
    "answer": "At Kestrel Bay, only stacks 04 through 09 are waterfront facing [1]. Stacks 01 to 03 face the service road [1, 2].",
    "not_found": false,
    "faithful": true,
-   "faithful_reason": "The context states that for Kestrel Bay, stacks 04 through 09 are waterfront facing and stacks 01 to 03 face the service road.",
+   "faithful_reason": "The answer accurately reflects the information provided in the context regarding Kestrel Bay's stacks.",
    "relevant": true,
-   "relevant_reason": "The answer directly identifies which stacks face the waterfront at Kestrel Bay based on the provided text.",
+   "relevant_reason": "The answer directly identifies the specific stacks (04 through 09) that face the waterfront.",
    "correct": true,
-   "correct_reason": "The system correctly identifies that stacks 04 through 09 face the waterfront and stacks 01 to 03 face the service road."
+   "correct_reason": "The system correctly identifies stacks 04 through 09 as waterfront facing and includes the additional context regarding stacks 01 to 03."
   },
   {
    "question": "Which project has the highest indicative psf, and what should agents expect from it?",
@@ -1699,9 +1699,9 @@
    "expected_source": "launch_portfolio.txt",
    "expected": "Portland Hollow at S$3,120 to S$3,480 psf. It is freehold, city fringe, 128 units, with a longer sales runway - not a volume project.",
    "context_recall": 1.0,
-   "precision_at_k": 1.0,
+   "precision_at_k": 0.75,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9667,
+   "ndcg_at_k": 0.9481,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.5,
@@ -1710,29 +1710,29 @@
    "retrieved": [
     {
      "title": "launch_portfolio.txt",
-     "similarity": 0.5315
+     "similarity": 0.3357
     },
     {
      "title": "launch_portfolio.txt",
-     "similarity": 0.622
+     "similarity": 0.4773
     },
     {
      "title": "ec_portfolio.txt",
-     "similarity": 0.5116
+     "similarity": 0.3024
     },
     {
      "title": "havenmark_market_call.txt",
-     "similarity": 0.5018
+     "similarity": 0.2338
     }
    ],
    "answer": "Portland Hollow has the highest indicative PSF in the portfolio [1, 2]. Agents should expect a longer sales runway for this project, as it is not a volume project [1, 2].",
    "not_found": false,
    "faithful": true,
-   "faithful_reason": "The context explicitly states that Portland Hollow has the highest indicative PSF and that agents should expect a longer sales runway because it is not a volume project.",
+   "faithful_reason": "Both the identification of Portland Hollow as having the highest PSF and the expectation of a longer sales runway are explicitly stated in the context.",
    "relevant": true,
-   "relevant_reason": "The answer correctly identifies Portland Hollow as having the highest indicative PSF and states agents should expect a longer sales runway.",
+   "relevant_reason": "The answer directly identifies the project with the highest PSF and explains what agents should expect from it.",
    "correct": null,
-   "correct_reason": "judge unavailable: judge model 'models/gemini-3.5-flash-lite' failed: Error code: 429 - [{'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.5-flash-lite\\nPlease retry in 54.441954053s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.5-flash-lite'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '54s'}]}}]"
+   "correct_reason": "judge unavailable: judge returned only a reasoning block, no verdict"
   },
   {
    "question": "Does the standard residential sale commission rate apply to new launches?",
@@ -1746,9 +1746,9 @@
    "expected_source": "launch_portfolio.txt",
    "expected": "No. New launch commission is set by the developer and must be confirmed in writing with the project marketing agency before the first viewing.",
    "context_recall": 1.0,
-   "precision_at_k": 0.75,
+   "precision_at_k": 1.0,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9644,
+   "ndcg_at_k": 0.9044,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.25,
@@ -1757,29 +1757,29 @@
    "retrieved": [
     {
      "title": "launch_portfolio.txt",
-     "similarity": 0.5883
+     "similarity": 0.3017
     },
     {
      "title": "ec_portfolio.txt",
-     "similarity": 0.6842
+     "similarity": 0.5785
     },
     {
      "title": "ec_portfolio.txt",
-     "similarity": 0.4554
+     "similarity": 0.2816
     },
     {
      "title": "transaction_checklist.txt",
-     "similarity": 0.5459
+     "similarity": 0.3641
     }
    ],
-   "answer": "No, the standard residential sale rate does not apply to new launches. For new launches, the commission structure is set by the developer [1]. For executive condominiums, the commission is also set by the developer and differs from both the standard residential sale rate and the private new launch rate [2, 3].",
+   "answer": "No, the standard residential sale rate does not apply to new launches. For new launches, the commission structure is set by the developer [1]. Specifically, for executive condominiums, the commission is set by the developer and differs from both the standard residential sale rate and the private new launch rate [2, 3].",
    "not_found": false,
    "faithful": true,
-   "faithful_reason": "The context explicitly states that new launch commission is set by the developer and not covered by the standard residential sale rate [1, 2, 3].",
+   "faithful_reason": "All claims are directly supported by the provided context regarding new launch and executive condominium commission structures.",
    "relevant": true,
-   "relevant_reason": "The answer directly addresses the question by stating that the standard commission rate does not apply to new launches and explains who sets the rate instead.",
-   "correct": true,
-   "correct_reason": "The system correctly states that the standard residential sale rate does not apply to new launches and that the commission is set by the developer."
+   "relevant_reason": "The answer directly addresses the question by stating the standard rate does not apply and explaining that developers set the commission for new launches.",
+   "correct": null,
+   "correct_reason": "judge unavailable: judge returned only a reasoning block, no verdict"
   },
   {
    "question": "Who owns each module in the outreach blueprint and how often does each run?",
@@ -1793,9 +1793,9 @@
    "expected_source": "outreach_blueprint.txt",
    "expected": "Module A Team Leader monthly, Module B Frame agents and above weekly, Module C all agents daily, Module D Practice Committee monthly.",
    "context_recall": 1.0,
-   "precision_at_k": 0.5,
+   "precision_at_k": 0.25,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9939,
+   "ndcg_at_k": 0.9885,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.25,
@@ -1804,29 +1804,29 @@
    "retrieved": [
     {
      "title": "outreach_blueprint.txt",
-     "similarity": 0.6417
+     "similarity": 0.442
     },
     {
      "title": "havenmark_paid_advertising_policy.txt",
-     "similarity": 0.4481
+     "similarity": 0.2615
     },
     {
      "title": "havenmark_client_data_policy.txt",
-     "similarity": 0.4425
+     "similarity": 0.1996
     },
     {
      "title": "havenmark_referral_programme.txt",
-     "similarity": 0.4814
+     "similarity": 0.2192
     }
    ],
    "answer": "Based on the outreach blueprint, the ownership and cadence for each module are as follows:\n\n*   **Module A \u2014 Market Call:** Owned by the Team Leader; runs monthly on the first Tuesday [1].\n*   **Module B \u2014 Unit Study:** Owned by a rotating agent at the Frame stage or above; runs weekly [1].\n*   **Module C \u2014 Answer Post:** Owned by all agents; runs daily [1].\n*   **Module D \u2014 Case Clinic:** Owned by the Practice Committee; runs monthly inside the Market Call [1].",
    "not_found": false,
    "faithful": true,
-   "faithful_reason": "Every module's ownership and cadence are accurately supported by Slides 2, 3, 4, 5, and 7 of the outreach blueprint [1].",
+   "faithful_reason": "All ownership and cadence details for Modules A, B, C, and D are directly supported by the provided outreach blueprint.",
    "relevant": true,
-   "relevant_reason": "The answer directly addresses who owns each module and its cadence using information from the context.",
+   "relevant_reason": "The answer directly provides the owner and frequency for every module listed in the outreach blueprint.",
    "correct": true,
-   "correct_reason": "The system answer correctly identifies the ownership and cadence for all four modules as detailed in the expected answer."
+   "correct_reason": "The system answer correctly identifies the owner and frequency for all four modules as specified in the expected answer."
   },
   {
    "question": "What is the conversion path measured in the outreach blueprint?",
@@ -1842,7 +1842,7 @@
    "context_recall": 1.0,
    "precision_at_k": 0.5,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9809,
+   "ndcg_at_k": 0.912,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.25,
@@ -1851,29 +1851,29 @@
    "retrieved": [
     {
      "title": "outreach_blueprint.txt",
-     "similarity": 0.5888
+     "similarity": 0.3757
     },
     {
      "title": "havenmark_paid_advertising_policy.txt",
-     "similarity": 0.3962
+     "similarity": 0.2305
     },
     {
      "title": "havenmark_client_data_policy.txt",
-     "similarity": 0.3856
+     "similarity": 0.2308
     },
     {
      "title": "havenmark_media_briefing.txt",
-     "similarity": 0.5447
+     "similarity": 0.26
     }
    ],
-   "answer": "The conversion path is measured at every arrow in the following sequence: Post -> Enquiry -> Response within 20 minutes -> Viewing -> Offer [1].",
+   "answer": "The conversion path measured in the outreach blueprint is:\n\nPost -> Enquiry -> Response within 20 minutes -> Viewing -> Offer [1].\n\nThe blueprint notes that measurement occurs at every arrow, and the specific arrow that \"leaks\" is the one that is fixed [1].",
    "not_found": false,
    "faithful": true,
-   "faithful_reason": "The conversion path and its measurement are directly supported by Slide 6 of the outreach blueprint.",
+   "faithful_reason": "The answer accurately reflects the conversion path and measurement details provided in Slide 6 of the outreach blueprint.",
    "relevant": true,
-   "relevant_reason": "The answer directly identifies the conversion path measured in the outreach blueprint as the sequence from Post to Offer.",
+   "relevant_reason": "The answer directly provides the specific steps of the conversion path requested in the question.",
    "correct": true,
-   "correct_reason": "The system answer includes the exact conversion path and mentions that it is measured at every arrow."
+   "correct_reason": "The system correctly identifies the full conversion path and includes the detail that measurement occurs at every arrow."
   },
   {
    "question": "What does the outreach blueprint explicitly not cover?",
@@ -1886,10 +1886,10 @@
    ],
    "expected_source": "outreach_blueprint.txt",
    "expected": "Paid advertising, co-broke listings and client data handling - each is governed elsewhere.",
-   "context_recall": 1.0,
+   "context_recall": 0.5,
    "precision_at_k": 0.75,
    "mrr": 0.5,
-   "ndcg_at_k": 0.9271,
+   "ndcg_at_k": 0.8583,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.25,
@@ -1898,29 +1898,29 @@
    "retrieved": [
     {
      "title": "havenmark_client_data_policy.txt",
-     "similarity": 0.3735
+     "similarity": 0.2482
     },
     {
      "title": "havenmark_paid_advertising_policy.txt",
-     "similarity": 0.4476
+     "similarity": 0.3312
     },
     {
      "title": "outreach_blueprint.txt",
-     "similarity": 0.4471
+     "similarity": 0.3386
     },
     {
      "title": "havenmark_media_briefing.txt",
-     "similarity": 0.4613
+     "similarity": 0.3528
     }
    ],
    "answer": "The outreach blueprint explicitly does not cover the following:\n\n*   **Paid advertising:** This is subject to a separate budget approval [2, 3].\n*   **Co-broke listings:** These are governed by Pathway Part C [3].\n*   **Client data handling:** This is governed by the compliance policy [3].",
    "not_found": false,
    "faithful": true,
-   "faithful_reason": "Document [3] (outreach_blueprint.txt, Slide 8) explicitly lists paid advertising, co-broke listings, and client data handling as what the blueprint does not cover.",
+   "faithful_reason": "",
    "relevant": true,
-   "relevant_reason": "The answer directly lists what the outreach blueprint explicitly does not cover, matching the question.",
+   "relevant_reason": "The answer directly lists the specific items that the outreach blueprint does not cover.",
    "correct": true,
-   "correct_reason": "The system correctly identifies all three exclusions covered in the expected answer."
+   "correct_reason": "The system answer correctly identifies all three key items mentioned in the expected answer."
   },
   {
    "question": "What were Havenmark's 1H 2026 results versus 1H 2025?",
@@ -1933,10 +1933,10 @@
    ],
    "expected_source": "havenmark_market_call.txt",
    "expected": "268 cases versus 214, up 25.2%, with average commission per case rising 12.9% from S$9,140 to S$10,320.",
-   "context_recall": 1.0,
+   "context_recall": 0.5,
    "precision_at_k": 0.5,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9915,
+   "ndcg_at_k": 0.9746,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.25,
@@ -1945,29 +1945,29 @@
    "retrieved": [
     {
      "title": "havenmark_market_call.txt",
-     "similarity": 0.6895
+     "similarity": 0.5765
     },
     {
      "title": "launch_portfolio.txt",
-     "similarity": 0.5476
+     "similarity": 0.433
     },
     {
      "title": "havenmark_market_call_august.txt",
-     "similarity": 0.6411
+     "similarity": 0.5429
     },
     {
      "title": "ec_portfolio.txt",
-     "similarity": 0.4431
+     "similarity": 0.3933
     }
    ],
-   "answer": "Compared to 1H 2025, Havenmark's 1H 2026 firm-wide results were as follows:\n\n*   **Total transacted cases:** 268 (up 25.2% from 214) [1]\n*   **Residential sales cases:** 172 (up 31.3% from 131) [1]\n*   **Residential rental cases:** 96 (up 15.7% from 83) [1]\n*   **Average commission per case:** S$10,320 (up 12.9% from S$9,140) [1]\n*   **Agents at Frame stage or above:** 47 (up 23.7% from 38) [1]\n*   **Median days from listing to offer:** Fell to 31 days from 38 days in 1H 2025 [1]",
+   "answer": "For the first half (1H) of 2026 compared to 1H 2025, Havenmark's firm-wide results were as follows:\n\n*   **Total transacted cases:** 268 (up 25.2% from 214) [1]\n*   **Residential sales cases:** 172 (up 31.3% from 131) [1]\n*   **Residential rental cases:** 96 (up 15.7% from 83) [1]\n*   **Average commission per case:** S$10,320 (up 12.9% from S$9,140) [1]\n*   **Agents at Frame stage or above:** 47 (up 23.7% from 38) [1]\n*   **Median days from listing to offer:** Fell to 31 days from 38 days in 1H 2025 [1]",
    "not_found": false,
    "faithful": true,
-   "faithful_reason": "All factual claims regarding 1H 2026 versus 1H 2025 results are directly supported by the text in document [1].",
+   "faithful_reason": "All factual claims regarding transaction metrics and median days are directly supported by the data in document [1].",
    "relevant": true,
-   "relevant_reason": "The answer directly provides Havenmark's 1H 2026 results compared to 1H 2025 across multiple specific metrics as requested.",
-   "correct": true,
-   "correct_reason": "The system correctly identified that total transacted cases were 268 versus 214 (up 25.2%) and average commission per case rose 12.9% from S$9,140 to S$10,320."
+   "relevant_reason": "The answer directly compares multiple key performance metrics for 1H 2026 against 1H 2025 as requested.",
+   "correct": null,
+   "correct_reason": "judge unavailable: judge returned only a reasoning block, no verdict"
   },
   {
    "question": "What are the July 2026 Projects of the Month listed in the Market Call?",
@@ -1980,10 +1980,10 @@
    ],
    "expected_source": "havenmark_market_call.txt",
    "expected": "Wrenfield Park (D23) as POM 1 and Kestrel Bay (D15) as POM 2.",
-   "context_recall": 0.3333,
-   "precision_at_k": 1.0,
+   "context_recall": 0.6667,
+   "precision_at_k": 0.75,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9984,
+   "ndcg_at_k": 0.9614,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.5,
@@ -1992,29 +1992,29 @@
    "retrieved": [
     {
      "title": "havenmark_market_call.txt",
-     "similarity": 0.5991
+     "similarity": 0.5633
     },
     {
      "title": "havenmark_market_call.txt",
-     "similarity": 0.5468
+     "similarity": 0.5136
     },
     {
      "title": "havenmark_market_call_august.txt",
-     "similarity": 0.6069
+     "similarity": 0.541
     },
     {
      "title": "havenmark_market_call_september.txt",
-     "similarity": 0.5903
+     "similarity": 0.5034
     }
    ],
-   "answer": "The July 2026 Projects of the Month (POM) are:\n*   **POM 1:** Wrenfield Park (D23) [1]\n*   **POM 2:** Kestrel Bay (D15) [1]",
+   "answer": "The July 2026 Projects of the Month (POM) are:\n*   **POM 1:** Wrenfield Park (D23) [1, 2]\n*   **POM 2:** Kestrel Bay (D15) [1, 2]",
    "not_found": false,
    "faithful": true,
-   "faithful_reason": "The context for July 2026 explicitly lists Wrenfield Park (D23) and Kestrel Bay (D15) as the Projects of the Month.",
+   "faithful_reason": "The answer accurately identifies Wrenfield Park (D23) and Kestrel Bay (D15) as the July 2026 Projects of the Month based on the provided context.",
    "relevant": true,
-   "relevant_reason": "The answer directly provides the July 2026 Projects of the Month listed in the Market Call.",
+   "relevant_reason": "The answer directly identifies the specific projects requested for the July 2026 period.",
    "correct": true,
-   "correct_reason": "The system correctly identified both Wrenfield Park (D23) and Kestrel Bay (D15) as the July 2026 Projects of the Month."
+   "correct_reason": "The system correctly identifies both Wrenfield Park (D23) as POM 1 and Kestrel Bay (D15) as POM 2."
   },
   {
    "question": "What is the starting psf and preview date for Kestrel Bay?",
@@ -2030,7 +2030,7 @@
    "context_recall": 1.0,
    "precision_at_k": 1.0,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9957,
+   "ndcg_at_k": 0.9872,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.25,
@@ -2039,29 +2039,29 @@
    "retrieved": [
     {
      "title": "havenmark_market_call.txt",
-     "similarity": 0.5523
+     "similarity": 0.3214
     },
     {
      "title": "havenmark_market_call_august.txt",
-     "similarity": 0.4974
+     "similarity": 0.2349
     },
     {
      "title": "launch_portfolio.txt",
-     "similarity": 0.5831
+     "similarity": 0.3118
     },
     {
      "title": "havenmark_market_call.txt",
-     "similarity": 0.5642
+     "similarity": 0.2949
     }
    ],
-   "answer": "The preview for Kestrel Bay opens on 19 July 2026, with a starting psf of S$2,380 [1].",
+   "answer": "The starting psf for Kestrel Bay is S$2,380 [1], and its preview opens on 19 July 2026 [1].",
    "not_found": false,
-   "faithful": null,
-   "faithful_reason": "judge unavailable: judge model 'models/gemini-3.5-flash-lite' failed: Error code: 429 - [{'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.5-flash-lite\\nPlease retry in 5.243163518s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'model': 'gemini-3.5-flash-lite', 'location': 'global'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '5s'}]}}]",
-   "relevant": null,
-   "relevant_reason": "judge unavailable: judge model 'models/gemini-3.5-flash-lite' failed: Error code: 429 - [{'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.5-flash-lite\\nPlease retry in 3.444959318s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.5-flash-lite'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '3s'}]}}]",
-   "correct": null,
-   "correct_reason": "judge unavailable: judge model 'models/gemini-3.5-flash-lite' failed: Error code: 429 - [{'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.5-flash-lite\\nPlease retry in 1.811079797s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.5-flash-lite'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '1s'}]}}]"
+   "faithful": true,
+   "faithful_reason": "The starting psf of S$2,380 and the preview date of 19 July 2026 are both explicitly stated in the context.",
+   "relevant": true,
+   "relevant_reason": "The answer directly provides both the starting psf and the preview date requested in the question.",
+   "correct": true,
+   "correct_reason": "The system answer correctly provides both the starting psf and the preview date as specified in the expected answer."
   },
   {
    "question": "How many properties are on the Havenmark July 2026 Luxury slide, and which district has the most?",
@@ -2077,7 +2077,7 @@
    "context_recall": 1.0,
    "precision_at_k": 1.0,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9947,
+   "ndcg_at_k": 0.9955,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.25,
@@ -2086,29 +2086,29 @@
    "retrieved": [
     {
      "title": "havenmark_market_call.txt",
-     "similarity": 0.6612
+     "similarity": 0.5825
     },
     {
      "title": "havenmark_market_call_august.txt",
-     "similarity": 0.708
+     "similarity": 0.5162
     },
     {
      "title": "havenmark_market_call.txt",
-     "similarity": 0.7069
+     "similarity": 0.4994
     },
     {
      "title": "havenmark_market_call_august.txt",
-     "similarity": 0.6076
+     "similarity": 0.5179
     }
    ],
    "answer": "The Havenmark July 2026 Luxury slide lists 5 properties, and District 09 has the most listings with two of the five [1].",
    "not_found": false,
-   "faithful": null,
-   "faithful_reason": "judge unavailable: judge model 'models/gemini-3.5-flash-lite' failed: Error code: 429 - [{'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.5-flash-lite\\nPlease retry in 51.810130362s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'model': 'gemini-3.5-flash-lite', 'location': 'global'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '51s'}]}}]",
-   "relevant": null,
-   "relevant_reason": "judge unavailable: judge model 'models/gemini-3.5-flash-lite' failed: Error code: 429 - [{'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.5-flash-lite\\nPlease retry in 50.278135821s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.5-flash-lite'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '50s'}]}}]",
-   "correct": null,
-   "correct_reason": "judge unavailable: judge model 'models/gemini-3.5-flash-lite' failed: Error code: 429 - [{'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.5-flash-lite\\nPlease retry in 48.75934226s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.5-flash-lite'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '48s'}]}}]"
+   "faithful": true,
+   "faithful_reason": "The answer is directly supported by the information in Section 3 of the July 2026 Havenmark market call document.",
+   "relevant": true,
+   "relevant_reason": "The answer directly provides both the total number of properties and the specific district with the most listings as requested.",
+   "correct": true,
+   "correct_reason": "The system answer correctly identifies the number of properties and the district with the most listings."
   },
   {
    "question": "Two documents give a psf figure for Kestrel Bay. Which are they, and do the figures agree?",
@@ -2124,7 +2124,7 @@
    "context_recall": 1.0,
    "precision_at_k": 1.0,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9953,
+   "ndcg_at_k": 0.9996,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.5,
@@ -2133,29 +2133,29 @@
    "retrieved": [
     {
      "title": "launch_portfolio.txt",
-     "similarity": 0.4702
+     "similarity": 0.2677
     },
     {
      "title": "havenmark_market_call.txt",
-     "similarity": 0.4753
-    },
-    {
-     "title": "havenmark_market_call_august.txt",
-     "similarity": 0.4032
+     "similarity": 0.2222
     },
     {
      "title": "havenmark_market_call.txt",
-     "similarity": 0.4969
+     "similarity": 0.2564
+    },
+    {
+     "title": "ec_portfolio.txt",
+     "similarity": 0.1708
     }
    ],
-   "answer": "The two documents that provide a psf figure for Kestrel Bay are [1] and [2]. The figures agree, as both indicate a starting price of S$2,380 psf [1, 2].",
+   "answer": "The two documents that provide a psf figure for Kestrel Bay are [1] and [2].\n\nThe figures provided are:\n*   **Document [1]:** An indicative PSF of S$2,380 - S$2,520 [1].\n*   **Document [2]:** A starting psf of S$2,380 [2].\n\nThe figures agree, as the starting psf in document [2] matches the lower end of the indicative band provided in document [1].",
    "not_found": false,
    "faithful": true,
-   "faithful_reason": "Document [1] lists the indicative PSF as S$2,380 - S$2,520 and Document [2] states the starting PSF is S$2,380.",
+   "faithful_reason": "All claims regarding the documents and the psf figures for Kestrel Bay are directly supported by the provided context.",
    "relevant": true,
-   "relevant_reason": "The answer correctly identifies the two documents containing the psf figure and confirms that they agree on the S$2,380 psf starting price.",
+   "relevant_reason": "The answer identifies both documents and explains how the figures relate to each other.",
    "correct": true,
-   "correct_reason": "The system correctly identifies that both documents give a psf figure and that they agree on the starting price of S$2,380 psf."
+   "correct_reason": "The system correctly identifies both PSF figures and accurately states that they agree at the lower bound."
   },
   {
    "question": "Portland Hollow's entry psf and the Bayshore Road land price are both quoted. Which is higher and where does each appear?",
@@ -2171,7 +2171,7 @@
    "context_recall": 1.0,
    "precision_at_k": 1.0,
    "mrr": 1.0,
-   "ndcg_at_k": 0.973,
+   "ndcg_at_k": 0.9781,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.5,
@@ -2180,29 +2180,29 @@
    "retrieved": [
     {
      "title": "havenmark_market_call.txt",
-     "similarity": 0.6556
+     "similarity": 0.4212
     },
     {
      "title": "launch_portfolio.txt",
-     "similarity": 0.5761
+     "similarity": 0.3795
     },
     {
      "title": "havenmark_market_call_august.txt",
-     "similarity": 0.6064
+     "similarity": 0.3117
     },
     {
      "title": "launch_portfolio.txt",
-     "similarity": 0.624
+     "similarity": 0.4571
     }
    ],
-   "answer": "Portland Hollow's indicative entry price is S$3,120 psf [1], while the Bayshore Road parcel closed at S$1,388 psf per plot ratio [1]. Therefore, Portland Hollow's entry psf is higher. Both figures appear in Section 4 of the `havenmark_market_call.txt` document [1].",
+   "answer": "Portland Hollow's indicative entry price is S$3,120 psf [1], while the Bayshore Road parcel closed at S$1,388 psf per plot ratio [1]. Therefore, Portland Hollow's entry psf is higher. Both of these figures appear in the \"SECTION 4 \u2014 LAND AND SUPPLY NOTE\" of the havenmark_market_call.txt document [1].",
    "not_found": false,
    "faithful": true,
-   "faithful_reason": "Both values and their locations in Section 4 of havenmark_market_call.txt are explicitly supported by the context.",
+   "faithful_reason": "All factual claims regarding the prices and their location in the text are directly supported by the context.",
    "relevant": true,
-   "relevant_reason": "The answer correctly identifies Portland Hollow's entry psf as higher and specifies that both figures appear in Section 4 of the document.",
-   "correct": true,
-   "correct_reason": "The system correctly identifies that Portland Hollow's entry psf is higher and states where each appears based on the source text."
+   "relevant_reason": "The answer directly compares both prices and specifies the exact section and document where they are located.",
+   "correct": null,
+   "correct_reason": "judge unavailable: judge returned only a reasoning block, no verdict"
   },
   {
    "question": "A case reached three viewings with nothing signed. What does the method say, and what happened in the case clinic?",
@@ -2218,7 +2218,7 @@
    "context_recall": 1.0,
    "precision_at_k": 1.0,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9876,
+   "ndcg_at_k": 0.9971,
    "hit_rate_at_k": 1,
    "exact_context_recall": 0.5,
    "exact_precision_at_k": 0.5,
@@ -2227,29 +2227,29 @@
    "retrieved": [
     {
      "title": "havenmark_method.txt",
-     "similarity": 0.5715
+     "similarity": 0.4979
     },
     {
      "title": "havenmark_method.txt",
-     "similarity": 0.4398
-    },
-    {
-     "title": "havenmark_market_call_september.txt",
-     "similarity": 0.4198
+     "similarity": 0.3729
     },
     {
      "title": "compliance_casebook.txt",
-     "similarity": 0.5628
+     "similarity": 0.3727
+    },
+    {
+     "title": "havenmark_pathway.txt",
+     "similarity": 0.2564
     }
    ],
-   "answer": "According to the method, any case where a client has signed nothing after three viewings is escalated to the team leader, as three viewings without a document is considered a qualification problem rather than a stock problem [1, 2].\n\nIn the case clinic, two specific cases were discussed:\n*   **Case E:** A buyer requested to be released from an option after the cooling period had passed. The agent provided the consequences in writing before the client made a decision, and the file recorded the advice with its date; no finding was made [3].\n*   **Case F:** An agent quoted a rental figure from a portal listing (an asking rent) instead of a signed lease (a transacted rent). This was escalated the same day, and the client was re-advised before the offer [3].",
+   "answer": "According to the provided documents:\n\n*   **The Method:** Any case where a client has signed nothing after three viewings is escalated to the team leader [1, 2]. This is considered a qualification problem rather than a stock problem [1, 2].\n*   **The Case Clinic:** The provided documents do not contain information regarding a \"case clinic.\"",
    "not_found": false,
    "faithful": true,
-   "faithful_reason": "The answer accurately reflects the method's escalation rule for three viewings and correctly summarizes Case E and Case F from the case clinic in the context.",
+   "faithful_reason": "All factual claims regarding the method are supported by the text, and the statement regarding the absence of information on the \"case clinic\" is accurate.",
    "relevant": true,
-   "relevant_reason": "The answer correctly addresses what the method says about three viewings with nothing signed, and details the cases from the case clinic.",
-   "correct": false,
-   "correct_reason": "The system answer describes Case E and Case F instead of the expected Case A and its financing root cause."
+   "relevant_reason": "The answer directly addresses both parts of the question, providing the method details and correctly stating the absence of information regarding the case clinic.",
+   "correct": null,
+   "correct_reason": "judge unavailable: judge returned only a reasoning block, no verdict"
   },
   {
    "question": "A co-broke split was disputed after an offer. What rule applies and how was it decided?",
@@ -2263,9 +2263,9 @@
    "expected_source": "havenmark_pathway.txt",
    "expected": "The default fifty-fifty split stands, because a renegotiation must be agreed in writing before the first viewing. The Practice Committee found for the default split.",
    "context_recall": 1.0,
-   "precision_at_k": 0.5,
+   "precision_at_k": 0.75,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9691,
+   "ndcg_at_k": 0.9029,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.5,
@@ -2274,29 +2274,29 @@
    "retrieved": [
     {
      "title": "havenmark_market_call.txt",
-     "similarity": 0.5631
+     "similarity": 0.203
     },
     {
      "title": "havenmark_pathway.txt",
-     "similarity": 0.6098
+     "similarity": 0.4728
     },
     {
      "title": "commercial_checklist.txt",
-     "similarity": 0.4011
+     "similarity": 0.1919
     },
     {
-     "title": "transaction_checklist.txt",
-     "similarity": 0.3975
+     "title": "compliance_casebook.txt",
+     "similarity": 0.3341
     }
    ],
-   "answer": "Regarding a disputed co-broke split after an offer, the following rules and decisions apply:\n\n*   **Applicable Rule:** The default split is fifty-fifty (50/50) between the listing side and the buyer side [2]. This default split remains unless it is otherwise agreed upon in writing *before* the first viewing [2]. A split that is renegotiated after an offer has been made is not recognized [2].\n*   **Decision/Finding:** In a specific case where a co-broke split was disputed after an offer was made, the Practice Committee found for the default fifty-fifty split because the renegotiation had not been agreed to in writing before the first viewing [1].\n\nAdditionally, a co-broke split changed after an offer is classified as a \"Critical\" compliance finding [2]. In the event of a dispute, the situation should be escalated to the Practice Committee within 2 working days [3, 4].",
+   "answer": "When a co-broke split is disputed after an offer is made, the following rules and decisions apply:\n\n*   **The Rule:** The default split is fifty-fifty between the listing side and the buyer side [2]. A split renegotiated after an offer is made is not recognized; any change to the split must be agreed upon in writing before the first viewing [2].\n*   **The Decision:** In a specific case where a split was disputed after an offer was made, the Practice Committee found for the default fifty-fifty split because the renegotiation had not been agreed to in writing before the first viewing [1]. Additionally, the reasoning provided in the casebook states that leverage after an offer is not a valid basis for allocating work that has already been completed [4].\n*   **Compliance Grading:** Changing a co-broke split after an offer is graded as a **CRITICAL** finding [2]. In such instances, the case is suspended immediately, and the Practice Committee must convene within one working day [2].",
    "not_found": false,
-   "faithful": true,
-   "faithful_reason": "Every factual claim is directly supported by the provided text in documents [1], [2], [3], and [4].",
+   "faithful": null,
+   "faithful_reason": "judge unavailable: judge returned only a reasoning block, no verdict",
    "relevant": true,
-   "relevant_reason": "The answer correctly identifies both the applicable 50/50 default rule and how the Practice Committee decided the dispute.",
+   "relevant_reason": "The answer directly identifies the rule regarding written agreements before viewings and explains the decision based on the Practice Committee's findings.",
    "correct": true,
-   "correct_reason": "The system correctly identifies that the default 50/50 split applies and that the Practice Committee found for the default split due to lack of prior written agreement."
+   "correct_reason": "The system correctly identifies the 50/50 default rule, the requirement for written agreement before the first viewing, and the Practice Committee's decision."
   },
   {
    "question": "The twenty-minute response standard appears in more than one document. What is the rule and its stated justification?",
@@ -2311,39 +2311,39 @@
    "expected": "Portal and WhatsApp enquiries must be answered within 20 minutes in working hours, justified because an enquiry answered after two hours converts at roughly a third of the rate.",
    "context_recall": 1.0,
    "precision_at_k": 0.25,
-   "mrr": 0.5,
-   "ndcg_at_k": 0.9497,
+   "mrr": 1.0,
+   "ndcg_at_k": 0.9897,
    "hit_rate_at_k": 1,
-   "exact_context_recall": 1.0,
-   "exact_precision_at_k": 0.5,
+   "exact_context_recall": 0.5,
+   "exact_precision_at_k": 0.25,
    "exact_mrr": 1.0,
    "exact_hit_rate_at_k": 1,
    "retrieved": [
     {
-     "title": "havenmark_market_call.txt",
-     "similarity": 0.3853
-    },
-    {
      "title": "havenmark_media_briefing.txt",
-     "similarity": 0.5941
+     "similarity": 0.3943
     },
     {
      "title": "agent_faq.txt",
-     "similarity": 0.543
+     "similarity": 0.3479
     },
     {
      "title": "havenmark_pathway.txt",
-     "similarity": 0.426
+     "similarity": 0.2355
+    },
+    {
+     "title": "havenmark_practice_committee_charter.txt",
+     "similarity": 0.3603
     }
    ],
-   "answer": "The twenty-minute response standard applies to portal enquiries during working hours and WhatsApp enquiries during working hours [2].\n\nThe stated justification for this standard is that an enquiry answered after two hours converts at roughly a third of the rate of one answered within twenty minutes [1, 2]. Therefore, the standard exists because of this conversion gap rather than as a matter of politeness or good manners [2, 3].",
+   "answer": "The twenty-minute response standard applies to both Portal and WhatsApp enquiries during working hours [1].\n\nThe stated justification for this standard is that an enquiry answered after two hours converts at roughly a third of the rate of one answered within twenty minutes [1]. Therefore, the standard exists because of this conversion gap rather than as a matter of politeness [1]. Because this conversion difference is large enough, response time is treated as a business rule rather than a courtesy [2].",
    "not_found": false,
-   "faithful": true,
-   "faithful_reason": "The rule and its justification are fully supported by documents [1], [2], and [3].",
+   "faithful": null,
+   "faithful_reason": "judge unavailable: judge returned only a reasoning block, no verdict",
    "relevant": true,
-   "relevant_reason": "The answer correctly identifies the twenty-minute response rule for portal and WhatsApp enquiries and provides its stated conversion-rate justification.",
+   "relevant_reason": "The answer directly identifies the rule regarding Portal and WhatsApp enquiries and provides the conversion rate justification.",
    "correct": true,
-   "correct_reason": "The system answer correctly identifies the twenty-minute rule for working hours and its justification based on the conversion rate drop after two hours."
+   "correct_reason": "The system correctly identifies the 20-minute rule for Portal and WhatsApp enquiries and provides the correct justification regarding the conversion rate."
   },
   {
    "question": "What is One Sophia's entry price in psf and its rental yield projection for 2029?",
@@ -2357,9 +2357,9 @@
    "expected_source": "on_Sophia_pptx.txt",
    "expected": "One Sophia's right entry price is $2846 psf (up), with a projected high rental of $10 psf in 2029 equalling a 4.2% rental yield.",
    "context_recall": 1.0,
-   "precision_at_k": 1.0,
+   "precision_at_k": 0.75,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9997,
+   "ndcg_at_k": 0.9868,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.25,
@@ -2368,29 +2368,29 @@
    "retrieved": [
     {
      "title": "on_Sophia_pptx.txt",
-     "similarity": 0.743
+     "similarity": 0.5463
     },
     {
      "title": "on_Sophia_pptx.txt",
-     "similarity": 0.7157
+     "similarity": 0.4224
     },
     {
      "title": "on_Sophia_pptx.txt",
-     "similarity": 0.789
+     "similarity": 0.5197
     },
     {
      "title": "ec_portfolio.txt",
-     "similarity": 0.4869
+     "similarity": 0.4123
     }
    ],
-   "answer": "One Sophia's safe entry price is $2846psf and up [1], [2]. Its rental yield projection for 2029 is 4.2% RY, based on a high rental of $10psf [1].",
+   "answer": "One Sophia has a safe entry price of $2846psf and a projected high rental of $10psf in 2029, which equals a 4.2% RY [1].",
    "not_found": false,
    "faithful": true,
-   "faithful_reason": "Context [1] explicitly states One Sophia's entry price is $2846psf up and its 2029 rental yield projection is 4.2% RY.",
+   "faithful_reason": "The entry price of $2846psf and the 2029 rental projection of $10psf (4.2% RY) are explicitly stated in Slide 21 of the context.",
    "relevant": true,
-   "relevant_reason": "The answer directly provides both the entry price of $2846psf and the 2029 rental yield projection of 4.2%.",
+   "relevant_reason": "The answer directly provides both the entry price in psf and the rental yield projection for 2029.",
    "correct": true,
-   "correct_reason": "The system's answer accurately captures both the entry price of $2846psf and up and the 2029 rental yield projection of 4.2% based on a $10psf rental."
+   "correct_reason": "The system correctly provides the entry price of $2846 psf, the $10 psf rental in 2029, and the 4.2% rental yield."
   },
   {
    "question": "How many residential, office, and shop units does One Sophia have?",
@@ -2403,10 +2403,10 @@
    ],
    "expected_source": "on_Sophia_pptx.txt",
    "expected": "One Sophia is a 3-in-1 mixed development with 367 residential units, 122 office units, and 127 shops.",
-   "context_recall": 0.5,
-   "precision_at_k": 0.75,
+   "context_recall": 0.25,
+   "precision_at_k": 0.25,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9953,
+   "ndcg_at_k": 0.9783,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.25,
@@ -2415,29 +2415,29 @@
    "retrieved": [
     {
      "title": "on_Sophia_pptx.txt",
-     "similarity": 0.7706
+     "similarity": 0.5179
     },
     {
      "title": "on_Sophia_pptx.txt",
-     "similarity": 0.6092
+     "similarity": 0.3855
+    },
+    {
+     "title": "tenancy_faq.txt",
+     "similarity": 0.141
     },
     {
      "title": "launch_portfolio.txt",
-     "similarity": 0.4571
-    },
-    {
-     "title": "havenmark_rental_playbook.txt",
-     "similarity": 0.3074
+     "similarity": 0.2693
     }
    ],
    "answer": "One Sophia is a 3-in-1 mixed development that has:\n*   122 office units [1]\n*   367 residential units [1]\n*   127 shops [1]",
    "not_found": false,
    "faithful": true,
-   "faithful_reason": "The context in Slide 10 of document [1] states that One Sophia has 122 office units, 367 resi units, and 127 shops.",
+   "faithful_reason": "Slide 10 of the context explicitly lists 122 office units, 367 resi units, and 127 shops for the 3-in-1 mixed development.",
    "relevant": true,
-   "relevant_reason": "The answer correctly lists the exact number of office, residential, and shop units as requested.",
-   "correct": null,
-   "correct_reason": "judge unavailable: judge model 'models/gemini-3.5-flash-lite' failed: Error code: 429 - [{'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.5-flash-lite\\nPlease retry in 4.250088819s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'model': 'gemini-3.5-flash-lite', 'location': 'global'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '4s'}]}}]"
+   "relevant_reason": "The answer directly provides the specific counts for office, residential, and shop units requested in the question.",
+   "correct": true,
+   "correct_reason": "The system answer correctly provides the number of office, residential, and shop units as specified in the source."
   },
   {
    "question": "What does the One Sophia briefing give as the rental yield and entry price rationale?",
@@ -2451,9 +2451,9 @@
    "expected_source": "on_Sophia_pptx.txt",
    "expected": "One Sophia offers a right entry price of $2846 psf up, with high rental of $10 psf in 2029 equalling a 4.2% rental yield.",
    "context_recall": 1.0,
-   "precision_at_k": 0.75,
+   "precision_at_k": 0.5,
    "mrr": 1.0,
-   "ndcg_at_k": 0.9997,
+   "ndcg_at_k": 0.9912,
    "hit_rate_at_k": 1,
    "exact_context_recall": 1.0,
    "exact_precision_at_k": 0.25,
@@ -2462,29 +2462,29 @@
    "retrieved": [
     {
      "title": "on_Sophia_pptx.txt",
-     "similarity": 0.7859
+     "similarity": 0.5664
     },
     {
      "title": "on_Sophia_pptx.txt",
-     "similarity": 0.6773
+     "similarity": 0.3575
     },
     {
      "title": "on_Sophia_pptx.txt",
-     "similarity": 0.7311
+     "similarity": 0.4079
     },
     {
      "title": "havenmark_paid_advertising_policy.txt",
-     "similarity": 0.4916
+     "similarity": 0.2171
     }
    ],
    "answer": "The One Sophia briefing provides the following rationale regarding rental yield and entry price:\n\n*   **Rental Yield:** It projects a high rental of $10psf in 2029, which equals a 4.2% RY [1].\n*   **Entry Price:** It describes the entry price as a \"safe entry\" of $2846psf and up [1].",
    "not_found": false,
    "faithful": true,
-   "faithful_reason": "The context in Slide 21 explicitly states the rental yield of 4.2% ($10psf in 2029) and the entry price rationale (\"safe entry $2846psf up\").",
+   "faithful_reason": "Both the rental yield projection and the entry price rationale are directly stated in Slide 21 of the context.",
    "relevant": true,
-   "relevant_reason": "The answer directly provides the rental yield and entry price rationale mentioned in the One Sophia briefing.",
+   "relevant_reason": "The answer directly provides the specific rental yield and entry price details requested in the question.",
    "correct": true,
-   "correct_reason": "The system correctly identifies both the $2846 psf entry price and the $10 psf rental leading to a 4.2% rental yield."
+   "correct_reason": "The system correctly includes all key facts regarding the rental yield and the entry price."
   },
   {
    "question": "The One Sophia briefing shows a commission of 2.5%. Is that Havenmark's standard rate for a commercial sale?",
@@ -2498,40 +2498,40 @@
    "expected_source": "on_Sophia_pptx.txt",
    "expected": "No. 2.5% is what was recorded on that one closed deal. The standard commercial sale rate is 1.5% where the vendor is represented and 1% where the purchaser is.",
    "context_recall": 0.5,
-   "precision_at_k": 0.5,
-   "mrr": 1.0,
-   "ndcg_at_k": 0.9847,
+   "precision_at_k": 0.25,
+   "mrr": 0.5,
+   "ndcg_at_k": 0.9244,
    "hit_rate_at_k": 1,
-   "exact_context_recall": 0.5,
-   "exact_precision_at_k": 0.5,
-   "exact_mrr": 1.0,
-   "exact_hit_rate_at_k": 1,
+   "exact_context_recall": 0.0,
+   "exact_precision_at_k": 0.0,
+   "exact_mrr": 0.0,
+   "exact_hit_rate_at_k": 0,
    "retrieved": [
     {
-     "title": "on_Sophia_pptx.txt",
-     "similarity": 0.5799
-    },
-    {
-     "title": "on_Sophia_pptx.txt",
-     "similarity": 0.5917
-    },
-    {
      "title": "havenmark_market_call_september.txt",
-     "similarity": 0.5736
+     "similarity": 0.4057
     },
     {
      "title": "havenmark_commercial_desk.txt",
-     "similarity": 0.5404
+     "similarity": 0.4506
+    },
+    {
+     "title": "havenmark_method.txt",
+     "similarity": 0.3716
+    },
+    {
+     "title": "havenmark_pathway.txt",
+     "similarity": 0.4082
     }
    ],
    "answer": "I couldn't find this in your documents.",
    "not_found": true,
    "faithful": true,
-   "faithful_reason": "The provided context does not contain information about Havenmark's standard rate for a commercial sale, so stating that it couldn't be found is correct.",
-   "relevant": false,
-   "relevant_reason": "The question asks about information from the One Sophia briefing, so the answer should have been found rather than stating it couldn't be found.",
+   "faithful_reason": "The provided context contains no mention of \"One Sophia\" or a \"2.5% commission\".",
+   "relevant": true,
+   "relevant_reason": "The answer directly addresses the question by stating the information is not available in the provided documents.",
    "correct": false,
-   "correct_reason": "The system failed to find the information and stated it couldn't find it, missing the correct answer."
+   "correct_reason": "The system failed to identify the standard commercial sale rate of 1.5% provided in the source text."
   },
   {
    "question": "What is Havenmark's position on using external web search to answer client questions?",
@@ -2556,19 +2556,19 @@
    "retrieved": [
     {
      "title": "havenmark_media_briefing.txt",
-     "similarity": 0.686
+     "similarity": 0.5126
     },
     {
      "title": "havenmark_media_briefing.txt",
-     "similarity": 0.5991
+     "similarity": 0.4691
     },
     {
      "title": "havenmark_client_data_policy.txt",
-     "similarity": 0.5826
+     "similarity": 0.4153
     },
     {
      "title": "havenmark_referral_programme.txt",
-     "similarity": 0.5071
+     "similarity": 0.3592
     }
    ],
    "answer": "I couldn't find this in your documents.",
@@ -2600,19 +2600,19 @@
    "retrieved": [
     {
      "title": "launch_portfolio.txt",
-     "similarity": 0.5142
+     "similarity": 0.3844
     },
     {
      "title": "havenmark_market_call_september.txt",
-     "similarity": 0.5574
+     "similarity": 0.4117
     },
     {
      "title": "havenmark_market_call.txt",
-     "similarity": 0.5761
+     "similarity": 0.4363
     },
     {
      "title": "havenmark_market_call_august.txt",
-     "similarity": 0.5515
+     "similarity": 0.4278
     }
    ],
    "answer": "I couldn't find this in your documents.",
@@ -2644,19 +2644,19 @@
    "retrieved": [
     {
      "title": "havenmark_method.txt",
-     "similarity": 0.4561
+     "similarity": 0.2546
     },
     {
      "title": "havenmark_pathway.txt",
-     "similarity": 0.5462
+     "similarity": 0.3416
     },
     {
      "title": "havenmark_referral_programme.txt",
-     "similarity": 0.4565
+     "similarity": 0.3048
     },
     {
      "title": "havenmark_team_leader_standard.txt",
-     "similarity": 0.4519
+     "similarity": 0.2605
     }
    ],
    "answer": "I couldn't find this in your documents.",

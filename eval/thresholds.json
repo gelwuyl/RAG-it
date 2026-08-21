@@ -1,0 +1,22 @@
+{
+  "perplexity/pplx-embed-v1-0.6b": {
+    "false_miss_rate": 0.2222,
+    "false_positive_rate": 0.1332,
+    "median_false": 0.1463,
+    "median_true": 0.3519,
+    "n_false": 593,
+    "n_true": 108,
+    "threshold": 0.27,
+    "youden_j": 0.6446
+  },
+  "qwen/qwen3-embedding-8b": {
+    "false_miss_rate": 0.2593,
+    "false_positive_rate": 0.1737,
+    "median_false": 0.376,
+    "median_true": 0.5462,
+    "n_false": 593,
+    "n_true": 108,
+    "threshold": 0.48,
+    "youden_j": 0.567
+  }
+}

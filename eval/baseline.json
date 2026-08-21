@@ -1,8 +1,8 @@
 {
-  "generated": "2026-08-18 16:19:59",
+  "generated": "2026-08-21 20:35:09",
   "mode": "retrieval-pre-rerank",
-  "fingerprint": "2ba2611547c8",
-  "embedding_model": "qwen/qwen3-embedding-8b",
+  "fingerprint": "f22f9853f5cd",
+  "embedding_model": "perplexity/pplx-embed-v1-0.6b",
   "top_k": 4,
   "candidate_k": 20,
   "reranker": true,
@@ -15,14 +15,14 @@
     "exact_hit_rate_at_k"
   ],
   "metrics": {
-    "context_recall": 0.8931,
-    "precision_at_k": 0.7594,
-    "mrr": 0.9403,
-    "ndcg_at_k": 0.9888,
-    "hit_rate_at_k": 0.9623,
-    "exact_context_recall": 0.6226,
-    "exact_precision_at_k": 0.1792,
-    "exact_mrr": 0.5063,
-    "exact_hit_rate_at_k": 0.6415
+    "context_recall": 0.7814,
+    "precision_at_k": 0.5755,
+    "mrr": 0.8318,
+    "ndcg_at_k": 0.9721,
+    "hit_rate_at_k": 0.9057,
+    "exact_context_recall": 0.6509,
+    "exact_precision_at_k": 0.1887,
+    "exact_mrr": 0.5016,
+    "exact_hit_rate_at_k": 0.6792
   }
 }
