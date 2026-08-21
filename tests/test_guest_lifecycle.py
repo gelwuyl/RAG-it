@@ -372,8 +372,16 @@ def test_seeding_twice_does_not_copy_the_corpus_twice(client, monkeypatch):
     monkeypatch.setattr(guests, "reap_stale_guests", lambda db, **k: 0)
 
     def _fake_seed(db, g):
+        # config_fingerprint is what the real seed stamps on every clone
+        # (guests.seed_demo_corpus). Leaving it None made this stub unfaithful
+        # in the one way that now matters: guest-seed is idempotent on the
+        # FINGERPRINT rather than on existence, because a workspace copied
+        # under a superseded config lists documents that answer nothing.
+        from ragchat.config import load_config
+
         db.add(Document(user_id=g.id, source_type="upload", title="demo.md",
-                        status="ready", is_demo=True, size_bytes=1))
+                        status="ready", is_demo=True, size_bytes=1,
+                        config_fingerprint=load_config().fingerprint()))
         db.commit()
         return 1
 

@@ -47,7 +47,7 @@
         }
       })();
     </script>
-    <link rel="stylesheet" href="/styles.css?v=48" />
+    <link rel="stylesheet" href="/styles.css?v=49" />
     <script>
       // Boot diagnostics: collect load/runtime errors so a broken app.js
       // shows a visible message instead of a silently dead UI.
@@ -345,7 +345,20 @@
               scores are shown here.</p>
             <div id="eval-status" class="eval-status muted small"></div>
             <div id="eval-scorecard" class="eval-scorecard"></div>
-            <div id="eval-questions" class="eval-questions"></div>
+            <!-- 56 questions with their expected and actual answers. Real
+                 evidence, and the wrong default: it is several screens of
+                 detail under a scorecard that already says what happened, and
+                 it pushed the bars off the top of the pane on a laptop. Folded
+                 behind a disclosure so the summary is what a visitor meets and
+                 the evidence is one click away for anyone who wants it. -->
+            <details id="eval-details" class="eval-details">
+              <summary class="eval-details-summary">
+                <span class="eval-details-caret" aria-hidden="true">▸</span>
+                <span>See the benchmark in detail</span>
+                <span class="eval-details-hint">every question, expected vs actual</span>
+              </summary>
+              <div id="eval-questions" class="eval-questions"></div>
+            </details>
           </div>
         </aside>
 
@@ -633,6 +646,6 @@
       </div>
     </div>
 
-    <script type="module" src="/app.js?v=57"></script>
+    <script type="module" src="/app.js?v=58"></script>
   </body>
 </html>

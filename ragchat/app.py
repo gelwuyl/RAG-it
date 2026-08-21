@@ -422,6 +422,30 @@ class LoginIn(RegisterIn):
     pass
 
 
+def _demo_is_stale(db: Session, user: User | None) -> bool:
+    """True when a guest's sample documents predate the current fingerprint.
+
+    Cheap: one indexed lookup, and only for guests. Signed-in accounts own
+    their documents and get the normal re-index prompt instead.
+    """
+    if not guests.is_guest(user):
+        return False
+    try:
+        docs = (
+            db.query(Document.config_fingerprint)
+            .filter(Document.user_id == user.id, Document.is_demo.is_(True))
+            .all()
+        )
+        if not docs:
+            return False
+        return any(fp != load_config().fingerprint() for (fp,) in docs)
+    except Exception:
+        # A broken check must not break sign-in. Worst case the visitor sees
+        # the behaviour they already had.
+        log.exception("demo staleness check failed for %s", getattr(user, "id", None))
+        return False
+
+
 @app.get("/api/auth/status")
 def auth_status(
     request: Request, response: Response, db: Session = Depends(get_session)
@@ -463,6 +487,16 @@ def auth_status(
         # to have an upload rejected. Demo documents are excluded, matching how
         # the cap itself counts.
         "guest_usage": guests.usage(db, user) if guests.is_guest(user) else None,
+        # A returning guest whose sample documents were copied under a
+        # superseded config fingerprint. Their chunks are unreachable — the
+        # documents list as READY and every question answers "I couldn't find
+        # this in your documents" — and a guest cannot re-index, because that
+        # is an account-only route.
+        #
+        # Reported here rather than fixed here: status is a GET and must not
+        # write. The client calls guest-seed, which re-copies the vectors from
+        # the template for free.
+        "demo_needs_reseed": _demo_is_stale(db, user),
         # Whether the web tool is available to THIS caller — it needs a key AND
         # an account. Reported rather than inferred so the UI shows the control
         # in a state that matches what the server will actually do, instead of
@@ -685,13 +719,39 @@ def guest_seed(
         # demo corpus in a real workspace.
         return {"seeded": False, "reason": "not a guest workspace"}
 
-    existing = (
+    # Idempotent, but on the FINGERPRINT rather than on existence.
+    #
+    # Counting rows alone made a returning visitor's workspace look seeded when
+    # its vectors had been written under a superseded config. Chunks are only
+    # retrievable under the fingerprint they were written with, so the documents
+    # listed as READY with a chunk count while every question answered "I
+    # couldn't find this in your documents" — the workspace looked perfect and
+    # was empty underneath.
+    #
+    # A guest cannot dig themselves out either: re-index is an account-only
+    # route, so their only remedy was to wait out the 30-minute reap. That is
+    # the first thing a visitor sees, so it re-seeds instead, which costs a
+    # vector COPY and no embedding call.
+    current_fp = load_config().fingerprint()
+    demo_docs = (
         db.query(Document)
         .filter(Document.user_id == user.id, Document.is_demo.is_(True))
-        .count()
+        .all()
     )
-    if existing:
-        return {"seeded": True, "documents": existing, "reason": "already seeded"}
+    if demo_docs and all(d.config_fingerprint == current_fp for d in demo_docs):
+        return {"seeded": True, "documents": len(demo_docs), "reason": "already seeded"}
+
+    if demo_docs:
+        # Drop the stale clones before copying fresh ones, or the visitor ends
+        # up owning two of each: one that answers and one that cannot.
+        for doc in demo_docs:
+            try:
+                delete_document_chunks(user.id, doc.id)
+            except Exception:
+                log.exception("guest re-seed: dropping chunks for %s failed", doc.id)
+            db.delete(doc)
+        db.commit()
+        log.info("guest %s re-seeded: demo corpus was under a stale fingerprint", user.id)
 
     t0 = time.time()
     copied = 0

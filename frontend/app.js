@@ -465,6 +465,19 @@ function applyAuthStatus(status) {
   state.webAvailable = !!status.web_search_available;
   syncToolToggles();
 
+  // A returning guest whose sample documents were copied under a superseded
+  // config fingerprint. Their chunks are unreachable, so the workspace lists
+  // two READY documents and answers every question with "I couldn't find this
+  // in your documents" — looking perfect and being empty underneath. They
+  // cannot re-index either; that is an account-only route.
+  //
+  // This branch exists because the seeding call above runs only for a visitor
+  // who is NOT yet authenticated, and a returning guest already is. Nothing
+  // else on the boot path would ever notice.
+  if (status.demo_needs_reseed && !state.seeding) {
+    state.seeding = seedGuestWorkspace().then(() => refreshSources());
+  }
+
   const nameEl = $("user-name");
   if (nameEl) nameEl.textContent = state.isGuest ? "" : state.user?.name || "";
   renderGuestState();
