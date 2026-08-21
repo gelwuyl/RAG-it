@@ -165,12 +165,33 @@ tries the feature on, is the one thing it cannot see.
 
 ### Where this is going: tools the model chooses between
 
-The intended end state is agentic, and the name of the repo means it. Today
-`ask()` runs a fixed pipeline — rewrite → retrieve → rerank → generate — and
-deep search is a flag the *visitor* sets. The intent is that the MODEL decides,
-per question: is what retrieval returned enough to answer; if not, is this a
-case for a literal scan of the documents; if not, does it need something from
-outside. Reason, act, observe the result, decide again.
+The intended end state is agentic, and the name of the repo means it.
+
+**One rung of that ladder is built.** `ask()` is always handed the deep-search
+tool; `force_deep` only says whether the visitor is holding the switch down.
+Left off, `ask()` reaches for the tool ITSELF at the two points retrieval
+already knows it failed — nothing cleared `similarity_threshold`, or the model
+read the passages and replied `NOT_FOUND_ANSWER` — and generates a second time
+if the scan rescued anything. `eval_data.escalated` records why, and the UI says
+so under the answer.
+
+Three invariants hold it together, all asserted in `tests/test_escalation.py`.
+**Do not break them without reading that file:**
+
+1. **`scanned` bounds the ladder.** It goes true once, so the tool is used at
+   most once and the answer generated at most twice. A serverless function
+   frozen the instant it responds cannot host an open-ended `while`.
+2. **The happy path never touches the tool.** A question that was going to be
+   answered costs exactly what it did before.
+3. **The trigger is NOT the judges, and must not become them.**
+   `NOT_FOUND_ANSWER` is entirely faithful to its context and squarely answers
+   the question, so both judges PASS it — the grader is structurally blind to
+   the failure deep search fixes. Grading also happens in a later request now,
+   after the reader already has the answer.
+
+What is still missing is real *selection*: the app decides WHEN to look harder,
+but there is only one tool to reach for, so the choice is a rule rather than a
+judgement. A second tool is what turns it into one.
 
 What already fits that shape:
 
