@@ -22,7 +22,7 @@
         }
       })();
     </script>
-    <link rel="stylesheet" href="/landing.css?v=13" />
+    <link rel="stylesheet" href="/landing.css?v=14" />
   </head>
   <body>
     <button id="theme-toggle" class="theme-toggle" type="button"
@@ -41,9 +41,8 @@
         <h1 class="hero-title">Ask your documents. Get <em>cited</em> answers.</h1>
 
         <p class="hero-lede">
-          Drop in PDFs, notes, reports — whatever you have. Every answer points at
-          the exact passage behind it, so checking it takes one click, not one
-          leap of faith.
+          PDFs, notes, reports — whatever you have. Every answer points at the
+          passage it came from. One click to check, not one leap of faith.
         </p>
 
         <div class="hero-cta">
@@ -51,8 +50,8 @@
           <a class="btn" href="/app?signin=1">Sign in with Google</a>
         </div>
         <p class="hero-note">
-          No sign-up. You get a private workspace immediately — sign in later and
-          your work comes with you.
+          No sign-up. A private workspace immediately. Sign in later and your
+          work comes with you.
         </p>
       </div>
     </header>
@@ -80,29 +79,29 @@
         <div class="stage-notes">
           <div class="stage-note">
             <span class="stage-key">Rewrite</span>
-            <p>Nobody phrases a question the way a document phrases the answer.
-              The question is restated before anything is searched.</p>
+            <p>Nobody asks a question the way a document answers it. Restated
+              first, then searched.</p>
           </div>
           <div class="stage-note">
             <span class="stage-key">Retrieve</span>
-            <p>Two searches at once — one for meaning, one for exact words — so
-              an invoice number and a paraphrase are both findable.</p>
+            <p>Two searches at once: one for meaning, one for exact words. An
+              invoice number and a paraphrase are both findable.</p>
           </div>
           <div class="stage-note">
             <span class="stage-key">Rerank</span>
-            <p>A model reads every candidate and re-orders them against your
-              actual question. Similarity is a guess; this is a judgement.</p>
+            <p>A model re-orders every candidate against your actual question.
+              Similarity is a guess. This is a judgement.</p>
           </div>
           <div class="stage-note is-feature">
             <span class="stage-key">Deep search<span class="stage-tag">grep</span></span>
-            <p>Search <em>ranks</em> — and whatever falls below the cut is
-              invisible to the answer. This doesn't rank. It reads every
-              document word for word, so if the words are there, they're used.</p>
+            <p>Search ranks, and whatever falls below the cut may as well not
+              exist. This doesn't rank. It reads every document word for word —
+              if your words are there, they're used.</p>
           </div>
           <div class="stage-note">
             <span class="stage-key">Judge</span>
             <p>A second model checks the answer against its own sources. If it
-              can't decide, it says so — it never guesses at a verdict.</p>
+              can't decide, it says so. It never guesses a verdict.</p>
           </div>
         </div>
       </div>
@@ -111,17 +110,17 @@
     <!-- ===================== 02 · metric tiles ====================== -->
     <section>
       <div class="wrap">
+        <!-- No section number: there is one section. A lone "01" promises a
+             "02" that never comes. -->
         <div class="section-label">
-          <span class="section-num">01</span>
           <span class="section-name">By the numbers</span>
         </div>
         <p class="pipeline-intro">
-          56 golden questions over a 27-document corpus, including unanswerable
-          ones — because refusing to answer is a behaviour worth measuring too.
-          Most of the corpus is confusable on purpose: same firm, same
-          vocabulary, different facts, so retrieval has to discriminate rather
-          than recognise a topic. The scored result ships with the app; nobody
-          has to run it.
+          56 questions with known answers, over 27 documents. Some are
+          unanswerable on purpose — refusing is a behaviour worth measuring.
+          The corpus is confusable on purpose too: same firm, same vocabulary,
+          different facts. The scored result ships with the app. Nobody has to
+          run it.
         </p>
         <!-- Said out loud rather than only in the <meta> description, which no
              reader ever sees. And said precisely: RAGAS covers the generation
@@ -129,11 +128,11 @@
              ordinary information-retrieval metrics that predate it by decades.
              Calling all nine "RAGAS" was a small overclaim. -->
         <p class="pipeline-intro">
-          Answers are scored with <strong>RAGAS-style generation metrics</strong>
-          — faithfulness, relevancy, correctness — and retrieval with the
-          classic ones it is usually measured by. Nine readings in three groups:
-          did the right passage come back, did it come back near the top, and
-          was the answer built from it any good.
+          Nine readings, three questions.
+          <strong>RAGAS-style generation metrics</strong> — faithfulness,
+          relevancy, correctness — plus the classic retrieval ones. Did the
+          right passage come back, did it come back near the top, was the
+          answer any good.
         </p>
         <!-- Structural facts, verifiable from the repo and TESTED against it
              (tests/test_landing_claims.py) — the corpus count said 10 for as
@@ -168,9 +167,9 @@
         <div class="platform">
           <div>
             <span class="trace-key">Benchmarks · long jobs</span>
-            <p>A background thread would be frozen the moment the response is
-              sent, so the benchmark is sliced: bounded steps, each committing
-              before it returns.</p>
+            <p>A background thread freezes the moment the response is sent.
+              So the benchmark is sliced: bounded steps, each committing before
+              it returns.</p>
           </div>
           <div>
             <span class="trace-key">Interface · frontend</span>

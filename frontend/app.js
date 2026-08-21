@@ -2325,12 +2325,14 @@ $("excerpt-close").onclick = () => {
 // can fall in one group and be fine in the others, and knowing which group
 // moved is the whole diagnosis.
 //
-// The groups also make the framework honest. RAGAS covers context recall,
-// context precision, faithfulness, answer relevancy and answer correctness —
-// which spans retrieval AND generation. MRR, NDCG@k and Hit rate@k are classic
-// information-retrieval metrics that predate it by decades, and the not-found
-// rate is this app's own. Calling all nine "RAGAS" was a small overclaim; the
-// headers say what each actually is.
+// The groups also make the framework honest, and `ragas: true` finishes the
+// job. MRR, NDCG@k and Hit rate@k are classic information-retrieval metrics
+// that predate RAGAS by decades, and the not-found rate is this app's own.
+//
+// Precision@k is deliberately UNMARKED. RAGAS does define a context precision,
+// but it is rank-aware and this is plain precision@k — close enough to invite
+// the label and not the same thing, which is the small overclaim this marking
+// exists to stop making.
 //
 // Each row leads with what it MEASURES and keeps the formal name underneath.
 // "Context Recall 49%" tells a visitor nothing; "Found the right passages"
@@ -2343,14 +2345,14 @@ const EVAL_GROUPS = {
 };
 
 const EVAL_TARGETS = {
-  context_recall: { group: "retrieval", label: "Found the right passages", sub: "Context Recall", target: 0.80, higher: true },
+  context_recall: { group: "retrieval", ragas: true, label: "Found the right passages", sub: "Context Recall", target: 0.80, higher: true },
   precision_at_k: { group: "retrieval", label: "Sent mostly relevant text", sub: "Precision@k", target: 0.70, higher: true },
   mrr: { group: "ranking", label: "Best passage ranked high", sub: "MRR", target: 0.65, higher: true },
   ndcg_at_k: { group: "ranking", label: "Good overall ordering", sub: "NDCG@k", target: 0.70, higher: true },
   hit_rate_at_k: { group: "ranking", label: "Right passage made the cut", sub: "Hit rate@k", target: 0.80, higher: true },
-  faithfulness: { group: "generation", label: "Stuck to the sources", sub: "Faithfulness", target: 0.90, higher: true },
-  answer_relevancy: { group: "generation", label: "Answered what was asked", sub: "Answer relevancy", target: 0.85, higher: true },
-  answer_correctness: { group: "generation", label: "Matched the expected answer", sub: "Answer correctness", target: 0.80, higher: true },
+  faithfulness: { group: "generation", ragas: true, label: "Stuck to the sources", sub: "Faithfulness", target: 0.90, higher: true },
+  answer_relevancy: { group: "generation", ragas: true, label: "Answered what was asked", sub: "Answer relevancy", target: 0.85, higher: true },
+  answer_correctness: { group: "generation", ragas: true, label: "Matched the expected answer", sub: "Answer correctness", target: 0.80, higher: true },
   not_found_rate_unanswerables: { group: "generation", label: "Admitted when it could not answer", sub: "Not-found rate", target: 0.90, higher: true },
 };
 
@@ -2444,7 +2446,9 @@ function renderScorecard(metrics, runMode) {
       "score-row" + (hasLive ? " has-live" : "") + (waiting ? " is-waiting" : "");
     row.innerHTML = `
       <div class="score-head">
-        <span class="score-name">${t.label}<span class="score-sub">${t.sub}</span></span>
+        <span class="score-name">${t.label}<span class="score-sub">${t.sub}${
+          t.ragas ? '<span class="score-ragas">RAGAS</span>' : ""
+        }</span></span>
         <span class="score-val ${hasLive ? (below ? "under" : "over") : "quiet"}">${
           hasLive ? escapeHtml(liveLabel(live, field)) : waiting ? "grading…" : `${benchPct}%`
         }</span>

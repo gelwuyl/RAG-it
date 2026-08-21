@@ -50,7 +50,11 @@ def test_the_tiles_count_what_is_actually_there():
 
 def test_the_prose_claim_matches_too():
     """The tiles and the sentence drifted apart once; both are read."""
-    m = re.search(r"(\d+) golden questions over a (\d+)-document corpus", _landing())
+    # Anchored on the NUMBERS and their nouns rather than on one exact
+    # sentence: the copy has now been reworded twice, and a test that only
+    # survives verbatim prose fails for style edits while missing the drift it
+    # exists to catch.
+    m = re.search(r"(\d+) questions with known answers,? over (\d+) documents", _landing())
     assert m, "the corpus claim was reworded — re-point this test at it"
     assert int(m.group(1)) == _n_golden(), (
         f"claims {m.group(1)} golden questions, there are {_n_golden()}"

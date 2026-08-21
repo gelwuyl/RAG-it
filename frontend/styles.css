@@ -1128,6 +1128,17 @@ html[data-kind="guest"] .identity-hint .hint-badge { display: inline-block; }
   color: var(--text);
 }
 .score-group-sub { font-size: var(--text-nano); color: var(--faint); }
+/* Which metrics are actually RAGAS's. Set apart from the term it qualifies —
+   quiet, bracketed by its border rather than shouting — because it is a
+   provenance note, not part of the name. Four of the nine carry it; the rest
+   are classic IR metrics or this app's own, and saying so in the label is
+   cheaper than a footnote nobody reads. */
+.score-ragas {
+  margin-left: 6px; padding: 0 4px;
+  border: 1px solid var(--border); border-radius: var(--r-pill);
+  color: var(--faint); font-size: var(--text-nano);
+  letter-spacing: var(--tracking-telemetry);
+}
 /* The evidence, folded. Styled as a quiet control rather than a heading: it is
    an invitation, not a section the eye has to step over on the way down. */
 .eval-details { margin-top: 14px; border-top: 1px solid var(--border); }
