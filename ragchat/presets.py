@@ -1,4 +1,4 @@
-"""Named pipeline configurations offered in Settings (PRODUCT_UX_PLAN.md §7).
+"""Named pipeline configurations offered in Settings (IDEA.md §7).
 
 This is the SINGLE source of the values. They used to live in `frontend/app.js`,
 which was fine until the eval harness needed to measure them: a preset the

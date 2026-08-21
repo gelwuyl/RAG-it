@@ -2,7 +2,7 @@
  * Screenshot capture for the frontend — both pages × five breakpoints × both themes.
  *
  * Replaces the throwaway script that produced the committed shot_*.png files
- * but was never itself committed. Every visual step in PRODUCT_UX_PLAN.md is
+ * but was never itself committed. Every visual step in IDEA.md is
  * meant to be verified this way, so it needs to live in the repo.
  *
  * Playwright is installed at the repo root (no package.json — it was added

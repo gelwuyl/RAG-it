@@ -101,7 +101,7 @@ function emptyState(icon, title, text, extra = "") {
     </div>`;
 }
 
-// ---------- the four-beat loop (PRODUCT_UX_PLAN.md §5) ----------
+// ---------- the four-beat loop (IDEA.md §5) ----------
 //
 // The app has a natural loop — add a source → ask → click a citation → read the
 // quality readout — and nothing used to tell the user it existed. Each empty
@@ -199,7 +199,7 @@ function paintReadoutNudge() {
   });
 }
 
-// ---------- glossary (PRODUCT_UX_PLAN.md §5) ----------
+// ---------- glossary (IDEA.md §5) ----------
 //
 // Every one of these was previously either undefined or explained in a `title`
 // attribute, which does not exist on touch. A tap target with a real popover
@@ -503,7 +503,7 @@ function applyGuestLocks() {
     // aria-disabled rather than `disabled`: a disabled button dispatches no
     // click, so the visitor would get silence instead of a reason. Keeping it
     // clickable is what lets guestBlocked() explain itself — and explaining
-    // beats hiding (PRODUCT_UX_PLAN.md §5).
+    // beats hiding (IDEA.md §5).
     if (state.isGuest) el.setAttribute("aria-disabled", "true");
     else el.removeAttribute("aria-disabled");
     el.title = state.isGuest ? `Sign in with Google to ${what}.` : el.dataset.title || el.title;
@@ -1164,7 +1164,7 @@ function setSettingsReadOnly(readOnly) {
   }
 }
 
-// ---------- presets (PRODUCT_UX_PLAN.md §7) ----------
+// ---------- presets (IDEA.md §7) ----------
 //
 // The default view is four named configurations, each stating what it trades
 // away; the individual fields stay one click behind "Advanced".
@@ -1613,7 +1613,7 @@ $("settings-save").onclick = async () => {
   }
 };
 
-// ---------- persistent job status (PRODUCT_UX_PLAN.md §5) ----------
+// ---------- persistent job status (IDEA.md §5) ----------
 //
 // Re-index all and folder rescans announced themselves in a toast that vanished
 // after four seconds and then reported nothing until they finished — which looks
@@ -1868,7 +1868,7 @@ function renderAssistantContent(el, content, citations) {
   });
 }
 
-// One word for the whole quality verdict (PRODUCT_UX_PLAN.md §6).
+// One word for the whole quality verdict (IDEA.md §6).
 //
 // UNGRADED IS NOT FAILURE and must never render as one. A judge that 404s or
 // times out is a broken grader, not a bad answer — `faithful`/`relevant` are
@@ -2188,7 +2188,7 @@ $("excerpt-close").onclick = () => {
 
 // ---------- evaluation tab (right) ----------
 
-// RAGAS-style metric targets (from eval/EVAL_SPEC.md). Used to render the
+// RAGAS-style metric targets (IDEA.md §11). Used to render the
 // scorecard bars and the pass/fail colouring.
 // Each metric leads with what it MEASURES, and keeps its RAGAS name underneath.
 // "Context Recall 49%" tells you nothing unless you already know the framework;
@@ -2514,7 +2514,7 @@ applyBreakpointDefaults();
 NARROW.addEventListener("change", applyBreakpointDefaults);
 MOBILE.addEventListener("change", applyBreakpointDefaults);
 
-// ---------- mobile tabs (PRODUCT_UX_PLAN.md §9) ----------
+// ---------- mobile tabs (IDEA.md §9) ----------
 //
 // Below 768px the panes stop being a stacked scroll and become four tabbed
 // views, one at a time, conversation first. The phone is a reader: the answer
@@ -2752,7 +2752,7 @@ $("chats-expand").onclick = () => setChatsCollapsed(false, true);
 applyChatsDefault();
 CHATS_AUTO.addEventListener("change", applyChatsDefault);
 
-// ---------- command palette (PRODUCT_UX_PLAN.md §8) ----------
+// ---------- command palette (IDEA.md §8) ----------
 //
 // The one HUD marker adopted beyond the token system, and it earns its place by
 // being useful rather than decorative: in a four-column app, jumping to a chat or

@@ -44,7 +44,7 @@
   --font-sans: "Segoe UI", system-ui, -apple-system, "Inter", Roboto, Arial, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
-  /* ---------- type scale: two registers (PRODUCT_UX_PLAN.md §1) ----------
+  /* ---------- type scale: two registers (IDEA.md §1) ----------
 
      The whole design rests on the contrast between these two. A mono
      micro-label reads as instrumentation *because* it sits beside something
@@ -217,7 +217,7 @@
    user explicitly picks light. :root above stays light so a no-JS visitor
    still gets a coherent, readable page rather than unstyled tokens.
 
-   Design rules this block follows, from PRODUCT_UX_PLAN.md §1:
+   Design rules this block follows, from IDEA.md §1:
    - Depth comes from VALUE STEPS (bg → panel → sunken), not shadows.
    - Borders are hairlines, not lines.
    - Acid lime is the single hot accent and means "active / primary / live".

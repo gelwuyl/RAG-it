@@ -1,5 +1,12 @@
 """Deterministic verification of eval/metrics.py (no live proxy needed).
 
+NOT a pytest module, despite what it was called until now: it has no
+`test_*` functions, so `pytest` collected nothing from it and reported
+"no tests ran" — which reads as a pass. Run it directly:
+
+    .venv/Scripts/python eval/check_metrics.py
+
+
 Proves the retrieval metrics REACT to retrieval quality, so a good config and
 a bad config produce different numbers (spec §9 verification plan). Uses a
 trivial bag-of-words embedder so the run is fully deterministic.

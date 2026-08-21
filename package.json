@@ -1,0 +1,13 @@
+{
+  "name": "agentic-rag-checks",
+  "private": true,
+  "type": "module",
+  "description": "Playwright checks that run against the frontend dev server. The app itself is built from frontend/ — vercel.json names that directory explicitly, so this manifest is never installed at deploy time.",
+  "scripts": {
+    "shots": "node shot.mjs http://localhost:5173",
+    "layout": "node layout_check.mjs http://localhost:5173"
+  },
+  "devDependencies": {
+    "playwright": "^1.62.1"
+  }
+}

@@ -42,7 +42,7 @@ h1, h2, h3 { line-height: 1.3; }
 .small { font-size: var(--text-xs); }
 
 /* ==========================================================================
-   THE TWO REGISTERS (PRODUCT_UX_PLAN.md §1) — the contract, not a rule.
+   THE TWO REGISTERS (IDEA.md §1) — the contract, not a rule.
 
    There is no `.telemetry` utility class: this is plain CSS with no
    preprocessor, so a shared class would have to be applied in markup that is
@@ -271,7 +271,7 @@ html[data-kind="guest"] .identity-hint .hint-badge { display: inline-block; }
 }
 
 /* ---------- guest workspace badge ----------
-   Telemetry register (PRODUCT_UX_PLAN.md §1): mono, uppercase, letterspaced,
+   Telemetry register (IDEA.md §1): mono, uppercase, letterspaced,
    deliberately low contrast. It is a status readout, not a call to action —
    the actual sign-in button sits immediately beside it. */
 .guest-badge {
@@ -556,7 +556,7 @@ html[data-kind="guest"] .identity-hint .hint-badge { display: inline-block; }
 /* Prose register: an empty state is the one place the app explains itself, and
    at 13px it was smaller than the buttons it was explaining. */
 .empty-text { font-size: var(--text-prose); line-height: 1.55; max-width: 44ch; }
-/* ---------- the four-beat loop (PRODUCT_UX_PLAN.md §5) ----------
+/* ---------- the four-beat loop (IDEA.md §5) ----------
 
    Numbered, and lit up as each beat completes. Telemetry register: this is
    instrumentation about your progress, not content — the copy above it is what
@@ -911,7 +911,7 @@ html[data-kind="guest"] .identity-hint .hint-badge { display: inline-block; }
 .msg.assistant.not-found { background: var(--not-found-bg); border-color: var(--not-found-border); font-style: italic; }
 .msg.pending { color: var(--muted); font-style: italic; }
 
-/* Per-answer quality readout (PRODUCT_UX_PLAN.md §6).
+/* Per-answer quality readout (IDEA.md §6).
    One ~20px line by default; the four detail rows are one click away. */
 .eval-block {
   margin-top: 12px;
@@ -1236,7 +1236,7 @@ html[data-kind="guest"] .identity-hint .hint-badge { display: inline-block; }
   overflow-wrap: anywhere;
 }
 
-/* ---------- glossary (PRODUCT_UX_PLAN.md §5) ----------
+/* ---------- glossary (IDEA.md §5) ----------
 
    `.term` inherits everything from whatever it sits in — a topbar switch label, a
    mono row label in the readout, a line of prose — and adds only the dotted
@@ -1305,7 +1305,7 @@ html[data-kind="guest"] .identity-hint .hint-badge { display: inline-block; }
 }
 @keyframes job-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 
-/* ---------- mobile tab bar (PRODUCT_UX_PLAN.md §9) ----------
+/* ---------- mobile tab bar (IDEA.md §9) ----------
    Hidden by default: above 768px all four panes are visible at once, so a tab bar
    would be a control for a problem that does not exist. Everything that gives it
    its shape lives in the mobile media query at the end of this file. */
@@ -1329,7 +1329,7 @@ html[data-kind="guest"] .identity-hint .hint-badge { display: inline-block; }
 }
 .toast.error { background: var(--error); }
 
-/* ---------- command palette (PRODUCT_UX_PLAN.md §8) ----------
+/* ---------- command palette (IDEA.md §8) ----------
 
    Desktop only: both the overlay and its "/" button are hidden below 1100px, the
    same breakpoint where the columns stop being columns. The palette's commands
@@ -1462,7 +1462,7 @@ fieldset legend {
   padding: 1px 6px; border-radius: var(--r-sm);
   text-transform: none; letter-spacing: 0;
 }
-/* ---------- settings presets (PRODUCT_UX_PLAN.md §7) ----------
+/* ---------- settings presets (IDEA.md §7) ----------
 
    The default view of the modal. A preset is a whole pipeline configuration with
    the tradeoff it makes written on it, which is what the fifteen bare numeric
@@ -1701,7 +1701,7 @@ fieldset legend {
   .user-chip { max-width: 190px; }
   .switch-btn { padding: 4px 8px; min-width: 40px; }
 
-  /* ONE PANE AT A TIME, chosen from the tab bar (PRODUCT_UX_PLAN.md §9).
+  /* ONE PANE AT A TIME, chosen from the tab bar (IDEA.md §9).
      Not a reflow of the desktop layout: three panes stacked into one endless
      scroll made the phone a squeezed workbench, where reading an answer meant
      scrolling past a file list and a conversation picker to reach it, and the

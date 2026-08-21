@@ -176,7 +176,7 @@ Required: `GEMINI_API_KEY`, `OPENROUTER_API_KEY`, `DATABASE_URL` (or
 
 Optional: `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` for OAuth,
 `GUEST_SWEEP_SECRET` to arm the guest sweeper (unset disables the endpoint
-rather than opening it). See `DEPLOY_VERCEL.md`.
+rather than opening it). Deployment and OAuth setup live in `IDEA.md` §13–§14.
 
 ---
 

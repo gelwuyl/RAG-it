@@ -69,7 +69,7 @@ Therefore:
   button a no-op for weeks.
 - **Long jobs must be sliced.** The benchmark is the reference pattern: a client
   loop calls `POST /api/eval/step`, each step does one bounded unit and commits
-  to the `eval_runs` table. See `DEPLOY_VERCEL.md`.
+  to the `eval_runs` table. See `IDEA.md` §11 and §13.
 - **Anything periodic is driven from outside.** Vercel Hobby cron exists but
   fires once per *day*, which cannot honour a 30-minute guest TTL, so
   `.github/workflows/guest-sweeper.yml` calls `POST /api/admin/sweep-guests`
