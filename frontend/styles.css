@@ -1910,15 +1910,16 @@ fieldset legend {
 /* Metric name leads with what it measures; the formal term sits under it in the
    telemetry register. Two registers in one label: the plain-language line is
    what a visitor reads, the formal name is what a practitioner searches for.
-   The plain line is LIME because it is the part meant to be read — nine short
-   phrases that need no framework to understand, and the only thing in this pane
-   a first-time visitor can act on. The formal term stays quiet underneath. */
+   The FORMAL term carries the accent. It is the searchable half — the thing a
+   reader reaches for when they want to know what a number means — and at 11px
+   mono it is also the smallest text in the pane, which is the combination
+   nobody reads unless it is given some colour. The plain-language line above it
+   is already legible on its own and does not need the help. */
 .score-name { display: flex; flex-direction: column; gap: 2px; }
-.score-name { color: var(--primary-ink); }
 .score-sub {
   font-family: var(--font-mono); font-size: var(--text-nano);
   letter-spacing: var(--tracking-telemetry); text-transform: uppercase;
-  color: var(--faint);
+  color: var(--primary-ink);
 }
 
 

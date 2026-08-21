@@ -570,19 +570,34 @@ came back.
 
 ### Targets
 
-Used for the scorecard bars (`EVAL_TARGETS` in `frontend/app.js`).
+The harness measures more than the pane shows, and the split is deliberate.
+
+**Shown** (`EVAL_TARGETS` in `frontend/app.js`) — the RAGAS-style metrics, plus
+the one this app invented:
 
 | Metric | Target | Reads as |
 |---|---|---|
 | Context Recall | ≥ 0.80 | Found the right passages |
 | Precision@k | ≥ 0.70 | Sent mostly relevant text |
-| MRR | ≥ 0.65 | Best passage ranked high |
-| NDCG@k | ≥ 0.70 | Good overall ordering |
-| Hit rate@k | ≥ 0.80 | Right passage made the cut |
 | Faithfulness | ≥ 0.90 | Stuck to the sources |
 | Answer relevancy | ≥ 0.85 | Answered what was asked |
 | Answer correctness | ≥ 0.80 | Matched the known answer |
 | Not-found rate (unanswerables) | ≥ 0.90 | Refused what it should refuse |
+
+**Measured but not shown** — MRR ≥ 0.65, NDCG@k ≥ 0.70, Hit rate@k ≥ 0.80.
+These are classic information-retrieval metrics that predate RAGAS by decades,
+and nine bars under one framework's name was both a small overclaim and three
+more rows than a reader needs to answer "is this answer normal?". They stay in
+the harness because they separate a RANKING problem from a RETRIEVAL one, which
+is the diagnosis you want when a number moves, and the CI gate still watches
+their `exact_*` counterparts.
+
+Each row leads with what it MEASURES and carries the formal name underneath —
+"Context Recall 49%" tells a visitor nothing, "Found the right passages" tells
+them what got worse. The formal name is the ACCENTED half: it is the searchable
+term, the thing a reader reaches for when they want to know what a number
+means, and at 11px mono it is the smallest text in the pane, which is the
+combination nobody reads without some colour on it.
 
 A tuning change counts as an improvement only if retrieval **and** generation
 rise without the not-found rate dropping.

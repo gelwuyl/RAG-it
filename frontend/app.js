@@ -2316,19 +2316,27 @@ $("excerpt-close").onclick = () => {
 
 // ---------- evaluation tab (right) ----------
 
-// RAGAS-style metric targets (IDEA.md §11). Used to render the
-// scorecard bars and the pass/fail colouring.
-// Each metric leads with what it MEASURES, and keeps its RAGAS name underneath.
+// RAGAS-style metric targets (IDEA.md §11). Used to render the scorecard bars
+// and the pass/fail colouring.
+//
+// MRR, NDCG@k and Hit rate@k were here and are not. They are classic
+// information-retrieval metrics that predate RAGAS by decades, and showing
+// nine bars under one framework's name was both a small lie and three more
+// rows than a reader needs to answer "is this answer normal?". The harness
+// still computes them — they separate a RANKING problem from a RETRIEVAL one,
+// which is exactly the diagnosis you want when a number moves — and the CI
+// gate still watches their exact_* counterparts. They are gone from the PANE,
+// not from the measurement.
+// Each metric leads with what it MEASURES, and keeps its formal name underneath.
 // "Context Recall 49%" tells you nothing unless you already know the framework;
 // "Found the right passages" tells you what got worse when it drops. The formal
 // name stays because it is the searchable term, and dropping it would leave
-// anyone who does know RAGAS unable to map the scorecard onto it.
+// anyone who does know RAGAS unable to map the scorecard onto it — it is also
+// the accented half, because it is the one a reader is most likely to want to
+// look up.
 const EVAL_TARGETS = {
   context_recall: { label: "Found the right passages", sub: "Context Recall", target: 0.80, higher: true },
   precision_at_k: { label: "Sent mostly relevant text", sub: "Precision@k", target: 0.70, higher: true },
-  mrr: { label: "Best passage ranked high", sub: "MRR", target: 0.65, higher: true },
-  ndcg_at_k: { label: "Good overall ordering", sub: "NDCG@k", target: 0.70, higher: true },
-  hit_rate_at_k: { label: "Right passage made the cut", sub: "Hit rate@k", target: 0.80, higher: true },
   faithfulness: { label: "Stuck to the sources", sub: "Faithfulness", target: 0.90, higher: true },
   answer_relevancy: { label: "Answered what was asked", sub: "Answer relevancy", target: 0.85, higher: true },
   answer_correctness: { label: "Matched the expected answer", sub: "Answer correctness", target: 0.80, higher: true },
