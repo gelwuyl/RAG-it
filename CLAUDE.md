@@ -13,6 +13,7 @@ ragchat/config.py   Settings (env) + PipelineConfig (hot-reloaded) + model disco
 ragchat/pipeline.py ingest + ask (rewrite → retrieve → rerank → generate → judge)
 ragchat/embeddings.py  Provider-aware embedding/rerank clients (gemini | openrouter)
 ragchat/deepsearch.py  Deep search — literal scan of Document.source_text, no embeddings
+ragchat/websearch.py   Web search TOOL (Tavily) — last rung of the escalation, signed-in only
 ragchat/vectordb.py Dispatch to store.py (Chroma, local) or store_neon.py (pgvector)
 ragchat/db.py       SQLAlchemy models + self-healing schema init
 eval/               Golden set (56 Q, 53 answerable), corpus (27 files), judges, harness, CI gate
@@ -145,16 +146,20 @@ counts them in `n_ungraded`.
 Also: judges are thinking-model-sensitive. Keep `max_tokens` generous (reasoning
 tokens are billed against it) and strip `<thinking>` wrappers before parsing.
 
-### Deep search is per-request, and that is not an implementation detail
+### The tools are per-request, and that is not an implementation detail
 
 `config_overrides` is ONE row shared by the whole deployment, so anything stored
 there is a deployment-wide switch wearing the costume of a personal preference.
 The web-augmentation toggle it replaced had exactly that bug: one visitor
 flipping it changed retrieval for everyone.
 
-So deep search rides on the ask request (`AskIn.deep_search`) and nothing about
-it is ever written. It is also not in `PipelineConfig.fingerprint()` and cannot
-be — it embeds nothing, reading `Document.source_text` directly.
+So both tools ride on the ask request (`AskIn.deep_search`, `AskIn.web_search`)
+and nothing about either is ever written. Neither is in
+`PipelineConfig.fingerprint()` and neither can be — they embed nothing, one
+reading `Document.source_text` directly and the other fetching over HTTP.
+
+Both default to **True** on the request: they say which tools EXIST for this
+question, not which ones must run. That decision is `ask()`'s.
 
 That column is only populated by `_stage_for_indexing` (the upload path), so any
 OTHER way a document is created has to set it too, or deep search is silently
@@ -167,20 +172,23 @@ tries the feature on, is the one thing it cannot see.
 
 The intended end state is agentic, and the name of the repo means it.
 
-**One rung of that ladder is built.** `ask()` is always handed the deep-search
-tool; `force_deep` only says whether the visitor is holding the switch down.
-Left off, `ask()` reaches for the tool ITSELF at the two points retrieval
-already knows it failed — nothing cleared `similarity_threshold`, or the model
-read the passages and replied `NOT_FOUND_ANSWER` — and generates a second time
-if the scan rescued anything. `eval_data.escalated` records why, and the UI says
-so under the answer.
+**The ladder is built, with two tools on it.** `ask()` is handed TOOLS, not
+flags: `deep_search` (a literal scan of the user's own documents) and
+`web_search`. Passing None means the tool does not exist for that request —
+there is NO "run this every time" mode. `ask()` reaches for a tool itself at the
+two points retrieval already knows it failed (nothing cleared
+`similarity_threshold`, or the model read the passages and replied
+`NOT_FOUND_ANSWER`) and generates a second time if anything was rescued.
+`eval_data.escalated` records why and `eval_data.tools_used` records what.
 
 Three invariants hold it together, all asserted in `tests/test_escalation.py`.
 **Do not break them without reading that file:**
 
-1. **`scanned` bounds the ladder.** It goes true once, so the tool is used at
-   most once and the answer generated at most twice. A serverless function
-   frozen the instant it responds cannot host an open-ended `while`.
+1. **`used` bounds the ladder.** Every tool is spent at most once and `_reach`
+   stops at the first that finds something, so the answer is generated at most
+   twice HOWEVER MANY TOOLS EXIST. Adding a tool must widen the ladder, never
+   deepen it — a serverless function frozen the instant it responds cannot host
+   an open-ended `while`.
 2. **The happy path never touches the tool.** A question that was going to be
    answered costs exactly what it did before.
 3. **The trigger is NOT the judges, and must not become them.**
@@ -189,9 +197,21 @@ Three invariants hold it together, all asserted in `tests/test_escalation.py`.
    the failure deep search fixes. Grading also happens in a later request now,
    after the reader already has the answer.
 
-What is still missing is real *selection*: the app decides WHEN to look harder,
-but there is only one tool to reach for, so the choice is a rule rather than a
-judgement. A second tool is what turns it into one.
+4. **Documents before the web, always.** `_reach` walks the tools in order, and
+   that order is the grounding promise, not a preference. Reaching outside
+   before the user's own material has been read literally is exactly what got
+   the previous web feature deleted.
+5. **A web passage stays labelled end to end.** `web: True` on the passage,
+   `WEB —` in the context, a SYSTEM_PROMPT rule, `is_web` on the citation, a
+   badge in the UI, and `doc_id: None` so nothing mistakes it for a user file.
+   Dropping the flag anywhere turns "here is what the web says" into "here is
+   what your documents say", which is the one failure this feature must not
+   have.
+
+What is still missing is real *selection*: the app decides WHEN to look harder
+and walks its tools in a FIXED order. It does not reason about which tool suits
+the question. A model choosing — and able to observe a result and choose again —
+is the remaining step.
 
 What already fits that shape:
 

@@ -47,7 +47,8 @@ is the live page at [`/built`](https://rag-gel.vercel.app/built).
 | Evaluation pane | Ships with a scored result — **nobody runs a benchmark to see it** (§11) |
 | Benchmark runs | Client-driven slices, never a background thread (§13) |
 | Mobile | Genuinely good, and a **different product shape** from desktop (§9) |
-| Deep search | Per-request, never a stored setting. The app reaches for it **by itself** when ranked search comes up short; the switch is an override (§10) |
+| Tools | Deep search and web search are per-request, never stored. The app reaches for them **by itself** when it is about to refuse; a switch says whether a tool EXISTS, not whether it runs (§10) |
+| Web search | Last rung only — documents by ranking, then literally, then outside. Labelled everywhere it appears. Signed-in accounts only (§10) |
 | Grading | Runs **after** the answer is delivered, in its own request (§10) |
 
 **Visual reference:** [joeynyc/Grok-UI](https://github.com/joeynyc/Grok-UI) —
@@ -413,71 +414,90 @@ every scored passage falls below `similarity_threshold` — and deliberately doe
 pool is the absence of evidence rather than evidence of absence. That is exactly
 the part-number case fusion exists for.
 
-### The escalation — the app reaching for a second tool by itself
+### The escalation ladder — the app reaching for a tool by itself
 
-The first place this pipeline **chooses an action** instead of executing a fixed
-line. `ask()` is always handed the deep-search tool; `force_deep` only says
-whether the visitor is holding the switch down. Left off, `ask()` decides.
+The place this pipeline **chooses an action** instead of executing a fixed line.
+`ask()` is handed TOOLS, not flags. Whether one runs is its decision; a caller
+passing `None` says only that the tool does not exist for this request.
 
 It escalates at exactly the two points retrieval already knows it failed:
 
 | Trigger | Where | What it does |
 |---|---|---|
-| `weak_retrieval` | nothing cleared `similarity_threshold`, about to refuse | scan, and if anything comes back, generate instead of refusing |
-| `model_refused` | the model read the passages and replied `NOT_FOUND_ANSWER` | scan, and if anything comes back, rebuild the pool and answer **once** more |
+| `weak_retrieval` | nothing cleared `similarity_threshold`, about to refuse | reach for a tool, and if anything comes back, generate instead of refusing |
+| `model_refused` | the model read the passages and replied `NOT_FOUND_ANSWER` | reach for a tool, and if anything comes back, rebuild the pool and answer **once** more |
 
-Three properties make it safe, and all three are asserted in
+**Documents first, the web last, and never the other way round.** `_reach` walks
+the tools in a fixed order — the literal scan of the user's own documents, then
+the web — and stops at the first that finds something. That ordering *is* the
+grounding promise: reaching outside before the user's own material has been read
+literally would answer "your documents did not have it" by looking somewhere
+else instead of by looking harder, which is precisely why the old
+web-augmentation feature was deleted.
+
+Four properties make it safe, and all four are asserted in
 `tests/test_escalation.py`:
 
 - **Free on the happy path.** A question that was going to be answered never
-  touches the tool. The scan itself costs *no model call* — it reads
+  touches a tool. The literal scan costs *no model call* — it reads
   `Document.source_text` and matches literally — so the only real cost is one
   extra generation, spent solely on questions that were about to fail anyway.
-- **Provably finite.** `scanned` can go true once, so the tool is used at most
-  once and the answer is generated at most twice. A serverless function frozen
-  the instant it responds, with 60 seconds to work in, cannot host an
-  open-ended `while`: this is a ladder with one rung.
-- **It degrades to what came before.** A failing scan, or a failing retry, keeps
+- **Provably finite.** Every tool is spent at most once (`used`), and `_reach`
+  stops at the first that returns something, so the answer is generated at most
+  twice **however many tools exist**. More tools widen the ladder; they never
+  deepen it. A serverless function frozen the instant it responds, with 60
+  seconds to work in, cannot host an open-ended `while`.
+- **It degrades to what came before.** A failing tool, or a failing retry, keeps
   the refusal that already existed. Neither can turn a truthful answer into a
   500.
+- **The web is labelled everywhere it appears.** `web: True` on the passage,
+  `WEB —` in the prompt, a `SYSTEM_PROMPT` rule telling the model what the
+  marker means and to prefer the user's own documents where the two disagree,
+  `is_web` on the citation, a badge on the source chip, and the tool named in
+  the line under the answer. A web passage also carries `doc_id: None`, so
+  nothing can mistake it for one of the user's files.
 
 **It is deliberately not driven by the judges,** which is the counter-intuitive
 part. `NOT_FOUND_ANSWER` is entirely faithful to its context and squarely
-answers the question, so *both judges pass it* — the grader is blind to exactly
-the failure deep search fixes. The judges also arrive a request later now, by
-which time the reader is already reading. Retrieval confidence and the model's
-own refusal are both free, both earlier, and both actually correlated with the
-thing being fixed.
+answers the question, so *both judges pass it* — the grader is structurally
+blind to the failure these tools fix. The judges also arrive a request later
+now, by which time the reader is already reading. Retrieval confidence and the
+model's own refusal are both free, both earlier, and both actually correlated
+with the thing being fixed.
 
-**And it says so.** An answer that exists because the machine decided to try a
-second tool is not the same object as one that came straight back, and the
-reader has no other way to tell. `eval_data.escalated` carries the reason and
-the UI renders a line under the answer. A refusal *after* a scan also makes the
-larger claim — "I also searched every document word for word" — because that is
-a materially stronger statement than giving up after a ranked search.
+**And it says so.** An answer that exists because the machine decided to try
+another tool is not the same object as one that came straight back, and the
+reader has no other way to tell. `eval_data.escalated` carries the reason,
+`eval_data.tools_used` carries which tools were spent, and the UI renders a line
+under the answer. A refusal *after* a tool ran also makes the larger claim — "I
+also searched every document word for word and searched the web" — because that
+is a materially stronger statement than giving up after a ranked search.
+
+### The switches say what is AVAILABLE, not what is on
+
+Both tools are lit by default in the composer, and pressing one takes it away.
+This inverts the usual meaning of an accent colour, deliberately: an earlier
+version lit up to mean "force this on every question", which made the unlit
+default look like a disabled feature and meant "off" did not mean off. There is
+no force-on-every-question mode any more.
+
+Web search is **signed-in only**, enforced in the route rather than hidden in
+the UI, because it spends a metered third-party quota on a deployment anyone can
+reach without an account. Deep search has no such problem — it reads the
+visitor's own documents and costs nothing — so guests keep it.
 
 ### What is still missing
 
-The trigger is a **rule**, not a judgement: the app decides *when* to look
-harder, but the choice of tool is still hard-coded, because there is only one
-tool to choose. Real tool selection needs a third option to select between.
+The trigger is a **rule**, not a judgement. The app decides *when* to look
+harder and walks its tools in a fixed order; it does not reason about *which*
+tool suits the question. A model choosing between them — and able to observe a
+result and choose again — is the remaining step, and the thing that would make
+the loop genuinely agentic rather than merely automatic.
 
-The wiring is shaped for it: `ask(..., deep_search=<callable>)` takes a tool
-rather than a boolean, every passage in the pool is chunk-shaped and carries
-`similarity: None` when it has no measured distance, and `_drop_duplicates`
-exists because any observe step needs it.
-
-**Web search was deleted, not foreclosed.** It came back as an answer to "your
-documents did not have it" by looking somewhere else instead of looking harder,
-and it was a deployment-wide toggle wearing the costume of a personal one. When
-it returns it is a **tool the model may call**, its passages are labelled in the
-prompt and in the citation because they are the only ones not from the user's
-own documents, and it does not go in `config_overrides`.
-
-The constraint that shapes all of it: the function is frozen the instant it
-responds and `maxDuration` is 60s, so a reason/act/observe loop cannot be an
-open-ended `while`. Bound the iterations hard, or slice it across requests the
-way the benchmark does.
+The constraint that shapes it: the function is frozen the instant it responds
+and `maxDuration` is 60s, so a reason/act/observe loop cannot be an open-ended
+`while`. Bound the iterations hard, or slice it across requests the way the
+benchmark does.
 
 ---
 
@@ -672,6 +692,12 @@ it was 20, which put 39.7s in the path of a first page load.
 
 Required: `GEMINI_API_KEY`, `OPENROUTER_API_KEY`, `DATABASE_URL` (or
 `PG_DATABASE_URL`), `SESSION_SECRET`, `VECTOR_BACKEND=neon`.
+
+`TAVILY_API_KEY` arms the web-search tool. **Unset means the tool does not
+exist** — `websearch.is_configured()` is false, `/api/auth/status` reports
+`web_search_available: false`, the switch is hidden, and `ask()` is handed no
+web tool. That is a disabled feature, not a broken one, and the rest of the app
+is unaffected.
 
 Optional: `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_REDIRECT_URI`
 (§14), `PROXY_BASE_URL`, `RAG_LLM_MODEL`, `EMBEDDING_PROVIDER`,
