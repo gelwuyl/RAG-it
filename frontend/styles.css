@@ -1128,15 +1128,17 @@ html[data-kind="guest"] .identity-hint .hint-badge { display: inline-block; }
   color: var(--text);
 }
 .score-group-sub { font-size: var(--text-nano); color: var(--faint); }
-/* Which metrics are actually RAGAS's. Set apart from the term it qualifies —
-   quiet, bracketed by its border rather than shouting — because it is a
-   provenance note, not part of the name. Four of the nine carry it; the rest
-   are classic IR metrics or this app's own, and saying so in the label is
-   cheaper than a footnote nobody reads. */
-.score-ragas {
+/* Where a metric came from: RAGAS's, or this app's own. Lime, like the term it
+   sits beside, because provenance is part of the identity of the row rather
+   than a caveat about it — and a grey badge next to a lime term read as a
+   disclaimer. The border keeps it a separate object at a glance; without one,
+   two lime words in a row are just a longer name.
+   Four say RAGAS, one says RAG-it. The rest are classic IR metrics that belong
+   to nobody in particular and carry nothing. */
+.score-from {
   margin-left: 6px; padding: 0 4px;
-  border: 1px solid var(--border); border-radius: var(--r-pill);
-  color: var(--faint); font-size: var(--text-nano);
+  border: 1px solid var(--primary-soft-border); border-radius: var(--r-pill);
+  color: var(--primary-ink); font-size: var(--text-nano);
   letter-spacing: var(--tracking-telemetry);
 }
 /* The evidence, folded. Styled as a quiet control rather than a heading: it is
