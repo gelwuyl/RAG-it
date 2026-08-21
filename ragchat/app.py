@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 from . import auth as authn
 from . import pipeline
 from . import deepsearch
+from . import websearch
 from . import guests
 from .config import (
     CONFIG_PATH,
@@ -462,6 +463,11 @@ def auth_status(
         # to have an upload rejected. Demo documents are excluded, matching how
         # the cap itself counts.
         "guest_usage": guests.usage(db, user) if guests.is_guest(user) else None,
+        # Whether the web tool is available to THIS caller — it needs a key AND
+        # an account. Reported rather than inferred so the UI shows the control
+        # in a state that matches what the server will actually do, instead of
+        # offering a switch that silently does nothing.
+        "web_search_available": websearch.is_configured() and not guests.is_guest(user),
     }
 
 
@@ -1203,15 +1209,19 @@ def get_chat(
 
 class AskIn(BaseModel):
     question: str = Field(min_length=1, max_length=4000)
-    # Deep search rides on the QUESTION, not on config.
+    # Both tools ride on the QUESTION, not on config.
     #
     # config_overrides is a single row shared by the whole deployment (db.py),
     # so a stored toggle would mean one visitor's choice changing retrieval for
-    # everyone — which is exactly the bug the web-augmentation toggle this
-    # replaces actually had. Per-request also matches what it is: a decision
-    # about one question ("I know this is in there, look properly"), not a
-    # preference about the app.
-    deep_search: bool = False
+    # everyone — which is exactly the bug the old web-augmentation toggle
+    # actually had.
+    #
+    # They default to TRUE because the point is that the APP decides. These say
+    # which tools it is allowed to consider, not which ones it must use: a tool
+    # left on still runs only when ask() is about to refuse. Switching one off
+    # is the visitor taking it away, which is the only decision left to them.
+    deep_search: bool = True
+    web_search: bool = True
 
 
 @app.post("/api/chats/{chat_id}/ask")
@@ -1242,13 +1252,21 @@ def ask_chat(
     # verdicts arrive from /grade below, a request later. Sliced the same way
     # the benchmark is, and for the same reason — a serverless function cannot
     # keep working after it has responded.
-    # The tool is ALWAYS handed over; the switch only says whether the visitor
-    # is forcing it. Left off, ask() decides for itself whether to reach for it
-    # — which is the whole point of the escalation in pipeline.ask.
+    # Which tools exist for this request. Passing None is the ONLY way a caller
+    # influences the escalation — whether an available tool actually runs is
+    # ask()'s decision (pipeline.ask, ESCALATION 1 and 2).
+    #
+    # Web search is signed-in only, and that is enforced here rather than hidden
+    # in the UI. It spends a metered third-party quota on a deployment anyone
+    # can reach without an account, so a guest keeping it would put the app's
+    # monthly allowance in the hands of whoever finds the URL. Deep search has
+    # no such problem — it reads the visitor's own documents and costs nothing —
+    # which is why guests keep that one.
+    may_web = bool(body.web_search) and not guests.is_guest(user) and websearch.is_configured()
     result = ask(
         user.id, body.question, history, cfg,
-        deep_search=deepsearch.searcher(db, user.id),
-        force_deep=bool(body.deep_search),
+        deep_search=deepsearch.searcher(db, user.id) if body.deep_search else None,
+        web_search=websearch.searcher() if may_web else None,
         grade=False,
     )
 
@@ -1986,6 +2004,7 @@ def health():
         # sweep endpoint answers 404 either way, by design, and guest
         # workspaces quietly outlive their TTL.
         "GUEST_SWEEP_SECRET": bool(_os.environ.get("GUEST_SWEEP_SECRET")),
+        "TAVILY_API_KEY": bool(_os.environ.get("TAVILY_API_KEY")),
         "GOOGLE_CLIENT_ID": bool(_os.environ.get("GOOGLE_CLIENT_ID")),
         "GOOGLE_CLIENT_SECRET": bool(_os.environ.get("GOOGLE_CLIENT_SECRET")),
         "GOOGLE_REDIRECT_URI": bool(_os.environ.get("GOOGLE_REDIRECT_URI")),

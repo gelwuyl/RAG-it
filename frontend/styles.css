@@ -382,20 +382,33 @@ html[data-kind="guest"] .identity-hint .hint-badge { display: inline-block; }
   transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
 }
 .switch-btn:hover { background: var(--hover-soft); }
-#deep-toggle.on {
+/* Lit is the DEFAULT state here, which inverts the usual meaning of an accent:
+   it says "this tool is available to the app", not "this is switched on for
+   every question". Pressing it hands the tool back, and the pill goes quiet. */
+#deep-toggle.on, #web-toggle.on {
   background: var(--primary); color: var(--on-primary); border-color: var(--primary);
 }
-#deep-toggle.on:hover { background: var(--primary-hover); }
+#deep-toggle.on:hover, #web-toggle.on:hover { background: var(--primary-hover); }
 
-/* Deep search sits in the composer, on the baseline of the Ask button rather
-   than of the textarea — .ask-form aligns to flex-end, and a pill that grew
-   with a multi-line question would drift up the box away from the control it
-   belongs beside. */
-.deep-pair {
-  display: inline-flex; align-items: center; gap: 4px;
+/* The tool switches sit in the composer, on the baseline of the Ask button
+   rather than of the textarea — .ask-form aligns to flex-end, and pills that
+   grew with a multi-line question would drift up the box away from the control
+   they belong beside.
+
+   Stacked, because there are two of them and the composer is the width of the
+   conversation: side by side they crowd the textarea on a laptop and wrap
+   unpredictably on a phone. Stacking also reads as a list of tools, which is
+   what it is. */
+.tool-switches {
+  display: inline-flex; flex-direction: column; gap: 5px;
   flex-shrink: 0; align-self: flex-end; padding-bottom: 1px;
 }
-#deep-toggle { min-width: 0; white-space: nowrap; }
+.tool-row { display: inline-flex; align-items: center; gap: 4px; }
+.tool-row .switch-btn { flex: 1; text-align: center; }
+#deep-toggle, #web-toggle { min-width: 0; white-space: nowrap; }
+/* The two labels differ in width; matching them stops the ? marks from
+   zig-zagging down the column. */
+.tool-row .switch-btn { min-width: 104px; }
 
 /* ---------- panes grid ----------
 
@@ -1058,6 +1071,19 @@ html[data-kind="guest"] .identity-hint .hint-badge { display: inline-block; }
 .cite-chip:hover { background: var(--primary-soft); border-color: var(--primary-soft-border); color: var(--primary-ink); }
 .cite-chip .cite-num { font-weight: 700; color: var(--primary-ink); }
 .cite-chip .cite-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 22ch; }
+/* A web citation is the only source chip that is NOT one of the user's own
+   documents. Marked in the telemetry register — small, mono, uppercase — so it
+   reads as a fact about the source rather than as a warning about the answer.
+   Dashed border because the passage is real but the provenance is different;
+   red would say "this is wrong", which it is not. */
+.cite-chip.is-web { border-style: dashed; }
+.cite-web {
+  font-family: var(--font-mono); font-size: var(--text-nano);
+  letter-spacing: var(--tracking-telemetry); text-transform: uppercase;
+  color: var(--muted);
+  border: 1px solid var(--border); border-radius: var(--r-pill);
+  padding: 0 5px; flex-shrink: 0;
+}
 
 .ask-form {
   display: flex; gap: 10px; padding: 12px 14px;
@@ -1068,6 +1094,10 @@ html[data-kind="guest"] .identity-hint .hint-badge { display: inline-block; }
 .ask-form textarea {
   flex: 1; min-width: 0; resize: none; font-size: 15px;
   border-radius: var(--r-md); max-height: 140px; line-height: 1.5;
+  /* Tall enough that two stacked switches sit beside the box rather than
+     towering over it. Two 24px pills + 5px gap + padding is ~69px; the box
+     matches so the composer still reads as one block. */
+  min-height: 68px;
 }
 #ask-btn { padding: 10px 20px; }
 
@@ -1885,7 +1915,7 @@ fieldset legend {
     order: 1; flex: 1 0 100%;
     min-height: 46px;
   }
-  .deep-pair { order: 2; margin-right: auto; align-self: center; }
+  .tool-switches { order: 2; margin-right: auto; align-self: center; }
   #ask-btn { order: 3; padding: 10px 22px; }
 
   /* Smaller, as asked: this is a modifier on the question, not the action.
@@ -1895,7 +1925,7 @@ fieldset legend {
     font-size: 11px; letter-spacing: 0.02em;
     padding: 4px 10px; min-width: 0;
   }
-  .deep-pair .term-mark { width: 26px; height: 26px; }
+  .tool-row .term-mark { width: 26px; height: 26px; }
 }
 
 

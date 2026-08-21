@@ -17,7 +17,14 @@ const state = {
   seeding: null,      // in-flight sample-document copy, so the sources pane can say so
   answerEval: null,   // the answer currently drawn on the benchmark bars
   bootUsageSkipped: false, // consumes the one duplicate status fetch at boot
-  deepSearch: false,  // per-QUESTION literal scan; sent with ask, never stored
+  // Which tools the app is ALLOWED to reach for on the next question. True is
+  // the default for both: the point of the escalation is that the app decides,
+  // and these say what exists for it to decide between. Per-question, sent with
+  // ask, never stored — a stored toggle would be one row shared by the whole
+  // deployment (see the ask route).
+  deepSearch: true,
+  webSearch: true,
+  webAvailable: false,   // server-reported: needs a key AND an account
   // Documents + folders currently in the workspace. Only the COUNT is kept:
   // it is what the empty conversation needs to say something true, and holding
   // the full lists here would be a second copy of the DOM's own state.
@@ -216,6 +223,16 @@ const GLOSSARY = {
     "itself and says so under the answer. Turn it on to force it on every " +
     "question. Either way it applies only to the question you send it with — " +
     "it is not a setting.",
+  ],
+  "web-search": [
+    "Web search",
+    "Your documents come first, always. If ranked search comes up short AND " +
+    "reading every document word for word finds nothing either, the app may " +
+    "search the web rather than simply tell you it found nothing. Anything " +
+    "that comes back is labelled as a web source in the answer and in its " +
+    "citation, because it is the only material here that is not yours. " +
+    "Signed-in only, and it applies to the question you send it with — it is " +
+    "not a setting.",
   ],
   "re-index": [
     "Re-index",
@@ -437,6 +454,11 @@ function applyAuthStatus(status) {
   root.classList.add("identity-resolved");
   state.guestUsage = status.guest_usage || null;
   state.googleOAuth = !!status.google_oauth;
+  // Whether the WEB tool exists for this caller. The server decides — it needs
+  // a provider key and a signed-in account — so the switch can never offer
+  // something the ask route would refuse.
+  state.webAvailable = !!status.web_search_available;
+  syncToolToggles();
 
   const nameEl = $("user-name");
   if (nameEl) nameEl.textContent = state.isGuest ? "" : state.user?.name || "";
@@ -1114,19 +1136,44 @@ async function refreshLiveConfig() {
 // which is exactly when a literal hit it missed goes unnoticed.
 $("deep-toggle").onclick = () => {
   state.deepSearch = !state.deepSearch;
-  syncDeepToggle();
+  syncToolToggles();
   toast(
     state.deepSearch
-      ? "Deep search ON — every question scanned word-for-word, alongside ranked search"
-      : "Deep search AUTO — used on its own when ranked search comes up short",
+      ? "Deep search available — used when ranked search comes up short"
+      : "Deep search off — your documents are searched by ranking only",
   );
 };
 
-function syncDeepToggle() {
-  const btn = $("deep-toggle");
-  if (!btn) return;
-  btn.classList.toggle("on", state.deepSearch);
-  btn.setAttribute("aria-pressed", String(state.deepSearch));
+$("web-toggle").onclick = () => {
+  state.webSearch = !state.webSearch;
+  syncToolToggles();
+  toast(
+    state.webSearch
+      ? "Web search available — used only when your documents come up short"
+      : "Web search off — answers come from your documents alone",
+  );
+};
+
+// Lit means AVAILABLE, not "forced on". The app decides whether to use a tool;
+// these switches decide whether it HAS one. That inversion is deliberate: the
+// earlier version lit up to mean "run this on every question", which made an
+// unlit button look like a disabled feature when it was the normal state.
+function syncToolToggles() {
+  for (const [id, on] of [
+    ["deep-toggle", state.deepSearch],
+    ["web-toggle", state.webSearch],
+  ]) {
+    const btn = $(id);
+    if (!btn) continue;
+    btn.classList.toggle("on", on);
+    btn.setAttribute("aria-pressed", String(on));
+  }
+  // The web row is hidden rather than disabled when it is not on offer: a
+  // guest has no way to make it work, and a dead control they cannot fix is
+  // worse than one that is not there. `web_search_available` is the SERVER's
+  // answer, so the control can never promise something the route refuses.
+  const row = $("web-row");
+  if (row) row.hidden = !state.webAvailable;
 }
 
 // Delete vector rows whose document is gone, plus any left under a superseded
@@ -1859,9 +1906,17 @@ function renderAssistantContent(el, content, citations) {
       const chip = document.createElement("button");
       chip.className = "cite-chip";
       chip.type = "button";
-      chip.title = `Show the passage from “${c.title}”`;
+      // A web source is the only citation here that is not one of the user's
+      // own documents. It gets a badge for the same reason the prompt gets a
+      // marker: an answer that blends the two without saying which is which
+      // breaks the one promise this app makes.
+      if (c.is_web) chip.classList.add("is-web");
+      chip.title = c.is_web
+        ? `From the web — ${c.ref || c.title}`
+        : `Show the passage from “${c.title}”`;
       chip.innerHTML =
         `<span class="cite-num">${c.number}</span>` +
+        (c.is_web ? `<span class="cite-web">web</span>` : "") +
         `<span class="cite-name">${escapeHtml(c.title)}</span>`;
       chip.onclick = () => showExcerpt(c);
       wrap.appendChild(chip);
@@ -1963,12 +2018,17 @@ function buildEvalBlock(evalData, evalLine) {
   if (why) {
     const note = document.createElement("div");
     note.className = "escalation-note";
+    const tools = evalData.tools_used || [];
+    const did = [];
+    if (tools.includes("deep")) did.push("every document was scanned word for word");
+    if (tools.includes("web")) did.push("the web was searched");
+    const what = did.length ? did.join(", then ") : "the app looked again";
     note.innerHTML =
       `<span class="escalation-mark" aria-hidden="true">⤷</span>` +
       `<span>${
         why === "weak_retrieval"
-          ? "Ranked search found nothing close enough, so every document was scanned word for word."
-          : "The first pass came up empty, so every document was scanned word for word and the answer rewritten."
+          ? `Ranked search found nothing close enough, so ${what}.`
+          : `The first pass came up empty, so ${what} and the answer rewritten.`
       }</span>`;
     wrap.appendChild(note);
   }
@@ -2125,7 +2185,11 @@ $("ask-form").onsubmit = async (e) => {
   try {
     const result = await api(`/api/chats/${state.currentChatId}/ask`, {
       method: "POST",
-      body: JSON.stringify({ question, deep_search: state.deepSearch }),
+      body: JSON.stringify({
+        question,
+        deep_search: state.deepSearch,
+        web_search: state.webSearch && state.webAvailable,
+      }),
     });
     pending.remove();
     const msg = appendMessage(

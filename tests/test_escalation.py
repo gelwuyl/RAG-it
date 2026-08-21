@@ -111,14 +111,16 @@ def test_a_good_answer_never_touches_the_tool(rig):
     assert rig["generations"] == 1
 
 
-def test_the_switch_still_forces_it(rig):
-    """A literal hit the ranker missed matters MOST when the ranker looked
-    confident, which is when nobody looks twice. Forcing must stay
-    unconditional."""
-    res = _ask(rig, force_deep=True)
-    assert rig["scans"] == 1
-    assert LITERAL in rig["prompts"][0]
-    assert res["answer"] == GOOD
+def test_a_tool_switched_off_is_never_reached_for(rig):
+    """The switch removes the tool; it does not merely stop forcing it. There
+    is no mode where the visitor makes a tool run — only one where they take it
+    away."""
+    rig["answers"] = [_pl.NOT_FOUND_ANSWER, GOOD]
+    res = _pl.ask("u", "q", [], _make_cfg(), deep_search=None, web_search=None)
+    assert rig["scans"] == 0
+    assert rig["generations"] == 1
+    assert res["not_found"] is True
+    assert res["answer"] == _pl.NOT_FOUND_ANSWER, "no tool ran, so no larger claim"
 
 
 # --- escalation 1: retrieval was too weak to bother generating ------------
@@ -187,12 +189,13 @@ def test_the_tool_is_never_used_twice(rig):
     assert res["not_found"] is True
 
 
-def test_forcing_the_scan_disarms_the_escalation(rig):
-    """The tool already ran; running it again would return the same passages."""
+def test_a_tool_is_spent_once_across_both_escalations(rig):
+    """Escalation 1 uses the scan, the model still refuses, and escalation 2
+    must not run the same tool again for the same answer."""
+    rig["pool"] = [_chunk(sim=0.01)]
     rig["answers"] = [_pl.NOT_FOUND_ANSWER]
-    res = _ask(rig, force_deep=True)
+    res = _ask(rig, cfg={"similarity_threshold": 0.5})
     assert rig["scans"] == 1
-    assert rig["generations"] == 1
     assert res["not_found"] is True
 
 
@@ -241,15 +244,17 @@ def test_a_refusal_after_a_scan_says_the_documents_were_read(rig):
 
 def test_a_refusal_without_a_scan_makes_the_smaller_claim(rig):
     rig["pool"] = [_chunk(sim=0.01)]
-    res = _pl.ask("u", "q", [], _make_cfg(similarity_threshold=0.5), deep_search=None)
+    res = _pl.ask("u", "q", [], _make_cfg(similarity_threshold=0.5),
+                  deep_search=None, web_search=None)
     assert res["answer"] == _pl.NOT_FOUND_ANSWER
 
 
 def test_the_refusal_still_starts_with_the_phrase_everything_matches_on(rig):
     """`_refused()` and the frontend's not-found styling both match the prefix.
     Rewording the front of this string breaks the escalation's own trigger."""
-    assert _pl._refusal_text(True).startswith(_pl.NOT_FOUND_ANSWER)
-    assert _pl._refused(_pl._refusal_text(True))
+    for used in ([], ["deep"], ["web"], ["deep", "web"]):
+        assert _pl._refusal_text(used).startswith(_pl.NOT_FOUND_ANSWER)
+        assert _pl._refused(_pl._refusal_text(used))
 
 
 def test_an_unescalated_answer_reports_no_escalation(rig):
@@ -257,3 +262,137 @@ def test_an_unescalated_answer_reports_no_escalation(rig):
     actually receives."""
     res = _ask(rig, grade=False)
     assert res["eval"]["escalated"] is None
+
+
+# ==========================================================================
+# The third tool: the web.
+#
+# Web passages are the only ones in the pool that are NOT the user's own
+# documents. That distinction is the app's single promise, so every test below
+# is really the same test asked in a different place: does the "this came from
+# outside" flag survive?
+# ==========================================================================
+
+WEB = "Independent testing put the figure at 11.4 kWh."
+
+
+def _web_hit(text=WEB, url="https://example.com/report"):
+    return {"text": text, "similarity": None, "doc_id": None,
+            "title": "Example battery report", "ref": url, "web": True}
+
+
+@pytest.fixture()
+def two_tools(rig):
+    """Both tools available; the web one returns a hit, deep search finds
+    nothing, so the ladder has to walk past the first rung."""
+    rig["deep"] = []
+    rig["web_hits"] = [_web_hit()]
+    rig["web_calls"] = 0
+
+    def _web(_query):
+        rig["web_calls"] += 1
+        return list(rig["web_hits"])
+
+    rig["web_tool"] = _web
+    return rig
+
+
+def _ask2(rig, **kw):
+    return _pl.ask("u", "servicing interval", [], _make_cfg(**kw.pop("cfg", {})),
+                   deep_search=rig["tool"], web_search=rig["web_tool"], **kw)
+
+
+def test_the_documents_are_searched_before_the_web(two_tools):
+    """Reaching outside before reading the user's own material is how the
+    deleted web-augmentation feature broke the grounding promise."""
+    two_tools["answers"] = [_pl.NOT_FOUND_ANSWER, GOOD]
+    _ask2(two_tools)
+    assert two_tools["scans"] == 1, "deep search must be tried first"
+    assert two_tools["web_calls"] == 1, "and the web only after it found nothing"
+
+
+def test_the_web_is_not_touched_when_the_documents_answer(two_tools):
+    two_tools["deep"] = [_deep_hit()]
+    two_tools["answers"] = [_pl.NOT_FOUND_ANSWER, GOOD]
+    res = _ask2(two_tools)
+    assert two_tools["scans"] == 1
+    assert two_tools["web_calls"] == 0, "the documents had it; nothing to look outside for"
+    assert res["eval"]["escalated"] == "model_refused"
+
+
+def test_a_good_answer_touches_neither_tool(two_tools):
+    _ask2(two_tools)
+    assert two_tools["scans"] == 0 and two_tools["web_calls"] == 0
+
+
+def test_web_passages_are_marked_as_web_in_the_prompt(two_tools):
+    """The model cannot label what it cannot distinguish."""
+    two_tools["answers"] = [_pl.NOT_FOUND_ANSWER, GOOD]
+    _ask2(two_tools)
+    retry_prompt = two_tools["prompts"][1]
+    assert WEB in retry_prompt
+    assert "WEB —" in retry_prompt, "a web passage reached the model unlabelled"
+
+
+def test_the_system_prompt_tells_the_model_what_the_marker_means(two_tools):
+    """A marker the model was never told about is decoration."""
+    assert "WEB —" in _pl.SYSTEM_PROMPT
+    assert "not from the user" in _pl.SYSTEM_PROMPT.lower()
+
+
+def test_the_web_flag_is_per_citation_not_per_answer(two_tools):
+    """An answer can rest on a document AND a web page at once, which is
+    exactly when saying which is which matters most."""
+    two_tools["answers"] = [_pl.NOT_FOUND_ANSWER, "Both [1] and [2] agree."]
+    res = _ask2(two_tools)
+    cites = res["citations"]
+    assert len(cites) == 2, cites
+    assert [c["is_web"] for c in cites] == [False, True], (
+        "the document and the web page were not told apart"
+    )
+
+
+def test_a_web_passage_carries_its_url_not_a_document_id(two_tools):
+    """Giving it a doc_id would let it be mistaken for one of the user's own."""
+    two_tools["answers"] = [_pl.NOT_FOUND_ANSWER, "Both [1] and [2] agree."]
+    res = _ask2(two_tools)
+    web_cite = next(c for c in res["citations"] if c["is_web"])
+    assert web_cite["doc_id"] is None
+    assert web_cite["ref"].startswith("https://")
+
+
+def test_the_web_never_votes_in_the_not_found_decision(two_tools):
+    """It carries `similarity: None`, so it has no standing in a cosine
+    judgement about the user's documents."""
+    two_tools["pool"] = [_chunk(sim=0.01)]
+    two_tools["answers"] = [GOOD]
+    res = _ask2(two_tools, cfg={"similarity_threshold": 0.5})
+    assert res["not_found"] is False, "the web hit rescued a below-threshold pool"
+    assert res["eval"]["escalated"] == "weak_retrieval"
+
+
+def test_a_refusal_that_tried_both_says_both(two_tools):
+    two_tools["web_hits"] = []
+    two_tools["answers"] = [_pl.NOT_FOUND_ANSWER]
+    res = _ask2(two_tools)
+    assert "word for word" in res["answer"] and "searched the web" in res["answer"]
+
+
+def test_the_ladder_still_costs_at_most_one_extra_generation(two_tools):
+    """Two tools widen the ladder; they must not deepen it. `_reach` stops at
+    the first tool that finds something, so the retry count is unchanged."""
+    two_tools["answers"] = [_pl.NOT_FOUND_ANSWER, _pl.NOT_FOUND_ANSWER, GOOD]
+    _ask2(two_tools)
+    assert two_tools["generations"] == 2, "a third generation is an unbounded loop"
+
+
+def test_a_broken_web_tool_falls_through_to_the_refusal(two_tools):
+    def _boom(_q):
+        two_tools["web_calls"] += 1
+        raise RuntimeError("tavily 503")
+
+    two_tools["web_tool"] = _boom
+    two_tools["answers"] = [_pl.NOT_FOUND_ANSWER]
+    res = _ask2(two_tools)
+    assert two_tools["web_calls"] == 1
+    assert res["not_found"] is True

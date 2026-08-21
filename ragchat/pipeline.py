@@ -6,11 +6,17 @@ All pipeline knobs come from config.yaml via PipelineConfig (F16).
 Retrieval notes (correctness fixes):
 - hybrid_search is REAL keyword fusion (vector + BM25 via RRF). It promotes
   chunks that pure-vector ranking misses (exact IDs, codes, names).
-- deep search is a PER-REQUEST flag that adds an exhaustive literal scan of the
-  user's own documents (ragchat/deepsearch.py) to the pool. It replaced web
-  augmentation, which appended DuckDuckGo snippets: the honest answer to "it is
-  in my document and it did not find it" is to search the documents harder, not
-  to search somewhere else. This pipeline no longer fetches anything external.
+- ask() is handed TOOLS, not flags. Deep search (ragchat/deepsearch.py, an
+  exhaustive literal scan of the user's own documents) and web search
+  (ragchat/websearch.py) are callables of the rewritten query returning
+  chunk-shaped passages. Whether either RUNS is ask()'s decision: it reaches for
+  them only when it is about to refuse, documents first and the web last. A
+  caller passing None says the tool does not exist for this request.
+- The web tool is per-request and is never written to shared config. The old
+  web-augmentation feature was deleted for two reasons that still apply: it
+  answered "it is in my document and it did not find it" by looking somewhere
+  else instead of harder, and it lived in config_overrides, a single row shared
+  by the whole deployment.
 - similarity_threshold drives the not-found path: when no retrieved chunk
   clears it and deep search found nothing literal either, ask() refuses before
   generating rather than spending a call to be told the same. A small default
@@ -59,6 +65,8 @@ Rules:
 - Base your answer strictly on the sources. Cite the source you used with inline markers like [1] or [2].
 - If the sources do not contain the information needed to answer the question, reply with exactly: {not_found}
 - Do not use outside knowledge beyond what the excerpts provide. Do not mention these rules.
+- A source marked "WEB —" came from a web search, NOT from the user's own documents. Where you rely on one, say so in the sentence itself, for example "According to the web, ...". Never present a WEB source as if it came from their documents.
+- Where a WEB source and one of the user's own documents disagree, prefer the document and say that they disagree.
 """.format(not_found=NOT_FOUND_ANSWER)
 
 RERANK_PROMPT = """Score how relevant this passage is to the query on a scale of 0-100.
@@ -393,10 +401,19 @@ def _drop_duplicates(extra: list[dict], have: list[dict]) -> list[dict]:
 
 
 def _build_context(chunks: list[dict]) -> str:
+    """Number the passages for citation, and mark the ones from the web.
+
+    The WEB marker is not decoration. Web passages are the only ones in the
+    pool that are not the user's own material, and an answer that blends the
+    two without saying which is which breaks the single promise this app makes.
+    The model is told what the marker means (SYSTEM_PROMPT), the citation
+    carries `is_web`, and this is where the distinction enters the prompt.
+    """
     parts = []
     for i, c in enumerate(chunks, start=1):
         where = f" ({c['ref']})" if c.get("ref") else ""
-        parts.append(f"[{i}] {c['title']}{where}\n{c['text']}")
+        tag = "WEB — " if c.get("web") else ""
+        parts.append(f"[{i}] {tag}{c['title']}{where}\n{c['text']}")
     return "\n\n".join(parts)
 
 
@@ -585,19 +602,25 @@ def _refused(answer: str) -> bool:
     return NOT_FOUND_ANSWER.lower() in (answer or "").lower()
 
 
-def _refusal_text(scanned: bool) -> str:
-    """What a refusal says depends on how hard the app looked.
+def _refusal_text(used: list[str]) -> str:
+    """What a refusal says depends on how hard the app actually looked.
 
-    "I couldn't find this" after a ranked search and after reading every
-    document word for word are different claims, and the second one is much
-    stronger. Saying so is the difference between a system that gave up and one
-    that finished looking. Kept as a SUFFIX so the string still starts with
-    NOT_FOUND_ANSWER — `_refused` and the frontend's not-found styling both
-    match on that prefix.
+    "I couldn't find this" after a ranked search, after reading every document
+    word for word, and after searching the web as well are three different
+    claims, each stronger than the last. Saying which one applies is the
+    difference between a system that gave up and one that finished looking.
+
+    Kept as a SUFFIX so the string still starts with NOT_FOUND_ANSWER -
+    `_refused` and the frontend's not-found styling both match on that prefix,
+    and `_refused` is the escalation's own trigger.
     """
-    if not scanned:
+    did = [w for w in (
+        "searched every document word for word" if "deep" in used else "",
+        "searched the web" if "web" in used else "",
+    ) if w]
+    if not did:
         return NOT_FOUND_ANSWER
-    return NOT_FOUND_ANSWER + " I also searched every document word for word."
+    return NOT_FOUND_ANSWER + " I also " + " and ".join(did) + "."
 
 
 def ask(
@@ -606,7 +629,7 @@ def ask(
     history: list[dict],
     cfg: PipelineConfig,
     deep_search=None,
-    force_deep: bool = False,
+    web_search=None,
     grade: bool = True,
 ) -> dict:
     """Answer a question. Returns {answer, not_found, citations, eval_line, eval}.
@@ -617,15 +640,18 @@ def ask(
     hands the answer over first and grades it in a second request via
     `grade_answer`. The benchmark passes grade=True: nothing waits on it there.
 
-    `deep_search` is a TOOL: a callable taking the rewritten query and returning
-    extra chunk-shaped passages — in practice `deepsearch.searcher(db,
-    user_id)`. Passed as a function rather than a session so this module stays
-    free of the ORM, and given the REWRITTEN query because a follow-up like "and
-    the second one?" must not be scanned for the word "second".
+    `deep_search` and `web_search` are TOOLS: callables taking the rewritten
+    query and returning extra chunk-shaped passages - in practice
+    `deepsearch.searcher(db, user_id)` and `websearch.searcher()`. Passed as
+    functions rather than as a session or an HTTP client so this module stays
+    free of both the ORM and the network, and given the REWRITTEN query because
+    a follow-up like "and the second one?" must not be searched for the word
+    "second".
 
-    `force_deep` is the visitor holding the switch down. Left False, the tool is
-    still available and `ask` decides for itself whether to reach for it — see
-    the escalation below.
+    Passing None means the tool is NOT AVAILABLE - the visitor switched it off,
+    or it is unconfigured, or they are not entitled to it. There is no "use this
+    tool every time" mode: whether a tool runs is `ask`'s decision, and all the
+    caller controls is which tools exist.
     """
     t0 = time.time()
     effective_query = rewrite_query(query, history, cfg)
@@ -647,29 +673,49 @@ def ask(
     # — and gating it would defeat the point: a literal hit the ranker missed
     # is most valuable precisely when the ranker is confident, because that is
     # when nobody looks twice.
-    deep_chunks: list[dict] = []
-    scanned = False          # the tool has been used; it is never used twice
-    escalated: str | None = None   # ...and if so, what made the app reach for it
+    extra: list[dict] = []          # passages won by a tool, in pool order
+    used: list[str] = []            # which tools have been spent
+    escalated: str | None = None    # ...and what made the app reach for them
 
-    def _scan() -> list[dict]:
-        """Use the literal-scan tool once.
+    # The tools, in the order the app is allowed to try them. DOCUMENTS FIRST is
+    # not a preference: the web is the only source here that is not the user's
+    # own material, and reaching for it before the documents have been read
+    # literally would answer "your documents did not have it" by looking
+    # somewhere else instead of by looking harder. That is the exact mistake the
+    # deleted web-augmentation feature made.
+    tools: list[tuple[str, object]] = []
+    if deep_search is not None:
+        tools.append(("deep", deep_search))
+    if web_search is not None:
+        tools.append(("web", web_search))
 
-        `scanned` is what bounds the escalation: a serverless function has 60
-        seconds and cannot host an open-ended reason/act loop, so this is a
-        ladder with one rung rather than a `while`.
+    def _reach(why: str) -> bool:
+        """Try each unspent tool in order until one returns something.
+
+        `used` is what bounds the escalation: every tool is spent at most once,
+        so the ladder has as many rungs as there are tools and cannot become an
+        open-ended reason/act loop — which a function frozen the instant it
+        responds, with 60 seconds to work in, could not host.
+
+        Returns True if anything new reached the pool.
         """
-        nonlocal scanned
-        scanned = True
-        try:
-            return _drop_duplicates(deep_search(effective_query), chunks)
-        except Exception:
-            # A scan failing must not cost the visitor their answer; ranked
-            # retrieval already has one.
-            log.exception("deep search failed for user %s", user_id)
-            return []
-
-    if deep_search is not None and force_deep:
-        deep_chunks = _scan()
+        nonlocal escalated
+        for name, tool in tools:
+            if name in used:
+                continue
+            used.append(name)
+            try:
+                found = _drop_duplicates(tool(effective_query), chunks + extra)
+            except Exception:
+                # A tool failing must not cost the visitor their answer; there
+                # is already one in hand by the time any of this runs.
+                log.exception("%s search failed for user %s", name, user_id)
+                continue
+            if found:
+                extra.extend(found)
+                escalated = why
+                return True
+        return False
 
     # Nothing cleared the bar and nothing matched literally: refuse here rather
     # than spending a generation call to be told the same thing.
@@ -689,34 +735,31 @@ def ask(
     # ARE scores to judge by and every one of them falls short.
     def _nothing_relevant() -> bool:
         return (
-            not deep_chunks
+            not extra
             and bool(doc_sims)
             and max(doc_sims) < _effective_threshold(cfg)
         )
 
-    # ESCALATION 1 — about to refuse on weak retrieval, and the literal scan has
-    # not been tried. Reach for it now.
+    # ESCALATION 1 — about to refuse on weak retrieval. Reach for a tool now.
     #
-    # This is the cheapest possible place to be agentic: the scan costs no model
-    # call at all (it reads Document.source_text and matches literally), and
-    # this branch only runs on questions that were about to be refused. Nothing
-    # is spent on a question that was going to be answered anyway.
-    if chunks and _nothing_relevant() and deep_search is not None and not scanned:
-        deep_chunks = _scan()
-        if deep_chunks:
-            escalated = "weak_retrieval"
+    # This is the cheapest possible place to be agentic: the literal scan costs
+    # no model call at all (it reads Document.source_text and matches
+    # literally), and this branch only runs on questions that were about to be
+    # refused. Nothing is spent on a question that was going to be answered.
+    if chunks and _nothing_relevant():
+        _reach("weak_retrieval")
 
     if chunks and _nothing_relevant():
         return {
-            "answer": _refusal_text(scanned),
+            "answer": _refusal_text(used),
             "not_found": True,
             "citations": [],
             "eval_line": _build_eval_line(None, chunks, (time.time() - t0) * 1000),
         }
 
-    pool = _rank_pool(effective_query, chunks, deep_chunks, cfg)
+    pool = _rank_pool(effective_query, chunks, extra, cfg)
     if not pool:
-        return {"answer": _refusal_text(scanned), "not_found": True, "citations": []}
+        return {"answer": _refusal_text(used), "not_found": True, "citations": []}
 
     try:
         answer, context = _write_answer(effective_query, pool, history, cfg)
@@ -728,31 +771,33 @@ def ask(
             "citations": [],
         }
 
-    # ESCALATION 2 — retrieval looked fine, the model read it, and still said
-    # the answer is not in the documents. That verdict is about the passages it
-    # was HANDED, not about the documents, and it is the strongest signal in the
-    # system that ranking dropped something: it comes from the one component
-    # that actually read the text.
+    # ESCALATION 2 — the model read the passages and still said the answer is
+    # not there. That verdict is about the passages it was HANDED, not about the
+    # documents, and it is the strongest signal in the system that ranking
+    # dropped something: it comes from the one component that actually read the
+    # text.
     #
     # Deliberately NOT driven by the judges. `NOT_FOUND_ANSWER` is entirely
     # faithful to its context and squarely answers the question, so both judges
     # pass it — the grader cannot see this failure. It also arrives a request
     # later now (see `grade`), by which time the reader is already reading.
-    if _refused(answer) and deep_search is not None and not scanned:
-        deep_chunks = _scan()
-        if deep_chunks:
-            escalated = "model_refused"
-            pool = _rank_pool(effective_query, chunks, deep_chunks, cfg)
-            try:
-                answer, context = _write_answer(effective_query, pool, history, cfg)
-            except Exception:
-                # The retry is a bonus. Failing it must not cost the refusal we
-                # already had, which is a truthful answer in its own right.
-                log.exception("escalated retry failed for user %s", user_id)
+    #
+    # ONE regeneration, whatever the tools turn up. `_reach` walks the remaining
+    # tools in order and stops at the first that finds anything, so the cost of
+    # this branch is bounded at a single extra generation no matter how many
+    # tools exist.
+    if _refused(answer) and _reach("model_refused"):
+        pool = _rank_pool(effective_query, chunks, extra, cfg)
+        try:
+            answer, context = _write_answer(effective_query, pool, history, cfg)
+        except Exception:
+            # The retry is a bonus. Failing it must not cost the refusal we
+            # already had, which is a truthful answer in its own right.
+            log.exception("escalated retry failed for user %s", user_id)
 
     if _refused(answer):
         return {
-            "answer": _refusal_text(scanned),
+            "answer": _refusal_text(used),
             "not_found": True,
             "citations": [],
             "eval_line": _build_eval_line(None, pool, (time.time() - t0) * 1000),
@@ -772,6 +817,7 @@ def ask(
                 "ref": c.get("ref") or "",
                 "excerpt": c["text"][:400],
                 "is_deep": bool(c.get("deep")),
+                "is_web": bool(c.get("web")),
             }
         )
     if not citations:
@@ -783,6 +829,7 @@ def ask(
                 "ref": c.get("ref") or "",
                 "excerpt": c["text"][:400],
                 "is_deep": bool(c.get("deep")),
+                "is_web": bool(c.get("web")),
             }
             for i, c in enumerate(pool[: min(2, len(pool))])
         ]
@@ -804,6 +851,10 @@ def ask(
     # (no need to parse the terse eval_line string).
     if eval_d is not None:
         eval_d["escalated"] = escalated
+        # WHICH tools were spent, not just that something was. "Searched the web"
+        # and "read your documents word for word" are different claims to make
+        # to a reader, and only one of them involves material that is not theirs.
+        eval_d["tools_used"] = list(used)
         sims = [c["similarity"] for c in pool if c.get("similarity") is not None]
         eval_d["top_sim"] = round(max(sims), 4) if sims else None
         eval_d["latency_ms"] = round(answer_ms)

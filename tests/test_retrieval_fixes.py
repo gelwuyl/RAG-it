@@ -336,9 +336,15 @@ def test_a_deep_hit_reaches_the_context_even_when_ranking_would_miss_it(monkeypa
     in the text handed to the model, not merely be found."""
     seen = {}
 
+    # The model refuses on the ranked pool, which is what makes ask() reach for
+    # the scan. There is no "force" mode any more: a literal hit reaches the
+    # model because the app decided it needed one.
+    calls = {"n": 0}
+
     def _chat(model, messages, temperature):
+        calls["n"] += 1
         seen["prompt"] = messages[-1]["content"]
-        return "Per [1] that is right."
+        return _pl.NOT_FOUND_ANSWER if calls["n"] == 1 else "Per [1] that is right."
 
     _with_stubs(monkeypatch, chat=_chat)
 
@@ -356,8 +362,7 @@ def test_a_deep_hit_reaches_the_context_even_when_ranking_would_miss_it(monkeypa
     # runs unconditionally, ranked retrieval notwithstanding — which is the
     # point, because a literal hit the ranker missed matters most when the
     # ranker looked confident.
-    res = _pl.ask("user-DS", "servicing interval", [], _make_cfg(),
-                  deep_search=_deep, force_deep=True)
+    res = _pl.ask("user-DS", "servicing interval", [], _make_cfg(), deep_search=_deep)
     assert "serviced every 400 hours" in seen["prompt"], (
         "a literal hit was found and then dropped before generation"
     )

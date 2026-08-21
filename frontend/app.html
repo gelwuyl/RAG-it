@@ -47,7 +47,7 @@
         }
       })();
     </script>
-    <link rel="stylesheet" href="/styles.css?v=46" />
+    <link rel="stylesheet" href="/styles.css?v=47" />
     <script>
       // Boot diagnostics: collect load/runtime errors so a broken app.js
       // shows a visible message instead of a silently dead UI.
@@ -278,19 +278,36 @@
               aria-label="Show commands" title="Commands — or type / here">/</button>
             <textarea id="question-input" rows="1" placeholder="Ask about your documents…"
               autocomplete="off"></textarea>
-            <!-- Deep search belongs to THIS question, not to the app. It sits
-                 in the composer for that reason, beside the thing it modifies,
-                 and it is sent on the ask request rather than saved. The web
-                 fallback switch it replaces lived in the topbar and wrote
+            <!-- The two tools the app may reach for, both ON by default.
+                 They belong to THIS question, not to the app, which is why
+                 they sit in the composer beside the thing they modify and are
+                 sent on the ask request rather than saved. The web-fallback
+                 switch this replaces lived in the topbar and wrote
                  deployment-wide config, so one visitor's switch moved everyone
-                 else's retrieval. -->
-            <span class="deep-pair">
-              <button id="deep-toggle" class="switch-btn" type="button"
-                aria-pressed="false"
-                title="Force the word-for-word scan on every question. Left off, it still runs by itself when ranked search comes up short.">
-                Deep search</button>
-              <button class="term-mark" type="button" data-term="deep-search"
-                aria-expanded="false" aria-label="What does Deep search do?">?</button>
+                 else's retrieval.
+
+                 Lit means AVAILABLE, not "in use". The app decides whether to
+                 use a tool; pressing a switch takes it away. That is the whole
+                 control the visitor has, and the only honest reading of a lit
+                 button here — an earlier version lit up to mean "force this on
+                 every question", so "off" did not mean off. -->
+            <span class="tool-switches">
+              <span class="tool-row">
+                <button id="deep-toggle" class="switch-btn on" type="button"
+                  aria-pressed="true"
+                  title="Deep search is available. Press to take it away.">
+                  Deep search</button>
+                <button class="term-mark" type="button" data-term="deep-search"
+                  aria-expanded="false" aria-label="What does Deep search do?">?</button>
+              </span>
+              <span class="tool-row" id="web-row" hidden>
+                <button id="web-toggle" class="switch-btn on" type="button"
+                  aria-pressed="true"
+                  title="Web search is available. Press to take it away.">
+                  Web search</button>
+                <button class="term-mark" type="button" data-term="web-search"
+                  aria-expanded="false" aria-label="What does Web search do?">?</button>
+              </span>
             </span>
             <button id="ask-btn" class="btn btn-primary" type="submit">Ask</button>
           </form>
@@ -609,6 +626,6 @@
       </div>
     </div>
 
-    <script type="module" src="/app.js?v=54"></script>
+    <script type="module" src="/app.js?v=55"></script>
   </body>
 </html>
