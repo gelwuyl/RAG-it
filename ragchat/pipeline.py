@@ -426,6 +426,33 @@ def _eval_answer(question: str, answer: str, context_text: str, cfg: PipelineCon
     return out
 
 
+def _ungraded_eval(cfg: PipelineConfig) -> dict | None:
+    """The eval dict an answer carries before anything has graded it.
+
+    `pending` is what the UI draws its in-progress state from. It is NOT the
+    same as `judge_error`: nothing has failed here, the grading simply has not
+    happened yet. Conflating the two would put a broken-grader message in front
+    of a reader who is two seconds from getting a verdict.
+    """
+    if not cfg.eval_show:
+        return None
+    return {"pending": True, "faithful": None, "relevant": None}
+
+
+def grade_answer(question: str, answer: str, context_text: str, cfg: PipelineConfig) -> dict:
+    """Run the judges on an answer that has already been delivered.
+
+    Split out of ask() so the reader is not kept waiting on two model calls
+    that grade what they are already reading. Returns the same shape
+    _eval_answer does, plus how long grading took.
+    """
+    t0 = time.time()
+    out = _eval_answer(question, answer, context_text, cfg) or {}
+    out["grade_ms"] = round((time.time() - t0) * 1000)
+    out["pending"] = False
+    return out
+
+
 def _clean_answer(answer: str) -> str:
     """Strip model reasoning wrappers (e.g. ``,
     ``<think:6124c78e>...</think:6124c78e>``, ``<reasoning>...</reasoning>``) from a
@@ -461,13 +488,28 @@ def _clean_answer(answer: str) -> str:
     return stripped.strip()
 
 
+def eval_line_from(eval_d: dict | None, latency_ms: float | None) -> str:
+    """Rebuild the grey line from a stored eval dict alone.
+
+    The grade route runs a request later and has no chunk pool to count, so the
+    two facts the line needs from retrieval — top similarity and how many
+    passages came from deep search — are carried in the eval dict itself.
+    """
+    return _line(eval_d, eval_d.get("top_sim") if eval_d else None,
+                 (eval_d or {}).get("deep_n") or 0, latency_ms)
+
+
 def _build_eval_line(eval_d: dict | None, chunks: list[dict], latency_ms: float) -> str:
     """Compact grey-line string: retrieval sim + deep hits + judge verdicts + latency."""
-    parts: list[str] = []
     sims = [c["similarity"] for c in chunks if c.get("similarity") is not None]
-    if sims:
-        parts.append(f"top sim {max(sims):.2f}")
-    deep = sum(1 for c in chunks if c.get("deep"))
+    return _line(eval_d, max(sims) if sims else None,
+                 sum(1 for c in chunks if c.get("deep")), latency_ms)
+
+
+def _line(eval_d: dict | None, top_sim: float | None, deep: int, latency_ms: float | None) -> str:
+    parts: list[str] = []
+    if top_sim is not None:
+        parts.append(f"top sim {top_sim:.2f}")
     if deep:
         parts.append(f"{deep} deep")
     if eval_d:
@@ -486,8 +528,15 @@ def ask(
     history: list[dict],
     cfg: PipelineConfig,
     deep_search=None,
+    grade: bool = True,
 ) -> dict:
     """Answer a question. Returns {answer, not_found, citations, eval_line, eval}.
+
+    `grade=False` returns the answer WITHOUT running the judges. They are two
+    more sequential model calls and, measured on the live provider, they cost
+    more than writing the answer did (10.1s against 7.8s) — so the chat route
+    hands the answer over first and grades it in a second request via
+    `grade_answer`. The benchmark passes grade=True: nothing waits on it there.
 
     `deep_search` is an optional callable taking the rewritten query and
     returning extra chunk-shaped passages — in practice
@@ -635,7 +684,7 @@ def ask(
     # not-found path, which returns before this point and always did report the
     # honest number. The UI renders this as "Answered in".
     answer_ms = (time.time() - t0) * 1000
-    eval_d = _eval_answer(effective_query, answer, context, cfg)
+    eval_d = _eval_answer(effective_query, answer, context, cfg) if grade else _ungraded_eval(cfg)
     # Enrich the eval dict with the retrieval top-similarity and end-to-end
     # latency so the UI can render a self-contained, readable performance block
     # (no need to parse the terse eval_line string).
@@ -646,7 +695,11 @@ def ask(
         # What grading added on top. Reported separately rather than folded
         # in: the reader waits for both, so hiding one would be the same
         # dishonesty in the other direction.
-        eval_d["grade_ms"] = round((time.time() - t0) * 1000 - answer_ms)
+        if grade:
+            eval_d["grade_ms"] = round((time.time() - t0) * 1000 - answer_ms)
+        # The grader needs the count of deep hits to rebuild this line later,
+        # and it will not have the pool by then.
+        eval_d["deep_n"] = sum(1 for c in pool if c.get("deep"))
     return {
         "answer": answer,
         "not_found": False,
@@ -660,4 +713,7 @@ def ask(
         # the retrieval metrics. rewrite_query is a model call, so a second
         # retrieval is not guaranteed to return the same list.
         "context": context,
+        # The query the answer was built from — the rewrite, not what the user
+        # typed. A later grade call must judge the same one.
+        "effective_query": effective_query,
     }

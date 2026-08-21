@@ -144,6 +144,12 @@ class Message(Base):
     citations = Column(Text, nullable=True)  # JSON list of {number, doc_id, title, ref, excerpt}
     eval_line = Column(Text, nullable=True)  # terse grey perf line (back-compat)
     eval_data = Column(Text, nullable=True)  # JSON of the full eval dict (faith/relevancy + reasons)
+    # JSON {"q": rewritten question, "context": the passages the model saw}.
+    # Grading happens in a SECOND request now, so it has to grade against the
+    # text the answer was actually built from — re-running retrieval to
+    # reconstruct it would judge the answer against a different set of
+    # passages, which is the mistake c002445 fixed for the retrieval metrics.
+    eval_context = Column(Text, nullable=True)
     created_at = Column(Float, default=now)
     conversation = relationship("Conversation", back_populates="messages")
 

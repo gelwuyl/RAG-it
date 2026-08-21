@@ -1865,6 +1865,11 @@ function renderAssistantContent(el, content, citations) {
 // falsity so a partial grading can never be read as a verdict.
 function evalVerdict(evalData) {
   const { faithful, relevant } = evalData;
+  // Waiting on the judges is NOT the same as the judges having failed. The
+  // answer is delivered before grading starts now, so every answer passes
+  // through this state for a few seconds; showing "Ungraded" there would mean
+  // the app reports a broken grader on every single question.
+  if (evalData.pending) return { state: "pending", word: "Grading…" };
   if (faithful == null && relevant == null) return { state: "ungraded", word: "Ungraded" };
   if (faithful === false || relevant === false) return { state: "weak", word: "Weak" };
   if (faithful == null || relevant == null) return { state: "ungraded", word: "Partly graded" };
@@ -1980,6 +1985,44 @@ function showAnswerOnScorecard(evalData, chip) {
   if (MOBILE.matches) setMobileTab("eval");
 }
 
+// Fetch the verdicts for an answer already on screen, and fold them in.
+//
+// The answer no longer waits for grading — two judge calls cost more than
+// writing the answer did — so it lands ungraded and this fills it in a moment
+// later. Everything here has to survive the reader not sitting still: they can
+// ask another question, switch chats, or close the tab before it returns.
+async function fetchGrade(chatId, messageId, msgEl) {
+  try {
+    const r = await api(`/api/chats/${chatId}/messages/${messageId}/grade`, {
+      method: "POST",
+    });
+    const graded = r && r.eval;
+    if (!graded) return;
+
+    // Does this answer currently own the bars? Asked BEFORE the chip is
+    // rebuilt, because the rebuild drops the marker that answers it.
+    const wasShown = !!msgEl?.querySelector(".eval-chip.is-shown");
+
+    // Rebuild this answer's chip in place. A :last-child lookup would attach
+    // the verdict to whatever answer happens to be last by the time the judges
+    // reply, which on a slow provider is often a different one.
+    const block = msgEl?.querySelector(".eval-block");
+    if (block) block.replaceWith(buildEvalBlock(graded, r.eval_line || ""));
+
+    // Move the bars only if they were already showing this answer. If the
+    // reader has since asked something else, updating the pane underneath them
+    // would label a newer answer with an older answer's verdict.
+    if (wasShown) {
+      showAnswerOnScorecard(graded, msgEl?.querySelector(".eval-chip"));
+    }
+  } catch (err) {
+    // A failed grade leaves the answer ungraded, which is a state the UI
+    // already draws honestly. It must never take the answer down with it.
+    console.warn("grading failed", err);
+  }
+}
+
+
 function appendMessage(role, content, citations = [], isPending = false, evalLine = "", evalData = null) {
   const box = $("messages");
   const hint = box.querySelector(".empty-state");
@@ -2042,6 +2085,11 @@ $("ask-form").onsubmit = async (e) => {
     // The chip comes from the element just appended rather than a :last-child
     // lookup, which would break the moment anything else is appended after it.
     if (result.eval) showAnswerOnScorecard(result.eval, msg?.querySelector(".eval-chip"));
+    // Not awaited: the answer is already readable, and the reader is free to
+    // type the next question while the judges work.
+    if (result.eval?.pending && result.message_id) {
+      fetchGrade(state.currentChatId, result.message_id, msg);
+    }
     markBeat("asked");                             // beat 2 — an answer exists
     chatStatusOverride.delete(state.currentChatId); // answered -> green dot
     // keep the chat list titles/statuses in sync
@@ -2195,6 +2243,9 @@ function renderScorecard(metrics, runMode) {
     const v = field ? liveValue(live, field) : null;
     const hasLive = v != null;
     if (hasLive) anyLive = true;
+    // Top similarity is known the moment the answer is; the two judged rows are
+    // not, and they are what the second request is fetching. Only those wait.
+    const waiting = !hasLive && !!(live && live.pending) && !!field;
 
     const benchPct = Math.round(bench * 100);
     const livePct = hasLive ? Math.round(v * 100) : 0;
@@ -2204,12 +2255,13 @@ function renderScorecard(metrics, runMode) {
     const below = hasLive && v < bench;
 
     const row = document.createElement("div");
-    row.className = "score-row" + (hasLive ? " has-live" : "");
+    row.className =
+      "score-row" + (hasLive ? " has-live" : "") + (waiting ? " is-waiting" : "");
     row.innerHTML = `
       <div class="score-head">
         <span class="score-name">${t.label}<span class="score-sub">${t.sub}</span></span>
         <span class="score-val ${hasLive ? (below ? "under" : "over") : "quiet"}">${
-          hasLive ? escapeHtml(liveLabel(live, field)) : `${benchPct}%`
+          hasLive ? escapeHtml(liveLabel(live, field)) : waiting ? "grading…" : `${benchPct}%`
         }</span>
       </div>
       <div class="score-bar">
@@ -2221,7 +2273,9 @@ function renderScorecard(metrics, runMode) {
       <div class="score-foot">${
         hasLive
           ? `this answer ${livePct}% · benchmark ${benchPct}%`
-          : `benchmark ${benchPct}%`
+          : waiting
+            ? `benchmark ${benchPct}% · waiting on the judge`
+            : `benchmark ${benchPct}%`
       }</div>`;
     el.appendChild(row);
   }
@@ -2245,10 +2299,13 @@ function renderScorecard(metrics, runMode) {
     t.innerHTML =
       `<span class="score-aside-pair"><span>Answered in</span>` +
       `<strong>${secs(live.latency_ms)}</strong></span>` +
-      (live.grade_ms != null && live.grade_ms > 0
-        ? `<span class="score-aside-pair"><span>then graded in</span>` +
-          `<strong>${secs(live.grade_ms)}</strong></span>`
-        : "");
+      (live.pending
+        ? `<span class="score-aside-pair"><span>grading</span>` +
+          `<strong class="score-aside-wait">…</strong></span>`
+        : live.grade_ms != null && live.grade_ms > 0
+          ? `<span class="score-aside-pair"><span>then graded in</span>` +
+            `<strong>${secs(live.grade_ms)}</strong></span>`
+          : "");
     el.appendChild(t);
   }
 

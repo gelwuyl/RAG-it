@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from . import auth as authn
+from . import pipeline
 from . import deepsearch
 from . import guests
 from .config import (
@@ -1232,23 +1233,80 @@ def ask_chat(
     # The searcher is built here, where the session lives, and handed to the
     # pipeline as a plain callable — pipeline.py stays free of the ORM, and the
     # scan runs against the REWRITTEN query, which ask() computes.
+    # grade=False: the two judges are two more sequential model calls and cost
+    # more than writing the answer does. The reader gets the answer now and the
+    # verdicts arrive from /grade below, a request later. Sliced the same way
+    # the benchmark is, and for the same reason — a serverless function cannot
+    # keep working after it has responded.
     result = ask(
         user.id, body.question, history, cfg,
         deep_search=deepsearch.searcher(db, user.id) if body.deep_search else None,
+        grade=False,
     )
 
-    db.add(
-        Message(
-            conversation_id=chat_id,
-            role="assistant",
-            content=result["answer"],
-            citations=json.dumps(result["citations"]),
-            eval_line=result.get("eval_line") or None,
-            eval_data=json.dumps(result["eval"]) if result.get("eval") else None,
-        )
+    msg = Message(
+        conversation_id=chat_id,
+        role="assistant",
+        content=result["answer"],
+        citations=json.dumps(result["citations"]),
+        eval_line=result.get("eval_line") or None,
+        eval_data=json.dumps(result["eval"]) if result.get("eval") else None,
+        # Only answers that HAVE passages can be graded. A not-found reply has
+        # no context and no verdict to reach for.
+        eval_context=(
+            json.dumps({"q": result.get("effective_query") or body.question, "context": result["context"]})
+            if result.get("context")
+            else None
+        ),
     )
+    db.add(msg)
     db.commit()
+    # The client needs this to ask for the grade; nothing else changes shape.
+    result["message_id"] = msg.id
+    result.pop("context", None)
+    result.pop("effective_query", None)
     return result
+
+
+@app.post("/api/chats/{chat_id}/messages/{message_id}/grade")
+def grade_message(
+    chat_id: str,
+    message_id: str,
+    user: User = Depends(authn.get_current_user),
+    db: Session = Depends(get_session),
+):
+    """Grade an answer that has already been delivered.
+
+    Second half of the split above. Kept idempotent: the client fires it once
+    per answer, but a retry after a timeout must not spend two more judge calls
+    and must not overwrite a verdict with a fresh failure.
+    """
+    conv = db.get(Conversation, chat_id)
+    if not conv or conv.user_id != user.id:
+        raise HTTPException(status_code=404, detail="Chat not found")
+    msg = db.get(Message, message_id)
+    if not msg or msg.conversation_id != chat_id:
+        raise HTTPException(status_code=404, detail="Message not found")
+
+    stored = json.loads(msg.eval_data) if msg.eval_data else {}
+    if stored and not stored.get("pending"):
+        return {"eval": stored, "eval_line": msg.eval_line}
+    if not msg.eval_context:
+        # Nothing to grade against — a not-found answer, or a message written
+        # before this split existed. Say so rather than inventing a verdict.
+        stored["pending"] = False
+        msg.eval_data = json.dumps(stored)
+        db.commit()
+        return {"eval": stored, "eval_line": msg.eval_line}
+
+    ctx = json.loads(msg.eval_context)
+    graded = pipeline.grade_answer(ctx.get("q") or "", msg.content,
+                                   ctx.get("context") or "", load_config())
+    stored.update(graded)
+    msg.eval_data = json.dumps(stored)
+    msg.eval_line = pipeline.eval_line_from(stored, stored.get("latency_ms"))
+    db.commit()
+    return {"eval": stored, "eval_line": msg.eval_line}
 
 
 # ---------- eval ----------

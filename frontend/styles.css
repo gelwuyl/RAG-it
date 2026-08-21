@@ -1094,7 +1094,14 @@ html[data-kind="guest"] .identity-hint .hint-badge { display: inline-block; }
    The bar animates because the movement IS the information: watching it jump
    as each answer lands is what makes "is this one normal?" a glance. */
 .score-fill { transition: width 420ms cubic-bezier(0.22, 0.61, 0.36, 1); }
-@media (prefers-reduced-motion: reduce) { .score-fill { transition: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .score-fill { transition: none; }
+  /* The wait still has to be legible without motion, so the bar holds the
+     accent instead of sweeping it. */
+  .score-row.is-waiting .score-bar::after { animation: none; width: 100%; opacity: 0.3; }
+  .score-aside-wait,
+  .eval-dot[data-state="pending"] { animation: none; }
+}
 /* Muted while it is only showing the benchmark: nothing has been asked yet, so
    there is no reading to emphasise. */
 .score-fill.bench { background: var(--border-strong); }
@@ -1116,6 +1123,33 @@ html[data-kind="guest"] .identity-hint .hint-badge { display: inline-block; }
   letter-spacing: var(--tracking-telemetry); text-transform: uppercase;
   color: var(--faint);
 }
+/* Waiting on the judges.
+   The answer is delivered before grading now, so these two rows sit empty for
+   a few seconds on every question. That gap has to read as "a reading is
+   coming" and NOT as "no reading was taken" — the app reports the second
+   state, honestly and deliberately, when a judge breaks, and confusing the two
+   would turn a normal few seconds into an apparent fault on every answer.
+   Hence motion: nothing else in this pane moves while it is idle. */
+@keyframes score-wait {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(320%); }
+}
+.score-row.is-waiting .score-fill { opacity: 0.28; }
+.score-row.is-waiting .score-bar::after {
+  content: ""; position: absolute; inset: 0 auto 0 0;
+  width: 30%; border-radius: var(--r-pill);
+  background: linear-gradient(90deg, transparent, var(--primary), transparent);
+  animation: score-wait 1.35s ease-in-out infinite;
+}
+.score-row.is-waiting .score-val { color: var(--primary-ink); }
+.score-aside-wait { animation: dot-pulse 1.2s ease-in-out infinite; }
+/* Lime is the app's ACTIVE colour, and grading in progress is exactly that —
+   unlike "ungraded", which is hollow because no reading was taken at all. */
+.eval-dot[data-state="pending"] {
+  background: var(--primary);
+  animation: dot-pulse 1.2s ease-in-out infinite;
+}
+
 .score-aside { flex-wrap: wrap; }
 .score-aside-pair { display: inline-flex; align-items: baseline; gap: 7px; }
 .score-aside strong {
