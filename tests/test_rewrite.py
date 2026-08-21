@@ -148,3 +148,59 @@ def test_end_to_end_rewrite_strips_the_trace(monkeypatch):
     monkeypatch.setattr("ragchat.pipeline._chat", lambda *a, **k: REAL_REPLY)
     history = [{"role": "user", "content": "What are the menu prices?"}]
     assert rewrite_query(ORIGINAL, history, _Cfg()) == WANTED
+
+
+# --------------------------------------------------------------------------
+# The prompt itself carries a correctness requirement, so it is asserted.
+#
+# Told only to "resolve pronouns and references", the model resolved ones that
+# were never there: after two turns about a solar battery, "What is the boiler
+# pressure range for the espresso machine?" came back — deterministically — as
+# "...for the SunPak 5 espresso machine". Retrieval then hunted for a product
+# that does not exist and the reader was told the fact was not in their
+# documents, while it sat in the corpus a paragraph away from an answer they
+# had already been given.
+#
+# Asserting on prompt text is unusual and deliberate. The instruction is load
+# bearing and invisible: nothing else in the suite fails if it is dropped,
+# because the bug needs a live model AND several turns to appear.
+# --------------------------------------------------------------------------
+
+
+def _captured_prompt(monkeypatch) -> str:
+    seen = {}
+
+    def _capture(model, messages, temperature):
+        seen["p"] = messages[0]["content"]
+        return "anything"
+
+    monkeypatch.setattr("ragchat.pipeline._chat", _capture)
+    rewrite_query(
+        "What is the boiler pressure range for the espresso machine?",
+        [{"role": "user", "content": "How long is the SunPak warranty?"},
+         {"role": "assistant", "content": "10 years."}],
+        _Cfg(),
+    )
+    return seen["p"]
+
+
+def test_the_prompt_tells_the_model_to_leave_a_standalone_question_alone(monkeypatch):
+    p = _captured_prompt(monkeypatch).lower()
+    assert "unchanged" in p, (
+        "the rewrite prompt no longer tells the model to return a standalone "
+        "question unchanged — see this section's comment for what that costs"
+    )
+
+
+def test_the_prompt_forbids_importing_a_subject_from_an_earlier_turn(monkeypatch):
+    p = _captured_prompt(monkeypatch).lower()
+    assert "never add" in p, (
+        "the rewrite prompt no longer forbids adding a subject the latest "
+        "question does not refer to — this is the SunPak-espresso-machine bug"
+    )
+
+
+def test_the_conversation_and_the_question_still_reach_the_model(monkeypatch):
+    """The guards above must not have crowded out what the step is for."""
+    p = _captured_prompt(monkeypatch)
+    assert "SunPak" in p and "boiler pressure range" in p

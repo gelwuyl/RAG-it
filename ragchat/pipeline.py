@@ -223,15 +223,35 @@ def _clean_rewrite(raw: str, fallback: str) -> str:
 def rewrite_query(
     query: str, history: list[dict], cfg: PipelineConfig
 ) -> str:
-    """Resolve follow-ups against chat history into a standalone query (PRD §5)."""
+    """Resolve follow-ups against chat history into a standalone query (PRD §5).
+
+    Telling the model to leave a standalone question ALONE is not padding — it
+    is the correctness of this step. Instructed only to "resolve references",
+    it resolves ones that were never there: after two turns about a solar
+    battery, "What is the boiler pressure range for the espresso machine?" came
+    back, deterministically, as "...for the SunPak 5 espresso machine".
+    Retrieval then hunted for a product that does not exist, nothing cleared
+    the threshold, and the reader was told "I couldn't find this in your
+    documents" — about a fact sitting in the corpus, in the same paragraph as
+    the answer they had been given two turns earlier.
+
+    That failure cannot be seen one question at a time, which is how it
+    survived: rewriting is skipped entirely when there is no history.
+    """
     if not cfg.query_rewrite or not history:
         return query
     tail = history[-6:]
     convo = "\n".join(f"{m['role']}: {m['content']}" for m in tail)
     prompt = (
-        "Rewrite the user's latest question into a standalone search query, "
-        "resolving pronouns and references using the conversation. Reply with "
-        "only the rewritten query, nothing else.\n\n"
+        "Rewrite the user's latest question into a standalone search query.\n"
+        "Resolve a pronoun or reference ONLY where the latest question is "
+        "incomplete without the conversation, such as 'what about the second "
+        "one?'.\n"
+        "If the latest question already stands on its own, reply with it "
+        "UNCHANGED.\n"
+        "Never add a name, product or subject from an earlier turn that the "
+        "latest question does not itself refer to.\n"
+        "Reply with only the query, nothing else.\n\n"
         f"Conversation:\n{convo}\n\nLatest question: {query}"
     )
     try:
