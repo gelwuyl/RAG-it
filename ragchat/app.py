@@ -1242,9 +1242,13 @@ def ask_chat(
     # verdicts arrive from /grade below, a request later. Sliced the same way
     # the benchmark is, and for the same reason — a serverless function cannot
     # keep working after it has responded.
+    # The tool is ALWAYS handed over; the switch only says whether the visitor
+    # is forcing it. Left off, ask() decides for itself whether to reach for it
+    # — which is the whole point of the escalation in pipeline.ask.
     result = ask(
         user.id, body.question, history, cfg,
-        deep_search=deepsearch.searcher(db, user.id) if body.deep_search else None,
+        deep_search=deepsearch.searcher(db, user.id),
+        force_deep=bool(body.deep_search),
         grade=False,
     )
 

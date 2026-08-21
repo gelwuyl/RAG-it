@@ -47,7 +47,7 @@ is the live page at [`/built`](https://rag-gel.vercel.app/built).
 | Evaluation pane | Ships with a scored result — **nobody runs a benchmark to see it** (§11) |
 | Benchmark runs | Client-driven slices, never a background thread (§13) |
 | Mobile | Genuinely good, and a **different product shape** from desktop (§9) |
-| Deep search | Per-request, never a stored setting (§10) |
+| Deep search | Per-request, never a stored setting. The app reaches for it **by itself** when ranked search comes up short; the switch is an override (§10) |
 | Grading | Runs **after** the answer is delivered, in its own request (§10) |
 
 **Visual reference:** [joeynyc/Grok-UI](https://github.com/joeynyc/Grok-UI) —
@@ -413,17 +413,59 @@ every scored passage falls below `similarity_threshold` — and deliberately doe
 pool is the absence of evidence rather than evidence of absence. That is exactly
 the part-number case fusion exists for.
 
-### Where this is going
+### The escalation — the app reaching for a second tool by itself
 
-The intended end state is agentic, and the repo's name means it. Today `ask()`
-runs a fixed pipeline and deep search is a flag the *visitor* sets. The intent
-is that the **model** decides, per question: was retrieval enough; if not, is
-this a case for a literal scan; if not, does it need something from outside.
+The first place this pipeline **chooses an action** instead of executing a fixed
+line. `ask()` is always handed the deep-search tool; `force_deep` only says
+whether the visitor is holding the switch down. Left off, `ask()` decides.
 
-The wiring already fits: `ask(..., deep_search=<callable>)` takes a tool rather
-than a boolean, every passage in the pool is chunk-shaped and carries
+It escalates at exactly the two points retrieval already knows it failed:
+
+| Trigger | Where | What it does |
+|---|---|---|
+| `weak_retrieval` | nothing cleared `similarity_threshold`, about to refuse | scan, and if anything comes back, generate instead of refusing |
+| `model_refused` | the model read the passages and replied `NOT_FOUND_ANSWER` | scan, and if anything comes back, rebuild the pool and answer **once** more |
+
+Three properties make it safe, and all three are asserted in
+`tests/test_escalation.py`:
+
+- **Free on the happy path.** A question that was going to be answered never
+  touches the tool. The scan itself costs *no model call* — it reads
+  `Document.source_text` and matches literally — so the only real cost is one
+  extra generation, spent solely on questions that were about to fail anyway.
+- **Provably finite.** `scanned` can go true once, so the tool is used at most
+  once and the answer is generated at most twice. A serverless function frozen
+  the instant it responds, with 60 seconds to work in, cannot host an
+  open-ended `while`: this is a ladder with one rung.
+- **It degrades to what came before.** A failing scan, or a failing retry, keeps
+  the refusal that already existed. Neither can turn a truthful answer into a
+  500.
+
+**It is deliberately not driven by the judges,** which is the counter-intuitive
+part. `NOT_FOUND_ANSWER` is entirely faithful to its context and squarely
+answers the question, so *both judges pass it* — the grader is blind to exactly
+the failure deep search fixes. The judges also arrive a request later now, by
+which time the reader is already reading. Retrieval confidence and the model's
+own refusal are both free, both earlier, and both actually correlated with the
+thing being fixed.
+
+**And it says so.** An answer that exists because the machine decided to try a
+second tool is not the same object as one that came straight back, and the
+reader has no other way to tell. `eval_data.escalated` carries the reason and
+the UI renders a line under the answer. A refusal *after* a scan also makes the
+larger claim — "I also searched every document word for word" — because that is
+a materially stronger statement than giving up after a ranked search.
+
+### What is still missing
+
+The trigger is a **rule**, not a judgement: the app decides *when* to look
+harder, but the choice of tool is still hard-coded, because there is only one
+tool to choose. Real tool selection needs a third option to select between.
+
+The wiring is shaped for it: `ask(..., deep_search=<callable>)` takes a tool
+rather than a boolean, every passage in the pool is chunk-shaped and carries
 `similarity: None` when it has no measured distance, and `_drop_duplicates`
-already exists because any observe step needs it.
+exists because any observe step needs it.
 
 **Web search was deleted, not foreclosed.** It came back as an answer to "your
 documents did not have it" by looking somewhere else instead of looking harder,
@@ -720,9 +762,9 @@ protection is fine to keep — just register that preview URL's callback too.
   visible count; a `n_citations` field on `GET /api/documents` would make it
   accurate across chats.
 - **Deep search earns nothing on the sample corpus.** With six passages ordinary
-  search already returns all of them, so there is nothing left to rescue. It
-  pays off on real document sets, and that is an honest limitation rather than a
-  bug to chase.
+  search already returns all of them, so there is nothing left to rescue — and
+  the escalation therefore almost never fires for a guest. It pays off on real
+  document sets, and that is an honest limitation rather than a bug to chase.
 - **Cold start is ~9s** and most of what remains is the hosting plan. The page
   is built to stay honest while it waits.
 

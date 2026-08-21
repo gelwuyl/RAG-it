@@ -913,6 +913,20 @@ html[data-kind="guest"] .identity-hint .hint-badge { display: inline-block; }
 
 /* Per-answer quality readout (IDEA.md §6).
    One ~20px line by default; the four detail rows are one click away. */
+/* The app went and looked again on its own, and says so.
+   Sits ABOVE the verdict chip because it explains where the answer came from,
+   which the reader needs before they weigh how good it was. Lime because lime
+   means the app did something (§1) — this is the one line on the page
+   describing an action nobody asked for, and it should read that way. Not
+   uppercase telemetry: it is a sentence about what happened, and the telemetry
+   register is for readings. */
+.escalation-note {
+  display: flex; gap: 7px; align-items: baseline;
+  font-size: var(--text-xs); line-height: 1.5;
+  color: var(--primary-ink);
+}
+.escalation-mark { flex-shrink: 0; opacity: 0.75; }
+
 .eval-block {
   margin-top: 12px;
   border-top: 1px solid var(--border);

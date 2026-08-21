@@ -211,8 +211,11 @@ const GLOSSARY = {
     "question, and a passage that ranks 21st out of 20 is simply not there. " +
     "Deep search does not rank. It reads every document you own word for " +
     "word and pulls out every literal occurrence of your terms, so if the " +
-    "words are in your documents they reach the answer. Slower, and only for " +
-    "the question you send it with — it is not a setting.",
+    "words are in your documents they reach the answer. You do not have to " +
+    "ask for it: when ranked search comes up short, the app runs it by " +
+    "itself and says so under the answer. Turn it on to force it on every " +
+    "question. Either way it applies only to the question you send it with — " +
+    "it is not a setting.",
   ],
   "re-index": [
     "Re-index",
@@ -1103,13 +1106,19 @@ async function refreshLiveConfig() {
 // It stays on once turned on, because someone who needed it for one question
 // usually needs it for the follow-up too, and the button says so at a glance.
 // Guests may use it: it reads their own documents and spends no model call.
+//
+// OFF no longer means "never". The tool is always handed to ask(), which
+// reaches for it by itself when ranked retrieval comes up short (pipeline.ask,
+// ESCALATION 1 and 2). This switch is the override: hold it down and the scan
+// runs on every question, including the ones the ranker was confident about —
+// which is exactly when a literal hit it missed goes unnoticed.
 $("deep-toggle").onclick = () => {
   state.deepSearch = !state.deepSearch;
   syncDeepToggle();
   toast(
     state.deepSearch
-      ? "Deep search ON — every document scanned word-for-word, alongside ranked search"
-      : "Deep search OFF — ranked search only",
+      ? "Deep search ON — every question scanned word-for-word, alongside ranked search"
+      : "Deep search AUTO — used on its own when ranked search comes up short",
   );
 };
 
@@ -1942,6 +1951,27 @@ function buildEvalBlock(evalData, evalLine) {
   // most recent answer and older ones would lose their scores entirely.
   const wrap = document.createElement("div");
   wrap.className = "eval-block";
+
+  // Say when the app went and looked again on its own.
+  //
+  // An answer that exists because the machine decided to try a second tool is
+  // not the same object as one that came straight back, and the reader has no
+  // other way to tell. This app's whole argument is that you show what you
+  // did, and a silent self-correction is the one place that would be easiest
+  // to skip and worst to skip.
+  const why = evalData && typeof evalData === "object" ? evalData.escalated : null;
+  if (why) {
+    const note = document.createElement("div");
+    note.className = "escalation-note";
+    note.innerHTML =
+      `<span class="escalation-mark" aria-hidden="true">⤷</span>` +
+      `<span>${
+        why === "weak_retrieval"
+          ? "Ranked search found nothing close enough, so every document was scanned word for word."
+          : "The first pass came up empty, so every document was scanned word for word and the answer rewritten."
+      }</span>`;
+    wrap.appendChild(note);
+  }
 
   if (evalData && typeof evalData === "object") {
     const { state: verdict, word } = evalVerdict(evalData);

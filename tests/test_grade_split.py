@@ -59,7 +59,7 @@ def answered(client, monkeypatch):
     """A chat holding one answered-but-ungraded assistant message."""
     from ragchat import app as rapp
 
-    def _fake_ask(user_id, query, history, cfg, deep_search=None, grade=True):
+    def _fake_ask(user_id, query, history, cfg, deep_search=None, force_deep=False, grade=True):
         assert grade is False, "the chat route must not wait for the judges"
         return {
             "answer": ANSWER,
@@ -216,7 +216,7 @@ def test_an_answer_with_no_context_stops_pending_instead_of_hanging(client, monk
     than spin forever on a grade that can never arrive."""
     from ragchat import app as rapp
 
-    def _not_found(user_id, query, history, cfg, deep_search=None, grade=True):
+    def _not_found(user_id, query, history, cfg, deep_search=None, force_deep=False, grade=True):
         return {"answer": "No match in your documents.",
                 "not_found": True, "citations": [], "eval_line": "12 ms"}
 

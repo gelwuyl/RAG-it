@@ -542,12 +542,71 @@ def _line(eval_d: dict | None, top_sim: float | None, deep: int, latency_ms: flo
     return " · ".join(parts)
 
 
+def _rank_pool(effective_query: str, chunks: list[dict], deep_chunks: list[dict],
+               cfg: PipelineConfig) -> list[dict]:
+    """Merge the ranked and literal pools and order them. Called twice when the
+    app escalates, which is why it is a function rather than inline code."""
+    pool = chunks + deep_chunks
+    if pool:
+        return _rerank(effective_query, pool, cfg)
+    return chunks[: cfg.top_k]
+
+
+def _write_answer(effective_query: str, pool: list[dict], history: list[dict],
+                  cfg: PipelineConfig) -> tuple[str, str]:
+    """Generate one answer from one pool. Returns (answer, context).
+
+    Raises whatever the provider raises — the caller decides whether a failure
+    is fatal (first attempt) or survivable (an escalation retry, where an
+    answer already exists).
+    """
+    context = _build_context(pool)
+    convo = "\n".join(f"{m['role']}: {m['content']}" for m in history[-6:])
+    user_prompt = (
+        f"Sources:\n{context}\n\n"
+        + (f"Conversation so far:\n{convo}\n\n" if convo else "")
+        + f"Question: {effective_query}"
+    )
+    answer = _chat(
+        cfg.llm_model,
+        [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": user_prompt},
+        ],
+        cfg.temperature,
+    )
+    # Strip reasoning wrappers some models emit (e.g. <thought>...) so the
+    # user-facing text is clean and the not-found guard / citation parsing
+    # aren't poisoned by a stray phrase inside the reasoning block.
+    return _clean_answer(answer), context
+
+
+def _refused(answer: str) -> bool:
+    return NOT_FOUND_ANSWER.lower() in (answer or "").lower()
+
+
+def _refusal_text(scanned: bool) -> str:
+    """What a refusal says depends on how hard the app looked.
+
+    "I couldn't find this" after a ranked search and after reading every
+    document word for word are different claims, and the second one is much
+    stronger. Saying so is the difference between a system that gave up and one
+    that finished looking. Kept as a SUFFIX so the string still starts with
+    NOT_FOUND_ANSWER — `_refused` and the frontend's not-found styling both
+    match on that prefix.
+    """
+    if not scanned:
+        return NOT_FOUND_ANSWER
+    return NOT_FOUND_ANSWER + " I also searched every document word for word."
+
+
 def ask(
     user_id: str,
     query: str,
     history: list[dict],
     cfg: PipelineConfig,
     deep_search=None,
+    force_deep: bool = False,
     grade: bool = True,
 ) -> dict:
     """Answer a question. Returns {answer, not_found, citations, eval_line, eval}.
@@ -558,12 +617,15 @@ def ask(
     hands the answer over first and grades it in a second request via
     `grade_answer`. The benchmark passes grade=True: nothing waits on it there.
 
-    `deep_search` is an optional callable taking the rewritten query and
-    returning extra chunk-shaped passages — in practice
-    `deepsearch.searcher(db, user_id)`. Passed as a function rather than a
-    session so this module stays free of the ORM, and given the REWRITTEN query
-    because a follow-up like "and the second one?" must not be scanned for the
-    word "second".
+    `deep_search` is a TOOL: a callable taking the rewritten query and returning
+    extra chunk-shaped passages — in practice `deepsearch.searcher(db,
+    user_id)`. Passed as a function rather than a session so this module stays
+    free of the ORM, and given the REWRITTEN query because a follow-up like "and
+    the second one?" must not be scanned for the word "second".
+
+    `force_deep` is the visitor holding the switch down. Left False, the tool is
+    still available and `ask` decides for itself whether to reach for it — see
+    the escalation below.
     """
     t0 = time.time()
     effective_query = rewrite_query(query, history, cfg)
@@ -586,13 +648,28 @@ def ask(
     # is most valuable precisely when the ranker is confident, because that is
     # when nobody looks twice.
     deep_chunks: list[dict] = []
-    if deep_search is not None:
+    scanned = False          # the tool has been used; it is never used twice
+    escalated: str | None = None   # ...and if so, what made the app reach for it
+
+    def _scan() -> list[dict]:
+        """Use the literal-scan tool once.
+
+        `scanned` is what bounds the escalation: a serverless function has 60
+        seconds and cannot host an open-ended reason/act loop, so this is a
+        ladder with one rung rather than a `while`.
+        """
+        nonlocal scanned
+        scanned = True
         try:
-            deep_chunks = _drop_duplicates(deep_search(effective_query), chunks)
+            return _drop_duplicates(deep_search(effective_query), chunks)
         except Exception:
             # A scan failing must not cost the visitor their answer; ranked
             # retrieval already has one.
             log.exception("deep search failed for user %s", user_id)
+            return []
+
+    if deep_search is not None and force_deep:
+        deep_chunks = _scan()
 
     # Nothing cleared the bar and nothing matched literally: refuse here rather
     # than spending a generation call to be told the same thing.
@@ -610,44 +687,39 @@ def ask(
     # fusion exists for: part numbers, form codes, names. Refusing there would
     # break the case hybrid retrieval was added to fix. Only refuse when there
     # ARE scores to judge by and every one of them falls short.
-    nothing_relevant = (
-        not deep_chunks
-        and bool(doc_sims)
-        and max(doc_sims) < _effective_threshold(cfg)
-    )
-    if chunks and nothing_relevant:
+    def _nothing_relevant() -> bool:
+        return (
+            not deep_chunks
+            and bool(doc_sims)
+            and max(doc_sims) < _effective_threshold(cfg)
+        )
+
+    # ESCALATION 1 — about to refuse on weak retrieval, and the literal scan has
+    # not been tried. Reach for it now.
+    #
+    # This is the cheapest possible place to be agentic: the scan costs no model
+    # call at all (it reads Document.source_text and matches literally), and
+    # this branch only runs on questions that were about to be refused. Nothing
+    # is spent on a question that was going to be answered anyway.
+    if chunks and _nothing_relevant() and deep_search is not None and not scanned:
+        deep_chunks = _scan()
+        if deep_chunks:
+            escalated = "weak_retrieval"
+
+    if chunks and _nothing_relevant():
         return {
-            "answer": NOT_FOUND_ANSWER,
+            "answer": _refusal_text(scanned),
             "not_found": True,
             "citations": [],
             "eval_line": _build_eval_line(None, chunks, (time.time() - t0) * 1000),
         }
 
-    pool = chunks + deep_chunks
-    if pool:
-        pool = _rerank(effective_query, pool, cfg)
-    else:
-        pool = chunks[: cfg.top_k]
-
+    pool = _rank_pool(effective_query, chunks, deep_chunks, cfg)
     if not pool:
-        return {"answer": NOT_FOUND_ANSWER, "not_found": True, "citations": []}
+        return {"answer": _refusal_text(scanned), "not_found": True, "citations": []}
 
-    context = _build_context(pool)
-    convo = "\n".join(f"{m['role']}: {m['content']}" for m in history[-6:])
-    user_prompt = (
-        f"Sources:\n{context}\n\n"
-        + (f"Conversation so far:\n{convo}\n\n" if convo else "")
-        + f"Question: {effective_query}"
-    )
     try:
-        answer = _chat(
-            cfg.llm_model,
-            [
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": user_prompt},
-            ],
-            cfg.temperature,
-        )
+        answer, context = _write_answer(effective_query, pool, history, cfg)
     except Exception as exc:
         # Generation failure (quota, model error) must not crash with a 500.
         return {
@@ -656,14 +728,31 @@ def ask(
             "citations": [],
         }
 
-    # Strip reasoning wrappers some models emit (e.g. ``) so the
-    # user-facing text is clean and the not-found guard / citation parsing
-    # aren't poisoned by a stray phrase inside the reasoning block.
-    answer = _clean_answer(answer)
+    # ESCALATION 2 — retrieval looked fine, the model read it, and still said
+    # the answer is not in the documents. That verdict is about the passages it
+    # was HANDED, not about the documents, and it is the strongest signal in the
+    # system that ranking dropped something: it comes from the one component
+    # that actually read the text.
+    #
+    # Deliberately NOT driven by the judges. `NOT_FOUND_ANSWER` is entirely
+    # faithful to its context and squarely answers the question, so both judges
+    # pass it — the grader cannot see this failure. It also arrives a request
+    # later now (see `grade`), by which time the reader is already reading.
+    if _refused(answer) and deep_search is not None and not scanned:
+        deep_chunks = _scan()
+        if deep_chunks:
+            escalated = "model_refused"
+            pool = _rank_pool(effective_query, chunks, deep_chunks, cfg)
+            try:
+                answer, context = _write_answer(effective_query, pool, history, cfg)
+            except Exception:
+                # The retry is a bonus. Failing it must not cost the refusal we
+                # already had, which is a truthful answer in its own right.
+                log.exception("escalated retry failed for user %s", user_id)
 
-    if NOT_FOUND_ANSWER.lower() in answer.lower():
+    if _refused(answer):
         return {
-            "answer": NOT_FOUND_ANSWER,
+            "answer": _refusal_text(scanned),
             "not_found": True,
             "citations": [],
             "eval_line": _build_eval_line(None, pool, (time.time() - t0) * 1000),
@@ -705,10 +794,16 @@ def ask(
     # honest number. The UI renders this as "Answered in".
     answer_ms = (time.time() - t0) * 1000
     eval_d = _eval_answer(effective_query, answer, context, cfg) if grade else _ungraded_eval(cfg)
+    # An escalation is a thing the APP decided to do, so it is reported even
+    # when evaluation is switched off entirely. Hiding a decision the reader did
+    # not make would be the worst of the options here.
+    if escalated and eval_d is None:
+        eval_d = {}
     # Enrich the eval dict with the retrieval top-similarity and end-to-end
     # latency so the UI can render a self-contained, readable performance block
     # (no need to parse the terse eval_line string).
     if eval_d is not None:
+        eval_d["escalated"] = escalated
         sims = [c["similarity"] for c in pool if c.get("similarity") is not None]
         eval_d["top_sim"] = round(max(sims), 4) if sims else None
         eval_d["latency_ms"] = round(answer_ms)

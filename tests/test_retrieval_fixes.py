@@ -77,6 +77,17 @@ from ragchat import config as _cfg
 from ragchat import store as _store
 from ragchat import pipeline as _pl
 
+# ...and again on the pipeline itself, because `pipeline.py` does
+# `from .embeddings import ProxyEmbeddings`, which binds the name into its own
+# namespace at ITS import time. Patching only `ragchat.embeddings` therefore
+# works exactly as long as this file is the first to import the pipeline — and
+# silently stops working the moment any test module sorting earlier does so,
+# at which point every test here reaches the real embedding API instead. That
+# is not a hypothetical: adding tests/test_escalation.py broke ten tests in
+# this file until this line existed, and the failure looked like a network
+# error rather than like a test-isolation bug.
+_pl.ProxyEmbeddings = _StubEmbeddings
+
 
 @pytest.fixture(autouse=True)
 def fresh_tmp_store(tmp_path, monkeypatch):
@@ -341,7 +352,12 @@ def test_a_deep_hit_reaches_the_context_even_when_ranking_would_miss_it(monkeypa
             "deep": True,
         }]
 
-    res = _pl.ask("user-DS", "servicing interval", [], _make_cfg(), deep_search=_deep)
+    # force_deep: this is the visitor holding the switch down. The tool then
+    # runs unconditionally, ranked retrieval notwithstanding — which is the
+    # point, because a literal hit the ranker missed matters most when the
+    # ranker looked confident.
+    res = _pl.ask("user-DS", "servicing interval", [], _make_cfg(),
+                  deep_search=_deep, force_deep=True)
     assert "serviced every 400 hours" in seen["prompt"], (
         "a literal hit was found and then dropped before generation"
     )
