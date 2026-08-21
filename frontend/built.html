@@ -122,9 +122,17 @@
               nothing — because the distance was the cost, not the work.</p>
           </div>
           <div class="trace-note">
-            <span class="trace-key">Are-you-there pings · one per request</span>
-            <p>Free against a local file, a full round trip against a hosted
-              database. Now connections retire on age instead.</p>
+            <span class="trace-key">Waiting to be marked · 56% of the wait</span>
+            <p>Every answer was scored before you were allowed to read it —
+              and scoring cost more than writing it. The answer now arrives
+              first and the marks land a moment later.</p>
+          </div>
+          <div class="trace-note">
+            <span class="trace-key">It invented a product</span>
+            <p>Ask two questions, then a third about something else, and the
+              app said the answer wasn't in your documents — a paragraph from
+              one it had already given you. The step that tidies your question
+              had glued the previous subject onto it.</p>
           </div>
           <div class="trace-note">
             <span class="trace-key">Sign-in button · 1.2s → 30ms</span>
@@ -190,9 +198,9 @@
           <div class="card">
             <h3 class="card-title">Cold starts</h3>
             <p class="card-text">The first visitor after a quiet spell waits
-              25–30 seconds while the server and database wake up. Loading the
-              code is 1.25s of that. The rest is the hosting plan, not the
-              code — so the page is built to stay honest while it waits.</p>
+              about 9 seconds while the server and database wake up. It was
+              25–30, blamed on the hosting plan — wrongly. Most of it was the
+              same ocean as everything else on this page.</p>
           </div>
           <div class="card">
             <h3 class="card-title">Word-for-word search does nothing here</h3>

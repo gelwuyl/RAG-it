@@ -404,6 +404,13 @@ async function initAuth() {
     applyAuthStatus(status);
   } catch (e) {
     console.error("auth failed:", e);
+    // Stand the skeleton down even though nothing was resolved. It is sized to
+    // the real button so the bar does not move when it is replaced — but if it
+    // is never replaced it sits BESIDE the real one, and two sign-in shapes in
+    // a 320px top bar collide with the controls next to them. An unanswered
+    // status call is a reason to stop reserving space, not to reserve it
+    // forever.
+    document.documentElement.classList.add("identity-resolved");
   }
   showApp();
   try {

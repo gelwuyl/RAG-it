@@ -1824,6 +1824,16 @@ fieldset legend {
   .google-btn-long { display: none; }
 }
 
+@media (max-width: 360px) {
+  /* Last thing to give. Below this the four items in the top row want ~356px
+     of a 320px screen, and because identity is pinned to the end of its track
+     it does not queue politely — it slides UNDER the theme toggle, which reads
+     as a rendering fault rather than as a tight fit. The wordmark is the only
+     item on that row that is decoration: the mark beside it says the same
+     thing, and every other control does something. */
+  .brand-name { display: none; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
 }
