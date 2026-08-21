@@ -1815,7 +1815,12 @@ async function openChat(chatId) {
   // on a later visit where the loop state was lost with the browser storage.
   markBeat("asked");
   for (const m of chat.messages) {
-    appendMessage(m.role, m.content, m.citations || [], false, m.eval_line || "", m.eval_data || null);
+    const el = appendMessage(m.role, m.content, m.citations || [], false,
+      m.eval_line || "", m.eval_data || null, m.id);
+    // Reloaded into a thread whose last answer was still being graded: ask for
+    // the verdict again rather than leaving it spinning. Grading is idempotent,
+    // so this costs nothing when it has already finished.
+    if (m.eval_data?.pending && m.id) fetchGrade(chatId, m.id, el);
   }
   box.scrollTop = box.scrollHeight;
 }
@@ -1999,21 +2004,27 @@ async function fetchGrade(chatId, messageId, msgEl) {
     const graded = r && r.eval;
     if (!graded) return;
 
+    // Re-find the message rather than trusting the element we started with:
+    // ten seconds is long enough for a chat refresh to have replaced it.
+    const el =
+      document.querySelector(`.msg[data-message-id="${messageId}"]`) || msgEl;
+    if (!el || !el.isConnected) return;
+
     // Does this answer currently own the bars? Asked BEFORE the chip is
     // rebuilt, because the rebuild drops the marker that answers it.
-    const wasShown = !!msgEl?.querySelector(".eval-chip.is-shown");
+    const wasShown = !!el.querySelector(".eval-chip.is-shown");
 
     // Rebuild this answer's chip in place. A :last-child lookup would attach
     // the verdict to whatever answer happens to be last by the time the judges
     // reply, which on a slow provider is often a different one.
-    const block = msgEl?.querySelector(".eval-block");
+    const block = el.querySelector(".eval-block");
     if (block) block.replaceWith(buildEvalBlock(graded, r.eval_line || ""));
 
     // Move the bars only if they were already showing this answer. If the
     // reader has since asked something else, updating the pane underneath them
     // would label a newer answer with an older answer's verdict.
     if (wasShown) {
-      showAnswerOnScorecard(graded, msgEl?.querySelector(".eval-chip"));
+      showAnswerOnScorecard(graded, el.querySelector(".eval-chip"));
     }
   } catch (err) {
     // A failed grade leaves the answer ungraded, which is a state the UI
@@ -2023,13 +2034,19 @@ async function fetchGrade(chatId, messageId, msgEl) {
 }
 
 
-function appendMessage(role, content, citations = [], isPending = false, evalLine = "", evalData = null) {
+function appendMessage(role, content, citations = [], isPending = false, evalLine = "", evalData = null, messageId = null) {
   const box = $("messages");
   const hint = box.querySelector(".empty-state");
   if (hint) hint.remove();
 
   const el = document.createElement("div");
   el.className = `msg ${role}${isPending ? " pending" : ""}`;
+  // Stamped so a grade arriving later can find this answer again. Holding the
+  // element itself is not enough: a chat-list refresh re-renders the thread,
+  // and the held node is then detached — updates land on a DOM nobody is
+  // looking at, which is exactly how the chip stayed on "Grading…" while the
+  // bars behind it filled in.
+  if (messageId) el.dataset.messageId = messageId;
   if (role === "assistant") {
     if (isPending) {
       el.textContent = content;
@@ -2076,7 +2093,7 @@ $("ask-form").onsubmit = async (e) => {
     pending.remove();
     const msg = appendMessage(
       "assistant", result.answer, result.citations, false,
-      result.eval_line || "", result.eval || null,
+      result.eval_line || "", result.eval || null, result.message_id || null,
     );
     // The newest answer takes the bars without being asked. Watching them move
     // as each answer lands is the comparison; making the reader click first

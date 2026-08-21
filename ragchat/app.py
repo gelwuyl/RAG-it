@@ -1186,6 +1186,10 @@ def get_chat(
         "title": conv.title,
         "messages": [
             {
+                # The client needs this to ask for a grade that has not arrived
+                # yet — a reader who reloads mid-grading would otherwise be
+                # left looking at "Grading…" forever.
+                "id": m.id,
                 "role": m.role,
                 "content": m.content,
                 "citations": json.loads(m.citations) if m.citations else [],

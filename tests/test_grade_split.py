@@ -228,3 +228,14 @@ def test_an_answer_with_no_context_stops_pending_instead_of_hanging(client, monk
     ev = client.post(f"/api/chats/{cid}/messages/{body['message_id']}/grade").json()["eval"]
     assert calls["n"] == 0
     assert ev.get("pending") is False
+
+
+def test_the_thread_carries_message_ids(answered):
+    """A reader who reloads while an answer is being graded needs to be able to
+    ask for that verdict again. Without an id on the message there is nothing
+    to ask about, and the chip spins forever."""
+    client, cid, body = answered
+    msgs = client.get(f"/api/chats/{cid}").json()["messages"]
+    assistant = [m for m in msgs if m["role"] == "assistant"]
+    assert assistant and assistant[0]["id"] == body["message_id"]
+    assert assistant[0]["eval_data"]["pending"] is True
