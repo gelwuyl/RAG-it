@@ -370,6 +370,7 @@ def run_benchmark(
     rerank: bool = False,
     ceiling: bool = False,
     preset: str | None = None,
+    embedding_model: str | None = None,
 ) -> dict:
     """Run the full eval harness and return the report dict.
 
@@ -396,6 +397,17 @@ def run_benchmark(
             raise SystemExit(f"Unknown preset: {preset}")
         cfg = replace(cfg, **entry["values"])
         print(f"Preset: {entry['name']} ({preset}) — {entry['values']}")
+    if embedding_model:
+        # Comparing embedders is exactly what this harness is for, and until now
+        # the only way to do it was to edit config.yaml — which re-points the
+        # pipeline for every caller and leaves it re-pointed if the run dies.
+        # Applied in memory like --preset, and it changes the fingerprint, so
+        # the corpus is re-indexed under the new model rather than scored
+        # against vectors made by the old one.
+        from dataclasses import replace as _replace
+
+        cfg = _replace(cfg, embedding_model=embedding_model)
+        print(f"Embedding model: {embedding_model}")
     print(f"Config fingerprint: {cfg.fingerprint()}")
     print(
         f"Judge model: {judges.judge_model()} | MATCH_THRESHOLD (cosine): {MATCH_THRESHOLD}"
@@ -434,6 +446,7 @@ def run_benchmark(
         # Which named configuration this run scored, if any. Without it, comparing
         # four runs means reverse-engineering the preset from the config snapshot.
         "preset": preset,
+        "embedding_model_override": embedding_model,
         # Which pipeline the numbers describe. A pre-rerank run and a reranked
         # run measure different lists, so their scores are not comparable — and
         # a report that does not say which it was invites exactly that mistake.
@@ -520,6 +533,13 @@ def main() -> None:
         ),
     )
     ap.add_argument(
+        "--embedding-model",
+        default=None,
+        help="score a different embedding model instead of the configured one "
+             "(applied in memory, never persisted). Changes the fingerprint, so "
+             "the corpus is re-indexed under it.",
+    )
+    ap.add_argument(
         "--preset",
         default=None,
         help="score a named Settings preset instead of the live config "
@@ -527,6 +547,7 @@ def main() -> None:
     )
     args = ap.parse_args()
     run_benchmark(
+        embedding_model=args.embedding_model,
         limit=args.limit,
         retrieval_only=args.retrieval_only,
         rerank=args.with_rerank,

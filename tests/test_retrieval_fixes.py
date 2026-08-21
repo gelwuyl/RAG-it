@@ -115,7 +115,7 @@ def _make_cfg(**over):
         hybrid_search=False,
         reranker=False,
         query_rewrite=False,
-        llm_model="stub",
+        llm_model="stub", router_model="stub-router",
         temperature=0.0,
         embedding_model="text-embedding-005",
         embedding_provider="gemini",

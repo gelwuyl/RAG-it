@@ -94,6 +94,12 @@ class Settings:
         self.google_redirect_uri = os.environ.get("GOOGLE_REDIRECT_URI", "")
         # Default generation model; overridden by config.yaml
         self.default_llm_model = os.environ.get("RAG_LLM_MODEL", "gemma-4-26b-it")
+        # Boot default only, like every other default_* here: the live
+        # value comes from load_config(). Flash-lite because it is the
+        # cheapest model on this endpoint that actually emits tool calls.
+        self.default_router_model = os.environ.get(
+            "RAG_ROUTER_MODEL", "models/gemini-3.5-flash-lite"
+        )
         # Default embedding model name as exposed by the proxy. The proxy
         # serves only gemini-embedding-* models; gemini-embedding-001 is
         # requested at 768 dims (see embeddings.py) to fit pgvector's HNSW
@@ -382,6 +388,7 @@ class PipelineConfig:
     reranker: bool
     query_rewrite: bool
     llm_model: str
+    router_model: str
     temperature: float
     embedding_model: str
     embedding_provider: str
@@ -465,6 +472,12 @@ def load_config() -> PipelineConfig:
         reranker=bool(r.get("reranker", True)),
         query_rewrite=bool(q.get("query_rewrite", True)),
         llm_model=str(g.get("llm_model", settings.default_llm_model)),
+        # The model that CHOOSES a tool, which is not the model that writes.
+        # They are separated because the requirement differs: writing wants the
+        # best prose available, choosing wants function calling and speed. The
+        # answering model here emits no tool calls at all (verified live against
+        # the endpoint), so a single-model design cannot choose anything.
+        router_model=str(g.get("router_model", settings.default_router_model)),
         temperature=float(g.get("temperature", 0.0)),
         embedding_model=str(e.get("model", settings.default_embedding_model)),
         embedding_provider=str(e.get("provider", settings.default_embedding_provider)),
@@ -509,6 +522,7 @@ def save_config_override(cfg: "PipelineConfig") -> None:
         "query": {"query_rewrite": cfg.query_rewrite},
         "generation": {
             "llm_model": cfg.llm_model,
+            "router_model": cfg.router_model,
             "temperature": cfg.temperature,
         },
         "embedding": {"model": cfg.embedding_model, "provider": cfg.embedding_provider},

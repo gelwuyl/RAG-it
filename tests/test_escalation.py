@@ -47,7 +47,7 @@ def _make_cfg(**over):
         chunk_size=512, chunk_overlap=75, splitter="recursive",
         top_k=4, candidate_k=20, similarity_threshold=0.0,
         hybrid_search=False, reranker=False, query_rewrite=False,
-        llm_model="stub", temperature=0.0,
+        llm_model="stub", router_model="stub-router", temperature=0.0,
         embedding_model="text-embedding-005", embedding_provider="gemini",
         reranker_provider="gemini", eval_show=True,
     )
@@ -79,6 +79,19 @@ def rig(monkeypatch):
 
     monkeypatch.setattr(_pl, "retrieve", lambda *a, **k: list(state["pool"]))
     monkeypatch.setattr(_pl, "_eval_answer", lambda *a, **k: None)
+
+    # The router is a live model call. Left alone it reaches the network from
+    # every test with two tools available — slow, flaky, and testing someone
+    # else's uptime. None is its "no opinion" answer, which is the fixed order.
+    state["router_pick"] = None
+    state["router_calls"] = 0
+
+    def _router(query, passages, available, cfg):
+        state["router_calls"] += 1
+        state["router_saw"] = list(available)
+        return state["router_pick"]
+
+    monkeypatch.setattr(_pl.router, "choose_tool", _router)
 
     def _chat(model, messages, temperature):
         state["generations"] += 1
@@ -414,3 +427,87 @@ def test_tools_used_names_the_tools_and_not_the_citations(two_tools):
 def test_an_answer_that_needed_no_tool_reports_none_used(two_tools):
     res = _ask2(two_tools, grade=False)
     assert res["eval"]["tools_used"] == []
+
+
+# ==========================================================================
+# The router: a MODEL choosing the tool, rather than the fixed order.
+#
+# The order alone cannot tell "this should be in their documents, the ranker
+# missed it" from "this could never have been in a private document", so it
+# pays for a full literal scan before every web search. The router makes that a
+# judgement about the question.
+#
+# Everything here is really one property: the router can improve the choice and
+# must never be able to block it.
+# ==========================================================================
+
+def test_the_router_pick_is_tried_first(two_tools):
+    """Both tools would find something; the router decides which is asked."""
+    two_tools["deep"] = [_deep_hit()]
+    two_tools["router_pick"] = "web"
+    two_tools["answers"] = [_pl.NOT_FOUND_ANSWER, GOOD]
+    res = _ask2(two_tools)
+    assert two_tools["web_calls"] == 1
+    assert two_tools["scans"] == 0, "the router chose the web and the scan ran anyway"
+    assert res["eval"]["tools_used"] == ["web"]
+    assert res["eval"]["routed"] == ["web"]
+
+
+def test_the_fixed_order_still_applies_without_an_opinion(two_tools):
+    two_tools["deep"] = [_deep_hit()]
+    two_tools["router_pick"] = None
+    two_tools["answers"] = [_pl.NOT_FOUND_ANSWER, GOOD]
+    res = _ask2(two_tools)
+    assert res["eval"]["tools_used"] == ["deep"], "documents first when nobody chose"
+    assert res["eval"]["routed"] == []
+
+
+def test_a_router_pick_that_finds_nothing_falls_through(two_tools):
+    """It reorders the ladder; it does not shorten it. Choosing wrongly must
+    cost a wasted tool call, never the answer."""
+    two_tools["deep"] = [_deep_hit()]
+    two_tools["web_hits"] = []
+    two_tools["router_pick"] = "web"
+    two_tools["answers"] = [_pl.NOT_FOUND_ANSWER, GOOD]
+    res = _ask2(two_tools)
+    assert res["eval"]["tools_used"] == ["web", "deep"]
+    assert res["not_found"] is False
+
+
+def test_a_broken_router_is_not_fatal(two_tools, monkeypatch):
+    def _boom(*a, **k):
+        raise RuntimeError("router 503")
+
+    # choose_tool swallows its own failures, but a bug that let one escape must
+    # not take the answer with it.
+    monkeypatch.setattr(_pl.router, "choose_tool", _boom)
+    two_tools["deep"] = [_deep_hit()]
+    two_tools["answers"] = [_pl.NOT_FOUND_ANSWER, GOOD]
+    try:
+        res = _ask2(two_tools)
+    except RuntimeError:
+        pytest.fail("a router failure reached the caller")
+    assert res["not_found"] is False
+
+
+def test_the_router_is_not_asked_when_there_is_no_choice(rig):
+    """One tool is not a decision, and asking costs a model call."""
+    rig["answers"] = [_pl.NOT_FOUND_ANSWER, GOOD]
+    _ask(rig)
+    assert rig["router_calls"] == 0
+
+
+def test_the_router_is_not_asked_on_a_question_that_works(two_tools):
+    _ask2(two_tools)
+    assert two_tools["router_calls"] == 0, "the happy path must stay free"
+
+
+def test_the_router_is_only_offered_tools_that_remain(two_tools):
+    """Escalation 1 spends one tool; escalation 2 must not offer it again."""
+    two_tools["pool"] = [_chunk(sim=0.01)]
+    two_tools["deep"] = []
+    two_tools["web_hits"] = []
+    two_tools["answers"] = [_pl.NOT_FOUND_ANSWER]
+    _ask2(two_tools, cfg={"similarity_threshold": 0.5})
+    assert two_tools["router_calls"] == 1, "nothing left to choose between afterwards"
+    assert sorted(two_tools["router_saw"]) == ["deep", "web"]

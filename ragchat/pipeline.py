@@ -31,6 +31,7 @@ import re
 import time
 
 from .chunking import refine_refs, split_document
+from . import router
 from .config import PipelineConfig, settings
 from .embeddings import openai_client, ProxyEmbeddings, retry_call, reranker_provider, rerank
 from .vectordb import add_chunks, query_chunks
@@ -675,6 +676,7 @@ def ask(
     # when nobody looks twice.
     extra: list[dict] = []          # passages won by a tool, in pool order
     tools_spent: list[str] = []      # which tools have been used, in order
+    routed: list[str] = []          # ...and which of those a model chose
     escalated: str | None = None    # ...and what made the app reach for them
 
     # The tools, in the order the app is allowed to try them. DOCUMENTS FIRST is
@@ -700,7 +702,36 @@ def ask(
         Returns True if anything new reached the pool.
         """
         nonlocal escalated
-        for name, tool in tools:
+        # Ask a model which tool fits before falling back to the fixed order.
+        #
+        # The order alone cannot tell "this should be in their documents, the
+        # ranker missed it" from "this could never have been in a private
+        # document", so it pays for a full literal scan of every document
+        # before every web search. The router makes that a judgement about the
+        # question. It returns None whenever it has no opinion — including when
+        # it fails — and then this is exactly the loop it was before.
+        order = list(tools)
+        if len([t for t in tools if t[0] not in tools_spent]) > 1:
+            try:
+                pick = router.choose_tool(
+                    effective_query,
+                    chunks,
+                    [n for n, _ in tools if n not in tools_spent],
+                    cfg,
+                )
+            except Exception:
+                # choose_tool swallows its own failures, so this should be
+                # unreachable — which is exactly why it is here. The guarantee
+                # is "the router can improve the choice and can never block
+                # it", and a guarantee that depends on another module policing
+                # itself is not one.
+                log.exception("tool router raised; using the fixed order")
+                pick = None
+            if pick:
+                order.sort(key=lambda t: t[0] != pick)
+                routed.append(pick)
+
+        for name, tool in order:
             if name in tools_spent:
                 continue
             tools_spent.append(name)
@@ -859,6 +890,10 @@ def ask(
         # and "read your documents word for word" are different claims to make
         # to a reader, and only one of them involves material that is not theirs.
         eval_d["tools_used"] = list(tools_spent)
+        # Whether a MODEL picked the tool or the fixed order did. Worth
+        # separating: one is a judgement about the question and the other
+        # is a fallback, and only the first is the app being agentic.
+        eval_d["routed"] = list(routed)
         sims = [c["similarity"] for c in pool if c.get("similarity") is not None]
         eval_d["top_sim"] = round(max(sims), 4) if sims else None
         eval_d["latency_ms"] = round(answer_ms)
