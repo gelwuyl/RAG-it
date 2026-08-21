@@ -1903,7 +1903,16 @@ fieldset legend {
   }
   .chat-item { padding: 9px 10px; }
   .chat-item .chat-delete { opacity: 1; }
-  .cite-chip { padding: 6px 12px; }
+  /* Measured at 375px: both of these were under the 44px this file sets itself.
+     They are full-width rows, so height costs nothing that has to fit beside
+     them — unlike .term-mark above, which stays small and grows a pseudo-element
+     hit area instead because a 44px circle beside a label reads as a button.
+
+     .eval-chip is the worst of the two at 25px, and it is the control that
+     puts an answer's readings on the benchmark bars — the fourth beat of the
+     loop the empty states walk a visitor through. */
+  .cite-chip { padding: 9px 12px; }
+  .eval-chip { padding: 10px 0; min-height: 44px; }
   .add-row input, .ask-form textarea { font-size: 16px; } /* avoid iOS zoom-on-focus */
   .field label { min-width: 0; width: 100%; }
   .field input[type="number"] { max-width: none; }

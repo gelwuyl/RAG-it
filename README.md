@@ -29,8 +29,9 @@ later brings your work with you.
 | **Reranker** | Cohere `rerank-v3.5` (OpenRouter) | **One** call re-orders the whole candidate pool against the question. Not one call per passage. |
 | **Deep search** | Literal scan of stored document text | Reads every document word for word and returns every literal match. Per-question, never a saved setting. |
 | **Web search** | Tavily | **Off unless you turn it on.** The last rung of the escalation ladder: reached only after your documents have been searched by ranking *and* word for word. Web passages are labelled in the answer and badged in the citation. Signed-in accounts only. |
+| **Tool router** | `models/gemini-3.5-flash-lite` (Google AI Studio) | Picks *which* tool to reach for when the app is about to refuse. A separate model on purpose: the answering model accepts a `tools` parameter and then never emits a call, verified live. ~0.7s, and nothing it produces is ever shown. |
 | **Generation** | `models/gemma-4-26b-a4b-it` (Google AI Studio) | Writes the answer from the retrieved passages, with inline citations. Kept over `gemini-3.5-flash-lite`, which scored 6.5 points lower on the golden set for no speed gain. |
-| **Judges** | Same model, LLM-as-judge | Scores each answer for faithfulness and relevancy. A judge that fails reports `ungraded`, never `failed`. |
+| **Judges** | Same model, LLM-as-judge | Scores each answer for faithfulness and relevancy, in a **second request** — grading costs more than answering, and you should not wait for it. A judge that fails reports `ungraded`, never `failed`. |
 | **Evaluation** | 56 golden questions over 27 documents | The scored result **ships with the app** — nobody runs a benchmark to see it. |
 | **CI gate** | GitHub Actions on push to main | Fails the build if retrieval regresses against a committed baseline. Passes loudly when a provider is down. |
 | **Auth** | Google OAuth + password fallback | Signed HTTP-only session cookie, plus a non-secret cookie so the page can paint identity before the server replies. |
@@ -110,10 +111,14 @@ search finds exact strings. Their rankings are fused, so an invoice number and
 a paraphrased policy are both findable. It is unconditional — there is no
 switch, because there is no trade worth offering.
 
-**The app reaches for its own tools.** When ranked search comes up short — or
-the model reads the passages and says the answer is not there — it does not
-simply refuse. It reads every document you own word for word, and tells you it
-did, under the answer.
+**The app reaches for its own tools, and a model picks which.** When ranked
+search comes up short — or the model reads the passages and says the answer is
+not there — it does not simply refuse. It reads every document you own word for
+word, and tells you it did, under the answer. Which tool it reaches for is a
+judgement, not a rule: "this should be in their documents, the ranker missed
+it" and "this could never have been in a private file" want different answers,
+and only a model can tell them apart. It can improve the choice; it can never
+block one, and the happy path never pays for it.
 
 **It does not go outside unless you let it.** Web search ships off: answers come
 from your documents, and an app that quietly searched the web whenever your
@@ -131,6 +136,13 @@ get is then drawn on the same bars, so "is this one normal?" is a glance.
 answer, so it reports `ungraded`. Rendering that as a failure would be a
 confident false claim about your documents.
 
+**The ruler is calibrated per embedding model.** The cosine retrieval metrics
+decide "does this chunk contain the golden passage?" against a threshold, and
+that threshold belongs to the embedder, not to the harness — models put their
+similarities on different scales. Scored with the wrong one, a perfectly good
+embedder reads as catastrophic. `eval/calibrate.py` derives it from labelled
+pairs; `eval/thresholds.json` stores it per model with its error rates.
+
 ---
 
 ## Run it locally
@@ -147,7 +159,7 @@ In dev the pages are at `/`, `/app.html` and `/built.html` — the clean `/app`
 and `/built` paths are Vercel rewrites and do not exist on the Vite server.
 
 ```bash
-# Tests — no network, ~10s
+# Tests — no network, ~17s
 .venv/Scripts/python -m pytest tests/ -q
 
 # Screenshots: 3 pages x 5 breakpoints x 2 themes. Fails on overflow,
@@ -161,6 +173,14 @@ node layout_check.mjs http://localhost:5173
 .venv/Scripts/python -m eval.run_eval --retrieval-only
 .venv/Scripts/python -m eval.run_eval
 .venv/Scripts/python -m eval.published --from-run latest   # publish it
+
+# Score a different embedding model without touching config.yaml
+.venv/Scripts/python -m eval.run_eval --retrieval-only --embedding-model <model>
+
+# ...and derive ITS match threshold first, or the comparison is a fiction.
+# The threshold belongs to the embedder: scored with another model's, a good
+# one reads as catastrophic.
+.venv/Scripts/python -m eval.calibrate --model <model> --write
 ```
 
 ### Configuration
@@ -174,7 +194,8 @@ Pipeline knobs live in `config.yaml` and can be tuned live from Settings.
 
 Changing chunking or the embedding model changes a config *fingerprint* that
 tags every stored chunk, so existing chunks stop matching and the UI prompts to
-re-index.
+re-index. Regenerate the sample-corpus vectors too — `python -m
+ragchat.demo_vectors` — or a guest's first question finds nothing.
 
 ### Environment
 
@@ -198,8 +219,11 @@ ragchat/
   chunking.py        splitters
   loaders.py         PDF / HTML / text extraction, URL fetch
   embeddings.py      provider-aware embedding + rerank clients
-  pipeline.py        ingest, and ask: rewrite → retrieve → rerank → generate → judge
+  pipeline.py        ingest, and ask: rewrite → retrieve → rerank → generate
   deepsearch.py      literal scan over stored document text
+  websearch.py       web search (Tavily), the last rung of the escalation
+  router.py          picks WHICH tool — a different model from the one that writes
+  presets.py         the named Settings configurations
   vectordb.py        dispatch to the Chroma or pgvector implementation
   store.py           Chroma (local dev)
   store_neon.py      pgvector (deployed)
@@ -216,11 +240,19 @@ eval/
   baseline.py        the committed baseline the CI gate compares against
   gate.py            CI entry point
   published.py       the shipped benchmark result
+  calibrate.py       derives the cosine match threshold for an embedding model
+  thresholds.json    that threshold per model, with its measured error rates
+  compare.py         diff two runs metric by metric
+  check_metrics.py   proves the metrics react to retrieval quality (not pytest)
 frontend/
   index.html         landing        →  /
   app.html           workspace      →  /app
   built.html         build write-up →  /built
   app.js, styles.css, landing.css, tokens.css
+tests/               317 tests, no network, ~17s
+shot.mjs             screenshots: 3 pages x 5 breakpoints x 2 themes
+layout_check.mjs     workspace layout behaviour a screenshot cannot see
+package.json         playwright, for those two checks only — not the app
 .github/workflows/   retrieval gate (push) · guest sweeper (every 15 min)
 config.yaml          pipeline knobs
 ```

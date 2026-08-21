@@ -569,6 +569,14 @@ a.card-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 3
 @media (max-width: 1000px) { .lessons { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 620px)  { .lessons { grid-template-columns: minmax(0, 1fr); } }
 
+/* On /built the wordmark is a LINK — the way back to the landing page, and the
+   only navigation on that page. At 30px it was under the 44px minimum this
+   project sets for touch. The landing page's copy is a plain div, where the
+   extra padding is invisible. */
+@media (max-width: 767px) {
+  .hero-mark { min-height: 44px; padding: 7px 0; }
+}
+
 
 /* ---------- small type, made legible ----------
    Every label below was 12px in muted grey. Small AND low contrast is the one
