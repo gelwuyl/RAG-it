@@ -471,8 +471,32 @@ def auth_status(
     }
 
 
+def _dev_auth_only() -> None:
+    """404 the password sign-in routes wherever Google sign-in exists.
+
+    `POST /api/auth/login` calls find_or_create_password_user, which CREATES
+    the account when it does not exist — so "log in" was really
+    "log in or silently register", and any username/password string on the
+    public deployment returned a fresh non-guest session. That made the
+    signed-in-only gate on web search worth nothing: the quota it guards was
+    available to anyone willing to invent a username.
+
+    It is also a plain bug for the people who do use passwords. Mistype your
+    username and you are handed a new empty workspace instead of "wrong
+    password", which looks exactly like your documents disappearing.
+
+    Same signal as local-login: where OAuth is configured there is a real way
+    in and these are redundant; where it is not, this is local development and
+    they are the only way in. 404 rather than 403 so the refusal does not
+    confirm the route exists.
+    """
+    if authn.oauth_configured():
+        raise HTTPException(status_code=404, detail="Not found")
+
+
 @app.post("/api/auth/register")
 def register(body: RegisterIn, request: Request, response: Response, db: Session = Depends(get_session)):
+    _dev_auth_only()
     exists = (
         db.query(User)
         .filter(User.provider == "password", User.sub == body.username)
@@ -505,6 +529,7 @@ def _promote_prior_guest(request: Request, db: Session, target: User) -> None:
 
 @app.post("/api/auth/login")
 def login(body: LoginIn, request: Request, response: Response, db: Session = Depends(get_session)):
+    _dev_auth_only()
     try:
         user, _err = authn.find_or_create_password_user(db, body.username, body.password)
     except ValueError:
@@ -538,8 +563,7 @@ def local_login(response: Response, db: Session = Depends(get_session)):
     signal: where Google sign-in exists there is a real way in and no reason for
     this one; where it does not, this is local development.
     """
-    if authn.oauth_configured():
-        raise HTTPException(status_code=404, detail="Not found")
+    _dev_auth_only()
     user = (
         db.query(User)
         .filter(User.provider == "password", User.sub == LOCAL_USERNAME)

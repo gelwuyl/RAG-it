@@ -1,4 +1,4 @@
-"""`/api/auth/local-login` must not exist where real sign-in does.
+"""The password sign-in routes must not exist where real sign-in does.
 
 It takes no credentials and returns a full non-guest session. On the live
 deployment the account it hands out held the owner's real business documents,
@@ -89,3 +89,53 @@ def test_the_web_tool_is_not_reachable_through_it(client, monkeypatch):
     client.post("/api/auth/local-login")
     status = client.get("/api/auth/status").json()
     assert status.get("web_search_available") is not True
+
+
+# --- and the same for the two that were still open -------------------------
+#
+# `login` calls find_or_create_password_user, which CREATES the account when it
+# is missing. So "log in" was really "log in or silently register", and any
+# invented username returned a non-guest session on the public deployment —
+# which is the session web search is gated on. The gate was worth nothing.
+
+
+def test_registration_is_closed_where_google_sign_in_exists(client, monkeypatch):
+    _oauth(monkeypatch, True)
+    r = client.post("/api/auth/register", json={"username": "someone", "password": "pw"})
+    assert r.status_code == 404, r.text
+
+
+def test_password_login_is_closed_too(client, monkeypatch):
+    """Closing register alone would leave the door open, because login creates
+    the account it cannot find."""
+    _oauth(monkeypatch, True)
+    r = client.post("/api/auth/login", json={"username": "someone", "password": "pw"})
+    assert r.status_code == 404, r.text
+
+
+def test_an_invented_username_creates_nothing(client, monkeypatch):
+    from ragchat.db import SessionLocal, User
+
+    _oauth(monkeypatch, True)
+    client.post("/api/auth/login", json={"username": "invented", "password": "pw"})
+    s = SessionLocal()
+    found = s.query(User).filter(User.sub == "invented").first()
+    s.close()
+    assert found is None, "a refused login still created the account"
+
+
+def test_both_still_work_in_local_development(client, monkeypatch):
+    _oauth(monkeypatch, False)
+    assert client.post(
+        "/api/auth/register", json={"username": "dev", "password": "pw"}
+    ).status_code == 200
+    assert client.post(
+        "/api/auth/login", json={"username": "dev", "password": "pw"}
+    ).status_code == 200
+
+
+def test_a_wrong_password_is_still_rejected_in_development(client, monkeypatch):
+    _oauth(monkeypatch, False)
+    client.post("/api/auth/register", json={"username": "dev2", "password": "right"})
+    r = client.post("/api/auth/login", json={"username": "dev2", "password": "wrong"})
+    assert r.status_code == 401

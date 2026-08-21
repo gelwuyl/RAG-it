@@ -511,3 +511,40 @@ def test_the_router_is_only_offered_tools_that_remain(two_tools):
     _ask2(two_tools, cfg={"similarity_threshold": 0.5})
     assert two_tools["router_calls"] == 1, "nothing left to choose between afterwards"
     assert sorted(two_tools["router_saw"]) == ["deep", "web"]
+
+
+# --- citation markers ------------------------------------------------------
+#
+# The parser read "[2]" and silently ignored "[2, 3, 4]", which is the form a
+# model reaches for whenever an answer rests on several sources at once — most
+# web answers. The prose then carried references with no chip to click, on an
+# app whose whole promise is that you can click the citation. Seen on the
+# deployment, in a real answer, not here.
+
+@pytest.mark.parametrize("answer,expected", [
+    ("Per [1] that is right.", [1]),
+    ("Tesla offers ten years [2, 3, 4].", [2, 3, 4]),
+    ("Both [2][3] agree.", [2, 3]),
+    ("Spaced [ 5 , 6 ] too.", [5, 6]),
+    ("Repeated [1] and again [1].", [1, 1]),
+    ("Nothing to cite here.", []),
+    ("An array literal [1,2] in prose is indistinguishable, and counts.", [1, 2]),
+])
+def test_every_form_the_model_writes_is_read(answer, expected):
+    assert _pl.cited_in(answer) == expected
+
+
+def test_a_combined_marker_produces_a_chip_for_each_source(two_tools):
+    """The number in the prose and the chip under it must be the same set."""
+    two_tools["deep"] = [_deep_hit()]
+    two_tools["answers"] = [_pl.NOT_FOUND_ANSWER, "All three agree [1, 2]."]
+    res = _ask2(two_tools)
+    assert [c["number"] for c in res["citations"]] == [1, 2]
+
+
+def test_a_marker_beyond_the_pool_is_ignored(two_tools):
+    """A model that invents [9] must not produce a chip pointing at nothing."""
+    two_tools["deep"] = [_deep_hit()]
+    two_tools["answers"] = [_pl.NOT_FOUND_ANSWER, "See [1, 9]."]
+    res = _ask2(two_tools)
+    assert [c["number"] for c in res["citations"]] == [1]

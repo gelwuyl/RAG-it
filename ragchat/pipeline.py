@@ -599,6 +599,29 @@ def _write_answer(effective_query: str, pool: list[dict], history: list[dict],
     return _clean_answer(answer), context
 
 
+# A citation marker, in every form the model actually writes one.
+#
+# It was `\[(\d+)\]`, which reads "[2]" and silently ignores "[2, 3, 4]" — and
+# the model writes the second form whenever an answer rests on several sources
+# at once, which is most web answers. The result was references in the prose
+# with no chip to click, on an app whose whole promise is that you can click
+# the citation. Found on the deployment, not in the tests.
+_CITE_MARKER = re.compile(r"\[\s*(\d+(?:\s*,\s*\d+)*)\s*\]")
+
+
+def cited_in(answer: str) -> list[int]:
+    """Every source number referenced in an answer, in order of appearance.
+
+    Shared with the frontend by contract rather than by code: app.js renders
+    the same forms as separate clickable markers, so what the reader can click
+    and what the citation list contains stay the same set.
+    """
+    out: list[int] = []
+    for group in _CITE_MARKER.findall(answer or ""):
+        out.extend(int(part) for part in group.split(",") if part.strip().isdigit())
+    return out
+
+
 def _refused(answer: str) -> bool:
     return NOT_FOUND_ANSWER.lower() in (answer or "").lower()
 
@@ -839,7 +862,7 @@ def ask(
     # ["deep"], because a citation marker is also a small integer and nothing
     # complained.
     cited_numbers = sorted(
-        {int(m) for m in re.findall(r"\[(\d+)\]", answer) if 1 <= int(m) <= len(pool)}
+        {n for n in cited_in(answer) if 1 <= n <= len(pool)}
     )
     citations = []
     for num in cited_numbers:

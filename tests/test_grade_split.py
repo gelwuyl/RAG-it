@@ -39,15 +39,6 @@ CONTEXT = "[1] The milk fridge must read between 1 and 4 degrees Celsius."
 ANSWER = "Between 1 and 4 degrees Celsius. [1]"
 
 
-@pytest.fixture(autouse=True)
-def _dev_sign_in_available(monkeypatch):
-    """See tests/test_local_login_closed.py — local-login is off wherever real
-    sign-in exists, and load_dotenv() means a developer's .env turns it off."""
-    from ragchat import app as rapp
-
-    monkeypatch.setattr(rapp.authn, "oauth_configured", lambda: False)
-
-
 @pytest.fixture()
 def client():
     from ragchat import app as rapp

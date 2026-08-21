@@ -34,20 +34,6 @@ for _k in ("PG_DATABASE_URL", "rag_gel_DATABASE_URL"):
     os.environ.pop(_k, None)
 
 
-@pytest.fixture(autouse=True)
-def _dev_sign_in_available(monkeypatch):
-    """`/api/auth/local-login` is disabled wherever Google OAuth is configured.
-
-    ragchat.config calls load_dotenv() at import, so a developer's real .env
-    switches that path off and fails these tests for a reason that has nothing
-    to do with what they test. Popping the env var is not enough — the next
-    module to import ragchat.config puts it straight back.
-    """
-    from ragchat import app as rapp
-
-    monkeypatch.setattr(rapp.authn, "oauth_configured", lambda: False)
-
-
 @pytest.fixture()
 def client():
     # Import after env is set so ragchat.db picks up the temp SQLite engine.

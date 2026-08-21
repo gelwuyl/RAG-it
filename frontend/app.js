@@ -1890,9 +1890,25 @@ async function openChat(chatId) {
 
 // Render [1] markers as clickable spans; citations list becomes chips below.
 function renderAssistantContent(el, content, citations) {
+  // Models write "[2, 3, 4]" as readily as "[2]", and the old pattern read only
+  // the second — so an answer resting on several sources at once had
+  // references in the prose that could not be clicked, on an app whose whole
+  // promise is that you can click the citation. Each number becomes its own
+  // marker: "[2, 3, 4]" renders as [2][3][4], three separate targets, because a
+  // single span over three numbers has no one passage to open.
+  //
+  // Must stay in step with pipeline.cited_in, which decides which sources get a
+  // chip. If one reads a form the other does not, the reader sees a reference
+  // with no chip or a chip nothing points at.
   const withMarkers = escapeHtml(content).replace(
-    /\[(\d+)\]/g,
-    (m, n) => `<span class="cite-marker" data-cite="${n}">[${n}]</span>`
+    /\[\s*(\d+(?:\s*,\s*\d+)*)\s*\]/g,
+    (m, group) =>
+      group
+        .split(",")
+        .map((n) => n.trim())
+        .filter(Boolean)
+        .map((n) => `<span class="cite-marker" data-cite="${n}">[${n}]</span>`)
+        .join(""),
   );
   el.innerHTML = withMarkers;
   if (citations.length) {
