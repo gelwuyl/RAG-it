@@ -311,6 +311,30 @@ DEMO_CORPUS_FILES = ("helios_energy_handbook.md", "meridian_coffee_ops.md")
 # never signed into; it exists so the demo can be embedded ONCE and then copied.
 DEMO_TEMPLATE_SUB = "__demo_template__"
 
+# Bump when refine_refs changes what it WRITES onto a chunk.
+#
+# The template's chunks are copied to each guest verbatim, so anything stored on
+# them outlives the code that produced it. The fingerprint covers the vectors —
+# model, chunk size, splitter — and deliberately not this, because a citation
+# label has no business invalidating an embedding. Without a second signal the
+# template kept serving "~0% of document" beside an excerpt containing the whole
+# file, and would have until the next unrelated re-index.
+CHUNK_METADATA_REVISION = 2
+
+
+def _demo_stamp(text: str) -> str:
+    """What the template's stored copy of this document should look like.
+
+    Goes in `content_hash`, which is the change-detection column and is exactly
+    what this is: the revision participates because a chunk carries rendered
+    metadata as well as text.
+    """
+    import hashlib
+
+    return hashlib.sha1(
+        f"{CHUNK_METADATA_REVISION}:{text}".encode("utf-8")
+    ).hexdigest()[:16]
+
 
 def _demo_template(db: Session) -> User | None:
     return (
@@ -378,7 +402,12 @@ def ensure_demo_template(db: Session, cfg) -> User:
         if doc.source_text != text:
             doc.source_text = text
             db.commit()
-        if doc.config_fingerprint == fp and doc.status == "ready":
+        stamp = _demo_stamp(text)
+        if (
+            doc.config_fingerprint == fp
+            and doc.content_hash == stamp
+            and doc.status == "ready"
+        ):
             continue
         db.commit()
         # One file's embedding failure must not deny the visitor the others. An
@@ -405,6 +434,7 @@ def ensure_demo_template(db: Session, cfg) -> User:
         doc.status = "ready"
         doc.n_chunks = n
         doc.config_fingerprint = fp
+        doc.content_hash = stamp
         doc.error = None
         db.commit()
     return template

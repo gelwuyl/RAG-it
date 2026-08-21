@@ -54,18 +54,37 @@ def split_document(text: str, title: str, cfg: PipelineConfig) -> list[Chunk]:
     return [Chunk(text=p, ref="") for p in pieces]
 
 
+# A chunk covering this much of its document is, for a reader's purposes, the
+# document. Below it, where the passage sits is worth saying; at or above it,
+# saying "~0% through" about the whole file is just wrong.
+WHOLE_DOCUMENT_COVERAGE = 0.9
+
+
 def refine_refs(chunks: list[Chunk], text: str) -> list[Chunk]:
-    """Attach approximate position references ('~N% through document') to
-    chunks that have no structural reference, for citation display."""
+    """Attach an approximate position ('~N% through') to chunks with no
+    structural reference, for citation display.
+
+    The number is where the passage STARTS, and the wording has to say so. It
+    used to read "~N% of document", which is a quantity rather than a position —
+    so a short file that produces a single chunk showed "~0% of document" beside
+    an excerpt containing all of it. Nought percent of the document, and it was
+    the whole thing.
+    """
     if not chunks:
         return chunks
     total = len(text)
     for ch in chunks:
         if not ch.ref and total > 0:
+            # Locate it FIRST. Checking coverage before confirming the passage
+            # is even in this document labels an unrelated chunk "whole
+            # document" whenever it happens to be longer than the file — a
+            # confident claim about a passage that is not there at all.
             pos = text.find(ch.text[:80])
-            if pos >= 0:
-                pct = round(pos * 100 / total)
-                ch.ref = f"~{pct}% of document"
-            else:
+            if pos < 0:
                 ch.ref = ""
+            elif len(ch.text) / total >= WHOLE_DOCUMENT_COVERAGE:
+                # Nothing to locate: there is only one place it can be.
+                ch.ref = "whole document"
+            else:
+                ch.ref = f"~{round(pos * 100 / total)}% through"
     return chunks
