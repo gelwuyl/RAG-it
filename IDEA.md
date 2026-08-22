@@ -746,7 +746,13 @@ region, so latency is the signal.
 A serverless function is frozen the instant it responds, so it cannot run a
 timer, and Vercel's Hobby cron fires once per **day** — which cannot honour a
 30-minute guest TTL. `.github/workflows/guest-sweeper.yml` calls
-`POST /api/admin/sweep-guests` every 15 minutes. Work done in front of a waiting
+`POST /api/admin/sweep-guests` every **5** minutes — and the frequency is only
+half about guests. Cleanup would be fine at a quarter-hour: one sweep clears up
+to 200 workspaces, and the interval only decides how long a dead one lingers
+past its TTL. Neon is the reason. Its free tier suspends after about five
+minutes idle, and a visitor landing on a suspended database waits for it to
+resume — 9.29s measured cold against 0.35s warm. Slowing this schedule down
+trades a first visitor's nine seconds for nothing. Work done in front of a waiting
 visitor is a backstop only and stays tiny: `guests.INLINE_REAP_LIMIT` is 2, and
 it was 20, which put 39.7s in the path of a first page load.
 

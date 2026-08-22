@@ -1,6 +1,7 @@
 name: guest sweeper
 
-# Deletes guest workspaces idle past their TTL (30 minutes, ragchat/guests.py).
+# Deletes guest workspaces idle past their TTL (30 minutes, ragchat/guests.py),
+# and — see the schedule below — keeps Neon from suspending between visitors.
 #
 # Why a GitHub schedule and not the app itself: a Vercel function is frozen the
 # instant it sends its response, so it cannot run a timer, and a background
@@ -10,9 +11,29 @@ name: guest sweeper
 # GitHub disables schedules on a repository with no pushes for 60 days. That is
 # why create_guest() still clears two workspaces inline: if this stops, cleanup
 # degrades to slower, not to never.
+# FIVE minutes, and the reason is only half about guests.
+#
+# Cleanup alone does not need it. One sweep clears up to 200 workspaces and the
+# 30-minute TTL means the interval only decides how long a dead workspace
+# lingers past it — 30-35 minutes here against 30-45 at a quarter-hour. Nobody
+# would notice the difference.
+#
+# The database would. Neon's free tier suspends after roughly five minutes
+# idle, and a visitor landing on a suspended one waits for it to come back:
+# measured 9.29s cold against 0.35s warm. At a quarter-hour Neon was asleep for
+# about ten minutes in every fifteen, so a first-time visitor arriving in that
+# window paid for it. A five-minute poll keeps it awake for everyone.
+#
+# So if you are here to reduce scheduled traffic: this is not the dial you
+# think it is. Slowing it down trades a first visitor's nine seconds for
+# nothing that matters.
+#
+# Not offset off the hour. That is worth doing for an hourly job, where landing
+# on GitHub's most congested minute delays the ONLY run you get; at this
+# frequency a late tick is followed by another five minutes later.
 on:
   schedule:
-    - cron: "*/15 * * * *"
+    - cron: "*/5 * * * *"
   workflow_dispatch: {}
 
 concurrency:

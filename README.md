@@ -35,7 +35,7 @@ later brings your work with you.
 | **Evaluation** | 56 golden questions over 27 documents | The scored result **ships with the app** — nobody runs a benchmark to see it. |
 | **CI gate** | GitHub Actions on push to main | Fails the build if retrieval regresses against a committed baseline. Passes loudly when a provider is down. |
 | **Auth** | Google OAuth + password fallback | Signed HTTP-only session cookie, plus a non-secret cookie so the page can paint identity before the server replies. |
-| **Guest workspaces** | Throwaway, 30-minute idle limit | Private per visitor. A scheduled job sweeps expired ones every 15 minutes. |
+| **Guest workspaces** | Throwaway, 30-minute idle limit | Private per visitor. A scheduled job sweeps expired ones every 5 minutes — which also keeps Neon from suspending, worth 9s off a cold visitor's first load. |
 
 ---
 

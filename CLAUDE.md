@@ -75,7 +75,10 @@ Therefore:
 - **Anything periodic is driven from outside.** Vercel Hobby cron exists but
   fires once per *day*, which cannot honour a 30-minute guest TTL, so
   `.github/workflows/guest-sweeper.yml` calls `POST /api/admin/sweep-guests`
-  every 15 minutes with a shared secret. Work done in front of a waiting
+  every 5 minutes with a shared secret. That interval is NOT about cleanup —
+  one sweep clears up to 200 workspaces — it is because Neon's free tier
+  suspends after ~5 minutes idle and a visitor landing on a suspended database
+  waits 9.3s against 0.35s warm. Work done in front of a waiting
   visitor is a backstop only and stays tiny — `guests.INLINE_REAP_LIMIT` is 2,
   and it was 20, which put 39.7s in the path of a first page load.
 - `maxDuration` is 60s (set in `vercel.json`). The Hobby default of 10s is not
