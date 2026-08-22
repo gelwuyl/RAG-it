@@ -1107,6 +1107,15 @@ html[data-kind="guest"] .identity-hint .hint-badge { display: inline-block; }
 }
 #ask-btn { padding: 10px 20px; }
 
+/* The one destructive bulk action. Red is reserved in this file for failure and
+   for destroying things, and this is the second kind — quiet until hovered, so
+   it reads as available rather than as a warning sitting permanently in the
+   corner of the pane. */
+.btn-danger { color: var(--fail); border-color: var(--fail-border, var(--border-strong)); }
+.btn-danger:hover {
+  background: var(--fail); color: var(--on-primary, #fff); border-color: var(--fail);
+}
+
 /* ---------- evaluation pane (right) ---------- */
 
 .eval-status { line-height: 1.45; }

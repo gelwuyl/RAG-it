@@ -1053,6 +1053,48 @@ def delete_document(
     }
 
 
+@app.delete("/api/documents")
+def delete_all_documents(
+    # Signed-in only. A guest's workspace is two vector-COPIED demo documents
+    # they did not add and cannot get back without a re-seed, and it throws
+    # itself away after 30 minutes regardless — a delete-everything button
+    # there destroys the demo and solves nothing.
+    user: User = Depends(require_account),
+    db: Session = Depends(get_session),
+):
+    """Empty this workspace: every document, every folder, every vector.
+
+    Scoped to SOURCES on purpose. Conversations are left alone — they are not
+    embedded, they cost no vector storage, and an answer keeps its citations
+    inline, so old chats stay readable after the documents behind them are
+    gone. "Delete my documents" should not quietly also mean "delete my chat
+    history"; the two are separate decisions and this is the irreversible one.
+
+    Set-based, like purge_users: three statements whatever the workspace holds.
+    Per-document deletes are a network hop each on Neon, which is what made
+    clearing twenty guest workspaces take 39.7 seconds.
+    """
+    from .vectordb import delete_users_chunks
+
+    docs = db.query(Document).filter(Document.user_id == user.id).count()
+    folders = db.query(FolderSource).filter(FolderSource.user_id == user.id).count()
+
+    # Vectors first. If this fails the rows stay, and a workspace with rows and
+    # no vectors is recoverable — re-index rebuilds it. The reverse leaves
+    # orphaned vectors nothing points at, which only the prune command finds.
+    delete_users_chunks([user.id])
+
+    db.query(Document).filter(Document.user_id == user.id).delete(
+        synchronize_session=False
+    )
+    db.query(FolderSource).filter(FolderSource.user_id == user.id).delete(
+        synchronize_session=False
+    )
+    db.commit()
+    log.info("workspace cleared for %s: %d documents, %d folders", user.id, docs, folders)
+    return {"ok": True, "documents": docs, "folders": folders}
+
+
 @app.post("/api/documents/prune")
 def prune_orphan_chunks(
     user: User = Depends(authn.get_current_user),

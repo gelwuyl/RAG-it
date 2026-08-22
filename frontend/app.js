@@ -1747,6 +1747,51 @@ async function reindexAll() {
 
 $("reindex-btn").onclick = reindexAll;
 
+// Empty the workspace: every document, every folder, every vector.
+//
+// The confirm names the count and says what SURVIVES, because "delete all" in
+// a pane called Sources could reasonably be read as taking the chats with it.
+// It does not: conversations are not embedded, they cost no vector storage, and
+// an answer keeps its citations inline, so old chats stay readable after the
+// documents behind them are gone.
+async function deleteAllDocuments() {
+  if (guestBlocked("delete-all-btn")) return;
+  // Counted from what is on screen: the document list is rendered straight
+  // from the fetch and never held in state, and a confirm for an
+  // irreversible action should name the number it is about to destroy.
+  const n = document.querySelectorAll('#doc-list .source-item').length;
+  if (!n) {
+    toast("Nothing to delete — this workspace has no documents.");
+    return;
+  }
+  const ok = confirm(
+    `Delete all ${n} document${n === 1 ? "" : "s"} and everything embedded from ` +
+    `them?
+
+This cannot be undone. Your chats are kept.`,
+  );
+  if (!ok) return;
+
+  setJobStatus("Deleting every document and its vectors…", { busy: true });
+  $("delete-all-btn").disabled = true;
+  try {
+    const r = await api("/api/documents", { method: "DELETE" });
+    setJobStatus(
+      `Deleted ${r.documents} document${r.documents === 1 ? "" : "s"}` +
+      (r.folders ? ` and ${r.folders} folder source${r.folders === 1 ? "" : "s"}` : ""),
+      { sticky: true },
+    );
+    await refreshSources();
+  } catch (e) {
+    setJobStatus(`Delete failed: ${e.message}`, { sticky: true });
+    toast(e.message, true);
+  } finally {
+    $("delete-all-btn").disabled = false;
+  }
+}
+
+$("delete-all-btn").onclick = deleteAllDocuments;
+
 // ---------- chat ----------
 
 // Local status overrides while a request is in flight; the backend status is

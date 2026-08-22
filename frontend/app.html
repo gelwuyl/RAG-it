@@ -47,7 +47,7 @@
         }
       })();
     </script>
-    <link rel="stylesheet" href="/styles.css?v=55" />
+    <link rel="stylesheet" href="/styles.css?v=56" />
     <script>
       // Boot diagnostics: collect load/runtime errors so a broken app.js
       // shows a visible message instead of a silently dead UI.
@@ -219,6 +219,13 @@
               <button class="term-mark" type="button" data-term="re-index"
                 aria-expanded="false" aria-label="What does re-indexing do?">?</button>
             </span>
+            <!-- Irreversible, so it is styled as one: the only red control in
+                 the app outside a per-item delete. It sits beside Re-index all
+                 because both act on the whole source list, and the two are the
+                 opposite ends of the same decision — rebuild it, or empty it. -->
+            <button id="delete-all-btn" class="btn btn-small btn-danger needs-account"
+              type="button" data-title="Delete every document and its vectors"
+              title="Delete every document and its vectors">✕ Delete all</button>
           </div>
         </aside>
 
@@ -653,6 +660,6 @@
       </div>
     </div>
 
-    <script type="module" src="/app.js?v=64"></script>
+    <script type="module" src="/app.js?v=65"></script>
   </body>
 </html>
