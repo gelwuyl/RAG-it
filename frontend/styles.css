@@ -1110,6 +1110,14 @@ html[data-kind="guest"] .identity-hint .hint-badge { display: inline-block; }
 /* ---------- evaluation pane (right) ---------- */
 
 .eval-status { line-height: 1.45; }
+/* Provenance, inside the disclosure. Telemetry register and a rule above it:
+   it is a caption for the evidence below, not a heading over it. */
+.eval-provenance {
+  line-height: 1.5; padding: 8px 0 10px; margin-bottom: 2px;
+  border-bottom: 1px solid var(--border);
+  color: var(--faint); font-size: var(--text-nano);
+}
+.eval-provenance:empty { display: none; }
 .eval-status:empty { display: none; }
 .eval-scorecard { display: flex; flex-direction: column; gap: 11px; }
 /* Group heading. Nine bars in a flat list read as nine views of one thing; they

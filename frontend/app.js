@@ -2574,7 +2574,13 @@ function renderEval(data) {
   // The Evaluation pane and the answer readout used to share no state at all,
   // which is why the two sets of numbers read as unrelated.
   state.evalData = data;
+  // Two different jobs, and they used to share one element. `status` is
+  // transient — indexing, scoring, failed — and belongs at the top where it
+  // interrupts. `provenance` is a standing fact about the published run and
+  // belongs with the evidence, folded away.
   const statusEl = $("eval-status");
+  const provEl = $("eval-provenance");
+  if (provEl) provEl.textContent = "";
   if (!data || data.status === "none") {
     statusEl.textContent = "";
     // The pane used to say only "no run yet", which explained neither what a
@@ -2630,8 +2636,11 @@ function renderEval(data) {
     ? `Published run${ts} · ${data.n_corpus_files || "?"} sample documents` +
       (model ? ` · ${model.replace(/^models\//, "")}` : "")
     : "Latest benchmark" + ts;
-  statusEl.textContent =
-    whose + (ungraded ? ` · ⚠ ${ungraded} ungraded (judge unavailable)` : "");
+  statusEl.textContent = "";
+  if (provEl) {
+    provEl.textContent =
+      whose + (ungraded ? ` · ⚠ ${ungraded} ungraded (judge unavailable)` : "");
+  }
   renderScorecard(data.metrics || {}, data.mode);
   renderEvalQuestions(data.results || []);
 }

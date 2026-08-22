@@ -47,7 +47,7 @@
         }
       })();
     </script>
-    <link rel="stylesheet" href="/styles.css?v=54" />
+    <link rel="stylesheet" href="/styles.css?v=55" />
     <script>
       // Boot diagnostics: collect load/runtime errors so a broken app.js
       // shows a visible message instead of a silently dead UI.
@@ -357,6 +357,13 @@
                 <span>See the benchmark in detail</span>
                 <span class="eval-details-hint">every question, expected vs actual</span>
               </summary>
+              <!-- Whose numbers these are: which run, when, how many
+                   documents, which model, and how many went ungraded. It sat
+                   above the bars, where it was the first thing a visitor read
+                   and the last thing they needed — a timestamp and a model id
+                   before they knew what the pane was for. It belongs with the
+                   evidence, so it moved here. -->
+              <div id="eval-provenance" class="eval-provenance"></div>
               <div id="eval-questions" class="eval-questions"></div>
             </details>
           </div>
@@ -646,6 +653,6 @@
       </div>
     </div>
 
-    <script type="module" src="/app.js?v=63"></script>
+    <script type="module" src="/app.js?v=64"></script>
   </body>
 </html>
