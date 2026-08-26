@@ -2458,15 +2458,20 @@ function fmtPct(v) {
 const LIVE_TO_BENCHMARK = {
   faithful: "faithfulness",
   relevant: "answer_relevancy",
+  correct: "answer_correctness",
+  context_relevance: "precision_at_k",
+  context_sufficiency: "context_recall",
 };
 
-// Two additional reference-free live checks. They grade the retrieved context
-// against the question itself, so every arbitrary chat answer carries four live
-// readings without claiming any golden-set metric. They have no benchmark bar.
-const LIVE_CONTEXT_CHECKS = [
-  { field: "context_relevance", label: "Context relevance", sub: "reference-free" },
-  { field: "context_sufficiency", label: "Context sufficiency", sub: "reference-free" },
-];
+// Fields whose live reading is an ESTIMATE against a model-drafted or
+// reference-free proxy, not the golden-set statistic the benchmark row normally
+// reports. They borrow the row's bar; their foot line says what was actually
+// judged so an estimate never reads as a measured ground-truth score.
+const LIVE_ESTIMATED_FIELDS = new Set([
+  "correct",
+  "context_relevance",
+  "context_sufficiency",
+]);
 
 // A judge answers yes/no for one answer while the benchmark reports a RATE
 // across the golden set. The labels say “this answer” and “benchmark” so the
@@ -2546,19 +2551,29 @@ function renderScorecard(metrics, runMode) {
       </div>
       <div class="score-foot">${
         hasLive
-          ? `this answer ${livePct}% · benchmark ${benchPct}%`
+          ? LIVE_ESTIMATED_FIELDS.has(field)
+            ? // Estimated: name what was actually judged. These borrow a row whose
+              // benchmark is a ground-truth statistic; without this the reading
+              // would claim the same evidence the benchmark had.
+              `${
+                field === "correct"
+                  ? "vs an answer drafted from your passages (estimated)"
+                  : field === "context_sufficiency"
+                    ? "passages look sufficient — no gold set to compare (estimated)"
+                    : "passages look on-topic — no gold set to compare (estimated)"
+              } · benchmark ${benchPct}%`
+            : `this answer ${livePct}% · benchmark ${benchPct}%`
           : waiting
             ? `benchmark ${benchPct}% · waiting on the judge`
             : field
               ? `benchmark ${benchPct}%`
               // Seven of the nine can never carry a live reading, and saying so
               // where the question arises beats leaving a row that looks
-              // broken. They need a KNOWN answer to score against: precision,
-              // MRR, NDCG and hit rate all ask "was the right passage
-              // returned", which nobody can judge for a question the corpus
-              // has no golden answer for. Correctness needs an expected
-              // answer; the not-found rate needs a set of deliberately
-              // unanswerable questions.
+              // broken. MRR, NDCG and hit rate all ask "was the right passage
+              // RETURNED", which nobody can judge for a question the corpus has
+              // no golden answer for. The not-found rate needs a set of
+              // deliberately unanswerable questions. Correctness now carries an
+              // estimated live reading above.
               : `benchmark ${benchPct}% · needs a known answer`
       }</div>`;
     el.appendChild(row);
@@ -2596,38 +2611,13 @@ function renderScorecard(metrics, runMode) {
     el.appendChild(t);
   }
 
-  // The two reference-free context checks carry live readings but no benchmark
-  // bar, so they are drawn after the scorecard rows rather than into one.
-  for (const check of LIVE_CONTEXT_CHECKS) {
-    const v = liveValue(live, check.field);
-    if (v == null && !(live && live.pending)) continue;
-    const row = document.createElement("div");
-    row.className =
-      "score-row" + (v != null ? " has-live" : "") + (v == null ? " is-waiting" : "");
-    row.innerHTML = `
-      <div class="score-head">
-        <span class="score-name">${check.label}<span class="score-sub">${check.sub}</span></span>
-        <span class="score-val ${v == null ? "quiet" : v ? "over" : "under"}">${
-          v == null ? "grading…" : escapeHtml(liveLabel(live, check.field))
-        }</span>
-      </div>
-      <div class="score-foot">${
-        v == null
-          ? "waiting on the judge"
-          : v
-            ? "this answer passed — judged against the question, no known answer needed"
-            : "this answer failed — judged against the question, no known answer needed"
-      }</div>`;
-    el.appendChild(row);
-  }
-
   const legend = document.createElement("p");
   legend.className = "score-legend";
   legend.textContent = anyLive
-    ? "Faithfulness and answer relevancy are judged for this answer, and the context checks below grade the retrieved passages without a known answer. Retrieval similarity is reported separately; Context Recall and the other ground-truth metrics need a known answer, so they show the benchmark alone. The tick is that benchmark — a reference, not a pass mark."
+    ? "Faithfulness and relevancy are judged directly for this answer; correctness and the retrieval rows marked estimated are judged without a gold reference (correctness scores against an answer drafted from your passages). Retrieval similarity is reported separately. The tick is that benchmark — a reference, not a pass mark."
     : live?.top_sim != null
-      ? "Top retrieval similarity is reported separately. The live judges, including the reference-free context checks, fill in when grading completes; Context Recall and the other ground-truth metrics need a known answer, so they show the benchmark alone."
-      : "Benchmark across the sample corpus. Ask a question and the live judges, including the reference-free context checks, will show that answer against it once grading completes.";
+      ? "Top retrieval similarity is reported separately. The live judges fill in when grading completes; correctness is estimated against a drafted reference rather than a gold answer."
+      : "Benchmark across the sample corpus. Ask a question and the live judges will show that answer against it once grading completes.";
   el.appendChild(legend);
 }
 

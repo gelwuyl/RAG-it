@@ -1,9 +1,11 @@
 """LLM-as-judge metrics for answer and context quality.
 
 The reference-based correctness judge is used by the benchmark. The live chat
-also uses two explicitly reference-free context checks: context relevance and
-context sufficiency. Those are useful proxies for arbitrary questions, but they
-must not be mistaken for golden-set recall, precision, or correctness.
+also uses two explicitly reference-free context checks — context relevance and
+context sufficiency — plus synthesize_expected, which DRAFTS a reference from
+the retrieved passages so arbitrary answers can carry an estimated correctness.
+Proxies and synthesized references must not be mistaken for golden-set recall,
+precision, or correctness; callers label them estimated in the UI.
 
 All judges reuse the same proxy LLM (qwen3.8-max) per user decision 2026-08-15.
 The judge returns PASS/FAIL (or a 0-1 score) plus one line of reasoning.
@@ -239,6 +241,47 @@ def context_sufficiency(question: str, context: str) -> tuple[bool, str]:
         + _VERDICT_CONTRACT
     )
     return _parse_verdict(_judge(prompt))
+
+
+def synthesize_expected(question: str, context: str) -> tuple[str, str]:
+    """Draft the expected answer a gold author would have written, from context.
+
+    Live grading of arbitrary questions has no human reference. The honest
+    substitute is to DERIVE one from the retrieved passages and label the result
+    estimated everywhere it is shown. Two deliberate properties:
+
+    * It reads only the question and the passages. It never sees the system's
+      answer, so scoring against it is not the model agreeing with itself.
+    * If the passages genuinely cannot answer the question, that is returned as
+      a verdict ("no answer derivable"), NOT invented text — grading a real
+      answer against a hallucinated reference would manufacture failures out
+      of thin air.
+
+    Raises JudgeError when the model cannot produce usable text.
+    """
+    if not context.strip():
+        raise JudgeError("empty context")
+    prompt = (
+        "You are writing the reference answer for a RAG evaluation set.\n"
+        "Answer the question using ONLY the passages below, in 1-3 sentences.\n"
+        "If and only if the passages do not contain enough information to "
+        "answer, reply with exactly:\n"
+        "NO_ANSWER_DERIVABLE\n"
+        "Do not use outside knowledge. Do not mention the passages or this task.\n\n"
+        f"Question: {question}\n\n"
+        f"Passages:\n{context}\n\n"
+        "Reference answer:"
+    )
+    # Reuses the same client/model as every other judge; raw text here rather
+    # than a verdict, so _judge + strip directly.
+    out = _judge(prompt)
+    if "<think" in out.lower():
+        out = re.split(r"</(?:thought|thinking|reasoning)>", out, flags=re.IGNORECASE)[-1].strip()
+    if not out:
+        raise JudgeError("reference synthesis returned empty content")
+    if "NO_ANSWER_DERIVABLE" in out:
+        return "", "context does not contain an answer"
+    return out, ""
 
 
 def answer_correctness(

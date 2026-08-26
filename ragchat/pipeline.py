@@ -66,21 +66,32 @@ NOT_FOUND_MIN_SIM = 0.12
 # and resumed by another HTTP request.
 GRADE_MAX_ATTEMPTS = 3
 GRADE_RETRY_AFTER_MS = 1_500
-# Every normal chat answer gets these four reference-free live checks. The first
-# two are answer checks; the latter two are explicitly labelled proxies because
-# arbitrary questions do not come with gold passages or an expected answer.
+# Every normal chat answer gets these five live readings. Faithfulness and
+# relevancy are judged directly. Correctness is ESTIMATED: the judge drafts an
+# expected answer from the retrieved passages and scores the real answer against
+# it, because arbitrary questions have no gold answer. The two context checks
+# map onto the Precision@k and Context Recall bars the same way - close enough
+# to be useful, not the same statistic, so the UI tags all three "estimated".
+# Renaming these keys orphans verdicts persisted in Message.eval_data.
 LIVE_GRADE_FIELDS = (
     "faithful",
     "relevant",
     "context_relevance",
     "context_sufficiency",
+    "correct",
 )
 _LIVE_GRADE_LABELS = {
     "faithful": "Faithfulness",
     "relevant": "Answer relevancy",
     "context_relevance": "Context relevance",
     "context_sufficiency": "Context sufficiency",
+    "correct": "Answer correctness",
 }
+# Value carried by eval_data["expected_reason"] when synthesize_expected ruled
+# that the passages cannot answer the question. Stored as data, compared as a
+# constant: a retry must be able to tell "graded — nothing to be right about"
+# from "the draft call itself failed".
+NO_ANSWER_DERIVABLE = "no answer derivable"
 
 SYSTEM_PROMPT = """You are a helpful assistant answering questions using ONLY the provided source excerpts.
 
@@ -473,13 +484,34 @@ def _eval_answer(
         field: previous.get(f"{field}_reason") if done[field] else ""
         for field in LIVE_GRADE_FIELDS
     }
+    # The synthesized reference is an INPUT to correctness, not a verdict. But
+    # "no answer derivable" IS a completed verdict for `correct`: the judge
+    # decided with certainty that the passages cannot answer, and FAIL is then
+    # the honest grade (there was nothing to be right about). It is persisted as
+    # expected_answer="" + expected_reason=NO_ANSWER_DERIVABLE, which also lets
+    # a retry skip re-purchasing the same draft call.
+    expected_text = previous.get("expected_answer")
+    expected_reason = previous.get("expected_reason") or ""
+    if values["correct"] is None and (
+        previous.get("expected_answer") == ""
+        and expected_reason == NO_ANSWER_DERIVABLE
+    ):
+        # Resume a graded "nothing to be right about" verdict instead of
+        # re-running synthesis for an answer it already ruled on.
+        values["correct"] = False
+        reasons["correct"] = "no reference derivable: the passages do not answer this"
+    correct_done = values["correct"] is not None
+    # A draft that failed once is retried (the outage may have healed); one that
+    # already RANKED as no-answer-derivable was a completed verdict, handled above.
 
     try:
         from eval.judges import (
+            answer_correctness,
             answer_relevancy,
             context_relevance,
             context_sufficiency,
             faithfulness,
+            synthesize_expected,
         )
     except Exception as exc:
         reason = f"judges unavailable: {exc}"
@@ -528,17 +560,58 @@ def _eval_answer(
             context_sufficiency, question, context_text
         )
 
+    if not correct_done:
+        # Resume a draft-outage marker ("expected_answer": "" + a reason) by
+        # re-running synthesis; NO_ANSWER_DERIVABLE was already converted to a
+        # FAIL verdict above. An absent key means "not yet attempted".
+        if previous.get("expected_answer") == "" or expected_text is None:
+            expected_text, expected_reason = _run(
+                synthesize_expected, question, context_text
+            )
+        if expected_text:
+            # A real reference exists: score against it and persist it so a
+            # retry never re-purchases the same draft call.
+            values["expected_answer"] = expected_text
+            values["correct"], reasons["correct"] = _run(
+                answer_correctness, question, expected_text, answer
+            )
+        else:
+            # No usable text. Two different meanings: the passages genuinely
+            # cannot answer (a graded verdict — correctness is FAIL by
+            # definition, since there was nothing to be right about), or the
+            # draft call itself failed (an outage the retry will heal, and the
+            # draft failure reason is stored as data, not an error string).
+            values["expected_answer"] = ""
+            if expected_reason:
+                values["expected_reason"] = expected_reason
+            if expected_reason == NO_ANSWER_DERIVABLE:
+                values["correct"] = False
+                reasons["correct"] = (
+                    "no reference derivable: the passages do not answer this"
+                )
+
     out = {
         **values,
         **{f"{field}_reason": reasons[field] for field in LIVE_GRADE_FIELDS},
     }
     missing = []
     for field in LIVE_GRADE_FIELDS:
-        if values[field] is None:
-            missing.append(
-                f"{_LIVE_GRADE_LABELS[field]} unavailable: "
-                f"{reasons[field] or 'judge returned no verdict'}"
-            )
+        if values[field] is None and not (
+            # A graded "the passages do not answer this" carries its own reason
+            # in expected_reason; it is a verdict, not a judge outage.
+            field == "correct"
+            and values.get("expected_reason") == NO_ANSWER_DERIVABLE
+        ):
+            if field == "correct":
+                # The reference draft is upstream of the correctness judge; if
+                # IT failed, naming "no verdict" would send someone debugging
+                # the wrong call.
+                cause = values.get("expected_reason") or (
+                    reasons[field] or "judge returned no verdict"
+                )
+            else:
+                cause = reasons[field] or "judge returned no verdict"
+            missing.append(f"{_LIVE_GRADE_LABELS[field]} unavailable: {cause}")
     if missing:
         out["judge_error"] = " · ".join(missing)
     return out
@@ -644,6 +717,8 @@ def _line(eval_d: dict | None, top_sim: float | None, deep: int, latency_ms: flo
             parts.append("ctx rel " + ("PASS" if eval_d["context_relevance"] else "FAIL"))
         if eval_d.get("context_sufficiency") is not None:
             parts.append("ctx suff " + ("PASS" if eval_d["context_sufficiency"] else "FAIL"))
+        if eval_d.get("correct") is not None:
+            parts.append("correct " + ("PASS" if eval_d["correct"] else "FAIL"))
     if latency_ms is not None:
         parts.append(f"{latency_ms:.0f} ms")
     return " · ".join(parts)
