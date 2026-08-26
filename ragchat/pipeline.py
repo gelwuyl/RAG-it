@@ -66,6 +66,21 @@ NOT_FOUND_MIN_SIM = 0.12
 # and resumed by another HTTP request.
 GRADE_MAX_ATTEMPTS = 3
 GRADE_RETRY_AFTER_MS = 1_500
+# Every normal chat answer gets these four reference-free live checks. The first
+# two are answer checks; the latter two are explicitly labelled proxies because
+# arbitrary questions do not come with gold passages or an expected answer.
+LIVE_GRADE_FIELDS = (
+    "faithful",
+    "relevant",
+    "context_relevance",
+    "context_sufficiency",
+)
+_LIVE_GRADE_LABELS = {
+    "faithful": "Faithfulness",
+    "relevant": "Answer relevancy",
+    "context_relevance": "Context relevance",
+    "context_sufficiency": "Context sufficiency",
+}
 
 SYSTEM_PROMPT = """You are a helpful assistant answering questions using ONLY the provided source excerpts.
 
@@ -437,11 +452,11 @@ def _eval_answer(
     cfg: PipelineConfig,
     previous: dict | None = None,
 ) -> dict | None:
-    """LLM-judge the unresolved live metrics without replacing a verdict.
+    """Judge unresolved live checks without replacing a completed verdict.
 
     A returned boolean is durable evidence from a completed judge call. Only a
     ``None`` is retried, so one transient provider failure cannot spend another
-    call on the metric that already completed — or replace that result with a
+    call on a metric that already completed — or replace that result with a
     later outage. Finality belongs to the HTTP route, where the persisted attempt
     count is available.
     """
@@ -449,29 +464,36 @@ def _eval_answer(
         return None
 
     previous = previous or {}
-    faithful_done = previous.get("faithful") is not None
-    relevant_done = previous.get("relevant") is not None
-    fh = previous.get("faithful") if faithful_done else None
-    fh_r = previous.get("faithful_reason") if faithful_done else ""
-    ar = previous.get("relevant") if relevant_done else None
-    ar_r = previous.get("relevant_reason") if relevant_done else ""
+    done = {field: previous.get(field) is not None for field in LIVE_GRADE_FIELDS}
+    values = {
+        field: previous.get(field) if done[field] else None
+        for field in LIVE_GRADE_FIELDS
+    }
+    reasons = {
+        field: previous.get(f"{field}_reason") if done[field] else ""
+        for field in LIVE_GRADE_FIELDS
+    }
 
     try:
-        from eval.judges import faithfulness, answer_relevancy
+        from eval.judges import (
+            answer_relevancy,
+            context_relevance,
+            context_sufficiency,
+            faithfulness,
+        )
     except Exception as exc:
         reason = f"judges unavailable: {exc}"
-        missing = []
-        if not faithful_done:
-            fh_r = reason
-            missing.append(f"Faithfulness unavailable: {reason}")
-        if not relevant_done:
-            ar_r = reason
-            missing.append(f"Answer relevancy unavailable: {reason}")
+        for field in LIVE_GRADE_FIELDS:
+            if not done[field]:
+                reasons[field] = reason
+        missing = [
+            f"{_LIVE_GRADE_LABELS[field]} unavailable: {reason}"
+            for field in LIVE_GRADE_FIELDS
+            if not done[field]
+        ]
         out = {
-            "faithful": fh,
-            "faithful_reason": fh_r,
-            "relevant": ar,
-            "relevant_reason": ar_r,
+            **values,
+            **{f"{field}_reason": reasons[field] for field in LIVE_GRADE_FIELDS},
         }
         if missing:
             out["judge_error"] = " · ".join(missing)
@@ -489,22 +511,34 @@ def _eval_answer(
         except Exception as exc:  # noqa: BLE001
             return None, str(exc)
 
-    if not faithful_done:
-        fh, fh_r = _run(faithfulness, question, context_text, answer)
-    if not relevant_done:
-        ar, ar_r = _run(answer_relevancy, question, answer)
+    if not done["faithful"]:
+        values["faithful"], reasons["faithful"] = _run(
+            faithfulness, question, context_text, answer
+        )
+    if not done["relevant"]:
+        values["relevant"], reasons["relevant"] = _run(
+            answer_relevancy, question, answer
+        )
+    if not done["context_relevance"]:
+        values["context_relevance"], reasons["context_relevance"] = _run(
+            context_relevance, question, context_text
+        )
+    if not done["context_sufficiency"]:
+        values["context_sufficiency"], reasons["context_sufficiency"] = _run(
+            context_sufficiency, question, context_text
+        )
 
     out = {
-        "faithful": fh,
-        "faithful_reason": fh_r,
-        "relevant": ar,
-        "relevant_reason": ar_r,
+        **values,
+        **{f"{field}_reason": reasons[field] for field in LIVE_GRADE_FIELDS},
     }
     missing = []
-    if fh is None:
-        missing.append(f"Faithfulness unavailable: {fh_r or 'judge returned no verdict'}")
-    if ar is None:
-        missing.append(f"Answer relevancy unavailable: {ar_r or 'judge returned no verdict'}")
+    for field in LIVE_GRADE_FIELDS:
+        if values[field] is None:
+            missing.append(
+                f"{_LIVE_GRADE_LABELS[field]} unavailable: "
+                f"{reasons[field] or 'judge returned no verdict'}"
+            )
     if missing:
         out["judge_error"] = " · ".join(missing)
     return out
@@ -522,8 +556,7 @@ def _ungraded_eval(cfg: PipelineConfig) -> dict | None:
         return None
     return {
         "pending": True,
-        "faithful": None,
-        "relevant": None,
+        **{field: None for field in LIVE_GRADE_FIELDS},
         "grade_attempts": 0,
         "grade_max_attempts": GRADE_MAX_ATTEMPTS,
     }
@@ -607,6 +640,10 @@ def _line(eval_d: dict | None, top_sim: float | None, deep: int, latency_ms: flo
             parts.append("faith " + ("PASS" if eval_d["faithful"] else "FAIL"))
         if eval_d.get("relevant") is not None:
             parts.append("rel " + ("PASS" if eval_d["relevant"] else "FAIL"))
+        if eval_d.get("context_relevance") is not None:
+            parts.append("ctx rel " + ("PASS" if eval_d["context_relevance"] else "FAIL"))
+        if eval_d.get("context_sufficiency") is not None:
+            parts.append("ctx suff " + ("PASS" if eval_d["context_sufficiency"] else "FAIL"))
     if latency_ms is not None:
         parts.append(f"{latency_ms:.0f} ms")
     return " · ".join(parts)

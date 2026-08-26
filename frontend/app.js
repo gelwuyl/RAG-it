@@ -2460,6 +2460,14 @@ const LIVE_TO_BENCHMARK = {
   relevant: "answer_relevancy",
 };
 
+// Two additional reference-free live checks. They grade the retrieved context
+// against the question itself, so every arbitrary chat answer carries four live
+// readings without claiming any golden-set metric. They have no benchmark bar.
+const LIVE_CONTEXT_CHECKS = [
+  { field: "context_relevance", label: "Context relevance", sub: "reference-free" },
+  { field: "context_sufficiency", label: "Context sufficiency", sub: "reference-free" },
+];
+
 // A judge answers yes/no for one answer while the benchmark reports a RATE
 // across the golden set. The labels say “this answer” and “benchmark” so the
 // shared bar does not claim they are the same statistic.
@@ -2588,13 +2596,38 @@ function renderScorecard(metrics, runMode) {
     el.appendChild(t);
   }
 
+  // The two reference-free context checks carry live readings but no benchmark
+  // bar, so they are drawn after the scorecard rows rather than into one.
+  for (const check of LIVE_CONTEXT_CHECKS) {
+    const v = liveValue(live, check.field);
+    if (v == null && !(live && live.pending)) continue;
+    const row = document.createElement("div");
+    row.className =
+      "score-row" + (v != null ? " has-live" : "") + (v == null ? " is-waiting" : "");
+    row.innerHTML = `
+      <div class="score-head">
+        <span class="score-name">${check.label}<span class="score-sub">${check.sub}</span></span>
+        <span class="score-val ${v == null ? "quiet" : v ? "over" : "under"}">${
+          v == null ? "grading…" : escapeHtml(liveLabel(live, check.field))
+        }</span>
+      </div>
+      <div class="score-foot">${
+        v == null
+          ? "waiting on the judge"
+          : v
+            ? "this answer passed — judged against the question, no known answer needed"
+            : "this answer failed — judged against the question, no known answer needed"
+      }</div>`;
+    el.appendChild(row);
+  }
+
   const legend = document.createElement("p");
   legend.className = "score-legend";
   legend.textContent = anyLive
-    ? "Faithfulness and answer relevancy can be judged for this answer. Retrieval similarity is reported separately; Context Recall and the other ground-truth metrics need a known answer, so they show the benchmark alone. The tick is that benchmark — a reference, not a pass mark."
+    ? "Faithfulness and answer relevancy are judged for this answer, and the context checks below grade the retrieved passages without a known answer. Retrieval similarity is reported separately; Context Recall and the other ground-truth metrics need a known answer, so they show the benchmark alone. The tick is that benchmark — a reference, not a pass mark."
     : live?.top_sim != null
-      ? "Top retrieval similarity is reported separately. Faithfulness and answer relevancy will appear when grading completes; Context Recall and the other ground-truth metrics need a known answer, so they show the benchmark alone."
-      : "Benchmark across the sample corpus. Ask a question and faithfulness and answer relevancy will show that answer against it once grading completes.";
+      ? "Top retrieval similarity is reported separately. The live judges, including the reference-free context checks, fill in when grading completes; Context Recall and the other ground-truth metrics need a known answer, so they show the benchmark alone."
+      : "Benchmark across the sample corpus. Ask a question and the live judges, including the reference-free context checks, will show that answer against it once grading completes.";
   el.appendChild(legend);
 }
 

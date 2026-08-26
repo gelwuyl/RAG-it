@@ -1,8 +1,14 @@
-"""LLM-as-judge generation metrics (faithfulness, relevancy, correctness).
+"""LLM-as-judge metrics for answer and context quality.
 
-All three reuse the same proxy LLM (qwen3.8-max) per user decision 2026-08-15.
+The reference-based correctness judge is used by the benchmark. The live chat
+also uses two explicitly reference-free context checks: context relevance and
+context sufficiency. Those are useful proxies for arbitrary questions, but they
+must not be mistaken for golden-set recall, precision, or correctness.
+
+All judges reuse the same proxy LLM (qwen3.8-max) per user decision 2026-08-15.
 The judge returns PASS/FAIL (or a 0-1 score) plus one line of reasoning.
-The eval harness calls these only in the full (non --retrieval-only) run.
+The eval harness calls the reference-based judges only in the full
+(non --retrieval-only) run.
 
 Tightened 2026-08-16: the judge prompts now forbid chain-of-thought and force a
 single-line verdict + one-sentence reason. Previously the model could emit a
@@ -181,6 +187,55 @@ def answer_relevancy(question: str, answer: str) -> tuple[bool, str]:
         "PASS.\n\n"
         f"Question: {question}\n\n"
         f"Answer: {answer}\n\n"
+        + _VERDICT_CONTRACT
+    )
+    return _parse_verdict(_judge(prompt))
+
+
+def context_relevance(question: str, context: str) -> tuple[bool, str]:
+    """Is the retrieved context materially relevant to the question?
+
+    This is a reference-free live proxy for retrieval precision. It judges the
+    passages against the question itself, not against a hidden expected answer,
+    so it must never be reported as canonical Context Precision or Recall.
+    """
+    if not context.strip():
+        return False, "empty context"
+    prompt = (
+        "You are checking the CONTEXT RELEVANCE of passages retrieved for a RAG "
+        "question, without a reference answer. PASS when the context contains "
+        "useful, directly relevant evidence for the question and has no "
+        "substantial irrelevant filler. FAIL when the passages are mostly "
+        "unrelated, too weak, or do not bear on what was asked. Judge only the "
+        "question and supplied context; do not use outside knowledge and do not "
+        "judge the generated answer. This is a reference-free proxy, not a gold "
+        "Context Precision or Context Recall score.\n\n"
+        f"Question: {question}\n\n"
+        f"Retrieved context:\n{context}\n\n"
+        + _VERDICT_CONTRACT
+    )
+    return _parse_verdict(_judge(prompt))
+
+
+def context_sufficiency(question: str, context: str) -> tuple[bool, str]:
+    """Does the context contain enough information to answer the question?
+
+    This is a reference-free live proxy for answer-passage coverage. It asks
+    whether the supplied passages are sufficient, not whether every gold passage
+    was retrieved, because arbitrary chat questions have no gold passage set.
+    """
+    if not context.strip():
+        return False, "empty context"
+    prompt = (
+        "You are checking CONTEXT SUFFICIENCY for a RAG question, without a "
+        "reference answer. PASS when the supplied passages contain enough "
+        "specific information to answer the question completely from the "
+        "passages alone. FAIL when key information is absent, the context is "
+        "too incomplete, or it cannot support an answer. Judge only the "
+        "question and supplied context; do not fill gaps with outside knowledge. "
+        "This is a reference-free coverage proxy, not canonical Context Recall.\n\n"
+        f"Question: {question}\n\n"
+        f"Retrieved context:\n{context}\n\n"
         + _VERDICT_CONTRACT
     )
     return _parse_verdict(_judge(prompt))

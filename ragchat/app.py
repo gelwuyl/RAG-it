@@ -1480,7 +1480,9 @@ def grade_message(
         raise HTTPException(status_code=404, detail="Message not found")
 
     stored = json.loads(msg.eval_data) if msg.eval_data else {}
-    complete = stored.get("faithful") is not None and stored.get("relevant") is not None
+    complete = all(
+        stored.get(field) is not None for field in pipeline.LIVE_GRADE_FIELDS
+    )
     # A legacy partial result may have been marked final by the old route. It is
     # intentionally eligible again: a transient judge outage should not become
     # a permanent “Partly graded” message after this fix is deployed.
@@ -1540,7 +1542,9 @@ def grade_message(
     attempts += 1
     stored["grade_attempts"] = attempts
     stored["grade_max_attempts"] = GRADE_MAX_ATTEMPTS
-    incomplete = stored.get("faithful") is None or stored.get("relevant") is None
+    incomplete = any(
+        stored.get(field) is None for field in pipeline.LIVE_GRADE_FIELDS
+    )
     if incomplete and attempts < GRADE_MAX_ATTEMPTS:
         stored["pending"] = True
         stored["retry_after_ms"] = GRADE_RETRY_AFTER_MS

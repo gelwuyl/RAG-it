@@ -189,6 +189,8 @@ def test_live_retry_only_calls_the_judge_without_a_verdict(monkeypatch):
 
     monkeypatch.setattr(judges, "faithfulness", _faithful)
     monkeypatch.setattr(judges, "answer_relevancy", _relevant)
+    monkeypatch.setattr(judges, "context_relevance", lambda *a: (True, "on point"))
+    monkeypatch.setattr(judges, "context_sufficiency", lambda *a: (True, "enough"))
     out = pipeline.grade_answer(
         "q",
         "a",
@@ -200,6 +202,10 @@ def test_live_retry_only_calls_the_judge_without_a_verdict(monkeypatch):
     assert calls == {"faithful": 0, "relevant": 1}
     assert out["faithful"] is False
     assert out["relevant"] is True
+    # The two context checks grade the SAME stored context, so a completed
+    # verdict is preserved exactly like the answer judges' is.
+    assert out["context_relevance"] is True
+    assert out["context_sufficiency"] is True
 
 
 def test_live_judge_error_identifies_the_missing_metric(monkeypatch):
@@ -209,6 +215,8 @@ def test_live_judge_error_identifies_the_missing_metric(monkeypatch):
         eval_show = True
 
     monkeypatch.setattr(judges, "faithfulness", lambda *args: (True, "supported"))
+    monkeypatch.setattr(judges, "context_relevance", lambda *a: (True, "on point"))
+    monkeypatch.setattr(judges, "context_sufficiency", lambda *a: (True, "enough"))
 
     def _broken_relevancy(*args):
         raise RuntimeError("429 rate limited")
@@ -219,3 +227,22 @@ def test_live_judge_error_identifies_the_missing_metric(monkeypatch):
     assert out["faithful"] is True and out["relevant"] is None
     assert "Answer relevancy unavailable: 429 rate limited" in out["judge_error"]
     assert "Faithfulness unavailable" not in out["judge_error"]
+
+
+def test_context_checks_are_reported_when_they_fail(monkeypatch):
+    """A FAIL from a reference-free proxy is a real verdict, not an outage."""
+    from ragchat import pipeline
+
+    class _Cfg:
+        eval_show = True
+
+    monkeypatch.setattr(judges, "faithfulness", lambda *a: (True, "supported"))
+    monkeypatch.setattr(judges, "answer_relevancy", lambda *a: (True, "on-topic"))
+    monkeypatch.setattr(judges, "context_relevance", lambda *a: (False, "mostly unrelated"))
+    monkeypatch.setattr(judges, "context_sufficiency", lambda *a: (True, "enough"))
+    out = pipeline.grade_answer("q", "a", "ctx", _Cfg())
+
+    assert out["context_relevance"] is False
+    assert out["context_relevance_reason"] == "mostly unrelated"
+    assert out["context_sufficiency"] is True
+    assert "judge_error" not in out

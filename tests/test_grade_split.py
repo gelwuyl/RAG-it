@@ -68,6 +68,7 @@ def answered(client, monkeypatch):
             "citations": [],
             "eval_line": "top sim 0.38 - 8255 ms",
             "eval": {"pending": True, "faithful": None, "relevant": None,
+                     "context_relevance": None, "context_sufficiency": None,
                      "top_sim": 0.38, "deep_n": 0, "latency_ms": 8255},
             "context": CONTEXT,
             "effective_query": "milk fridge temperature",
@@ -91,7 +92,9 @@ def _stub_judges(monkeypatch, verdict=(True, True)):
         _fake.seen = {"q": question, "answer": answer, "context": context_text,
                       "previous": previous}
         return {"faithful": verdict[0], "faithful_reason": "r",
-                "relevant": verdict[1], "relevant_reason": "r"}
+                "relevant": verdict[1], "relevant_reason": "r",
+                "context_relevance": verdict[0], "context_relevance_reason": "r",
+                "context_sufficiency": verdict[1], "context_sufficiency_reason": "r"}
 
     monkeypatch.setattr(pipeline, "_eval_answer", _fake)
     return calls, _fake
@@ -142,26 +145,38 @@ def test_partial_grade_stays_pending_until_the_missing_judge_recovers(answered, 
                 "faithful_reason": "supported",
                 "relevant": None,
                 "relevant_reason": "429 rate limited",
-                "judge_error": "Answer relevancy unavailable: 429 rate limited",
+                "context_relevance": True,
+                "context_relevance_reason": "on point",
+                "context_sufficiency": None,
+                "context_sufficiency_reason": "judge timeout",
+                "judge_error": "Answer relevancy unavailable: 429 rate limited"
+                " · Context sufficiency unavailable: judge timeout",
             }
         assert previous["faithful"] is True
+        assert previous["context_relevance"] is True
         return {
             "faithful": previous["faithful"],
             "faithful_reason": previous["faithful_reason"],
             "relevant": True,
             "relevant_reason": "on-topic",
+            "context_relevance": previous["context_relevance"],
+            "context_relevance_reason": previous["context_relevance_reason"],
+            "context_sufficiency": True,
+            "context_sufficiency_reason": "enough",
         }
 
     monkeypatch.setattr(pipeline, "_eval_answer", _partial_then_complete)
     url = f"/api/chats/{cid}/messages/{body['message_id']}/grade"
     first = client.post(url).json()["eval"]
     assert first["faithful"] is True and first["relevant"] is None
+    assert first["context_relevance"] is True and first["context_sufficiency"] is None
     assert first["pending"] is True
     assert first["grade_attempts"] == 1
 
     second = client.post(url).json()["eval"]
     assert len(calls) == 2
     assert second["faithful"] is True and second["relevant"] is True
+    assert second["context_sufficiency"] is True
     assert second["pending"] is False
     assert second["grade_attempts"] == 2
     assert "judge_error" not in second
@@ -180,6 +195,8 @@ def test_legacy_partial_result_is_eligible_for_the_new_retry(answered, monkeypat
         "faithful_reason": "supported",
         "relevant": None,
         "relevant_reason": "judge timeout",
+        "context_relevance": None,
+        "context_sufficiency": None,
     })
     session.commit()
     session.close()
@@ -207,7 +224,12 @@ def test_partial_grade_exhaustion_stops_after_the_bounded_budget(answered, monke
             "faithful_reason": "supported",
             "relevant": None,
             "relevant_reason": "judge timeout",
-            "judge_error": "Answer relevancy unavailable: judge timeout",
+            "context_relevance": True,
+            "context_relevance_reason": "on point",
+            "context_sufficiency": None,
+            "context_sufficiency_reason": "judge timeout",
+            "judge_error": "Answer relevancy unavailable: judge timeout"
+            " · Context sufficiency unavailable: judge timeout",
         }
 
     monkeypatch.setattr(pipeline, "_eval_answer", _always_missing)
@@ -217,6 +239,10 @@ def test_partial_grade_exhaustion_stops_after_the_bounded_budget(answered, monke
     exhausted = results[-1]
     assert exhausted["grade_exhausted"] is True
     assert "unavailable after 3 attempts" in exhausted["judge_error"]
+    # The recovered check is named too — a partial outage does not hide behind
+    # the one judge that stayed down.
+    assert "Answer relevancy unavailable: judge timeout" in exhausted["judge_error"]
+    assert "Context sufficiency unavailable: judge timeout" in exhausted["judge_error"]
 
     client.post(url)
     assert calls["n"] == rapp.GRADE_MAX_ATTEMPTS
