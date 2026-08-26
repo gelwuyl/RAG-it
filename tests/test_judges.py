@@ -333,6 +333,27 @@ def test_no_derivable_reference_is_a_graded_not_an_outage(monkeypatch):
     assert "judge_error" not in resumed
 
 
+def test_refusal_token_quoted_in_a_trace_is_not_a_refusal(monkeypatch):
+    """Found on the preview deployment: the drafter reasoned 'maybe reply
+    NO_ANSWER_DERIVABLE?' inside a thinking trace and still drafted a real
+    reference, but a substring match read the quoted token as a refusal — so an
+    answerable question got `correct: None` with 'context does not contain an
+    answer'. The refusal must be the WHOLE reply to count."""
+    from eval import judges
+
+    raw = "<thought>Do NOT reply NO_ANSWER_DERIVABLE here.</thought>\nThe fridge must read 1-4C."
+    monkeypatch.setattr(judges, "_judge", lambda prompt: raw)
+    text, reason = judges.synthesize_expected("how cold?", "[1] The fridge must read 1-4C.")
+    assert text == "The fridge must read 1-4C."
+    assert reason == ""
+
+    # And the genuine all-integer-refusal case still parses.
+    monkeypatch.setattr(judges, "_judge", lambda prompt: f" {judges.NO_ANSWER_DERIVABLE_SENTINEL.upper()} ")
+    text2, reason2 = judges.synthesize_expected("how cold?", "[1] nothing relevant")
+    assert text2 == ""
+    assert reason2 == judges.NO_ANSWER_DERIVABLE_SENTINEL
+
+
 def test_synthesis_outage_is_named_and_retry_heals(monkeypatch):
     """A failed DRAFT is an outage, not a verdict: it names the cause, stays
     None, and a healed retry finishes correctness without re-running the

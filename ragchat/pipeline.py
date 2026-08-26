@@ -36,6 +36,11 @@ from .config import PipelineConfig, settings
 from .embeddings import openai_client, ProxyEmbeddings, retry_call, reranker_provider, rerank
 from .vectordb import add_chunks, query_chunks
 
+# Deferred at the bottom of the module instead: eval.judges imports ragchat.config,
+# and importing it here at module load would risk a circular import. See the
+# _eval_answer import block.
+NO_ANSWER_DERIVABLE = None  # placeholder; bound lazily in _eval_answer
+
 log = logging.getLogger(__name__)
 
 # Chunks per embedding request. 64 rather than 16 because both providers accept
@@ -88,10 +93,11 @@ _LIVE_GRADE_LABELS = {
     "correct": "Answer correctness",
 }
 # Value carried by eval_data["expected_reason"] when synthesize_expected ruled
-# that the passages cannot answer the question. Stored as data, compared as a
-# constant: a retry must be able to tell "graded — nothing to be right about"
-# from "the draft call itself failed".
-NO_ANSWER_DERIVABLE = "no answer derivable"
+# that the passages cannot answer the question. Bound lazily from the judge
+# module (its producer) inside _eval_answer — importing it at module load risks
+# a circular import, and a module-level re-export would also pin the value at
+# import time, the exact bug class that bit JUDGE_MODEL.
+NO_ANSWER_DERIVABLE = None  # placeholder; bound lazily in _eval_answer
 
 SYSTEM_PROMPT = """You are a helpful assistant answering questions using ONLY the provided source excerpts.
 
@@ -490,22 +496,9 @@ def _eval_answer(
     # the honest grade (there was nothing to be right about). It is persisted as
     # expected_answer="" + expected_reason=NO_ANSWER_DERIVABLE, which also lets
     # a retry skip re-purchasing the same draft call.
-    expected_text = previous.get("expected_answer")
-    expected_reason = previous.get("expected_reason") or ""
-    if values["correct"] is None and (
-        previous.get("expected_answer") == ""
-        and expected_reason == NO_ANSWER_DERIVABLE
-    ):
-        # Resume a graded "nothing to be right about" verdict instead of
-        # re-running synthesis for an answer it already ruled on.
-        values["correct"] = False
-        reasons["correct"] = "no reference derivable: the passages do not answer this"
-    correct_done = values["correct"] is not None
-    # A draft that failed once is retried (the outage may have healed); one that
-    # already RANKED as no-answer-derivable was a completed verdict, handled above.
-
     try:
         from eval.judges import (
+            NO_ANSWER_DERIVABLE_SENTINEL,
             answer_correctness,
             answer_relevancy,
             context_relevance,
@@ -513,6 +506,9 @@ def _eval_answer(
             faithfulness,
             synthesize_expected,
         )
+        # Bind the module-level placeholder so comparisons below (and any
+        # caller inspecting pipeline.NO_ANSWER_DERIVABLE) see the real sentinel.
+        globals()["NO_ANSWER_DERIVABLE"] = NO_ANSWER_DERIVABLE_SENTINEL
     except Exception as exc:
         reason = f"judges unavailable: {exc}"
         for field in LIVE_GRADE_FIELDS:
@@ -530,6 +526,20 @@ def _eval_answer(
         if missing:
             out["judge_error"] = " · ".join(missing)
         return out
+
+    expected_text = previous.get("expected_answer")
+    expected_reason = previous.get("expected_reason") or ""
+    if values["correct"] is None and (
+        previous.get("expected_answer") == ""
+        and expected_reason == NO_ANSWER_DERIVABLE
+    ):
+        # Resume a graded "nothing to be right about" verdict instead of
+        # re-running synthesis for an answer it already ruled on.
+        values["correct"] = False
+        reasons["correct"] = "no reference derivable: the passages do not answer this"
+    correct_done = values["correct"] is not None
+    # A draft that failed once is retried (the outage may have healed); one that
+    # already RANKED as no-answer-derivable was a completed verdict, handled above.
 
     def _run(fn, *args):
         """Return (verdict|None, reason). None = not graded, NOT a failure.

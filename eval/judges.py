@@ -34,6 +34,14 @@ class JudgeError(RuntimeError):
     """
 
 
+# What synthesize_expected returns as the reason when the passages cannot
+# answer the question, and what ragchat.pipeline stores in eval_data's
+# expected_reason to mark correctness as graded-by-refusal. Kept here because
+# the judge is the producer; the pipeline imports this constant rather than
+# duplicating a magic string on both sides.
+NO_ANSWER_DERIVABLE_SENTINEL = "no answer derivable"
+
+
 def judge_model() -> str:
     """Model used for LLM-as-judge — resolved from the LIVE config each call.
 
@@ -266,7 +274,7 @@ def synthesize_expected(question: str, context: str) -> tuple[str, str]:
         "Answer the question using ONLY the passages below, in 1-3 sentences.\n"
         "If and only if the passages do not contain enough information to "
         "answer, reply with exactly:\n"
-        "NO_ANSWER_DERIVABLE\n"
+        f"{NO_ANSWER_DERIVABLE_SENTINEL.upper()}\n"
         "Do not use outside knowledge. Do not mention the passages or this task.\n\n"
         f"Question: {question}\n\n"
         f"Passages:\n{context}\n\n"
@@ -275,13 +283,18 @@ def synthesize_expected(question: str, context: str) -> tuple[str, str]:
     # Reuses the same client/model as every other judge; raw text here rather
     # than a verdict, so _judge + strip directly.
     out = _judge(prompt)
-    if "<think" in out.lower():
-        out = re.split(r"</(?:thought|thinking|reasoning)>", out, flags=re.IGNORECASE)[-1].strip()
-    if not out:
+    text = _THINK_BLOCK.sub("", out or "")
+    text = _UNCLOSED_THINK_BLOCK.sub("", text).strip()
+    if not text:
         raise JudgeError("reference synthesis returned empty content")
-    if "NO_ANSWER_DERIVABLE" in out:
-        return "", "context does not contain an answer"
-    return out, ""
+    # The refusal token must be the WHOLE reply. A trace that merely quotes it
+    # while reasoning toward a real answer is not a refusal; matching anywhere
+    # turned a correctly drafted reference into a false "no answer" (found on
+    # the preview deployment, 2026-08-27).
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    if len(lines) == 1 and lines[0].upper() == NO_ANSWER_DERIVABLE_SENTINEL.upper():
+        return "", NO_ANSWER_DERIVABLE_SENTINEL
+    return text, ""
 
 
 def answer_correctness(
