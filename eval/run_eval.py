@@ -340,7 +340,11 @@ def aggregate(results: list[dict], retrieval_only: bool = False) -> dict:
         metrics["n_ungraded"] = sum(
             1
             for r in answerable
-            if r.get("faithful") is None or r.get("relevant") is None
+            if (
+                r.get("faithful") is None
+                or r.get("relevant") is None
+                or r.get("correct") is None
+            )
         )
     metrics["n_answerable"] = len(answerable)
     metrics["n_unanswerable"] = len(unanswerable)

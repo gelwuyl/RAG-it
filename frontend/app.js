@@ -48,6 +48,12 @@ const state = {
   indexing: new Set(),
 };
 
+// A timer is a browser-owned request schedule, not server background work. It
+// also stops a thread refresh from scheduling duplicate retry calls for one
+// message while a bounded judge retry is already waiting.
+const gradeRetryTimers = new Map();
+const gradeRequests = new Set();
+
 // Human-friendly labels for known models. With live proxy discovery the
 // catalog is dynamic, so any model not listed here simply shows its raw id.
 const MODEL_LABELS = {
@@ -1925,6 +1931,15 @@ $("new-chat-btn").onclick = async () => {
   } catch (e) { toast(e.message, true); }
 };
 
+function gradeNeedsRetry(evalData) {
+  if (!evalData || evalData.grade_exhausted || evalData.grade_unavailable) return false;
+  if (evalData.pending) return true;
+  // Older partial results were mistakenly stored as final. They are safe to
+  // resume because the server preserves completed booleans and marks exhaustion.
+  return Object.hasOwn(evalData, "faithful") &&
+    (evalData.faithful == null || evalData.relevant == null);
+}
+
 async function openChat(chatId) {
   state.currentChatId = chatId;
   renderChats();
@@ -1949,10 +1964,10 @@ async function openChat(chatId) {
     if (m.id && m.id === state.answerEvalId) {
       el?.querySelector(".eval-chip")?.classList.add("is-shown");
     }
-    // Reloaded into a thread whose last answer was still being graded: ask for
-    // the verdict again rather than leaving it spinning. Grading is idempotent,
-    // so this costs nothing when it has already finished.
-    if (m.eval_data?.pending && m.id) fetchGrade(chatId, m.id, el);
+    // Reloaded into a thread with unfinished grading: ask for the verdict again
+    // rather than leaving it spinning. This also repairs old partial results
+    // which were incorrectly stored as final before retries were introduced.
+    if (gradeNeedsRetry(m.eval_data) && m.id) fetchGrade(chatId, m.id, el);
   }
   box.scrollTop = box.scrollHeight;
 }
@@ -2032,8 +2047,8 @@ function evalVerdict(evalData) {
   // the app reports a broken grader on every single question.
   if (evalData.pending) return { state: "pending", word: "Grading…" };
   if (faithful == null && relevant == null) return { state: "ungraded", word: "Ungraded" };
-  if (faithful === false || relevant === false) return { state: "weak", word: "Weak" };
   if (faithful == null || relevant == null) return { state: "ungraded", word: "Partly graded" };
+  if (faithful === false || relevant === false) return { state: "weak", word: "Weak" };
   return { state: "grounded", word: "Grounded" };
 }
 
@@ -2099,7 +2114,7 @@ function buildEvalBlock(evalData, evalLine) {
       : "";
     const sim = evalData.top_sim;
     const simText = sim != null
-      ? `<span class="eval-meter-val">${sim.toFixed(2)}</span>`
+      ? `<span class="eval-meter-val" title="Top retrieval similarity">sim ${sim.toFixed(2)}</span>`
       : "";
     chip.innerHTML = `<span class="eval-dot" data-state="${verdict}" aria-hidden="true"></span>
       <span class="eval-state">${escapeHtml(word)}</span>${simText}${nudge}
@@ -2111,6 +2126,16 @@ function buildEvalBlock(evalData, evalLine) {
       chip.querySelector(".eval-nudge")?.remove();
     };
     wrap.appendChild(chip);
+    // A missing verdict is not a failed answer. Once the bounded retry budget is
+    // exhausted, name the unavailable judge and its actual provider error so the
+    // reader can distinguish a grading outage from a quality finding.
+    const unavailable = evalData.judge_error || evalData.grade_unavailable;
+    if (unavailable && !evalData.pending) {
+      const error = document.createElement("div");
+      error.className = "eval-gloss eval-judge-error";
+      error.textContent = `Grading unavailable: ${unavailable}`;
+      wrap.appendChild(error);
+    }
     return wrap;
   }
   // Fallback: the terse line as-is, for messages stored before eval data existed.
@@ -2156,13 +2181,37 @@ function showAnswerOnScorecard(evalData, chip, messageId = null) {
 // writing the answer did — so it lands ungraded and this fills it in a moment
 // later. Everything here has to survive the reader not sitting still: they can
 // ask another question, switch chats, or close the tab before it returns.
+function scheduleGradeRetry(chatId, messageId, msgEl, delayMs) {
+  if (gradeRetryTimers.has(messageId)) return;
+  const delay = Number.isFinite(delayMs) ? Math.max(250, delayMs) : 1_500;
+  const timer = window.setTimeout(() => {
+    gradeRetryTimers.delete(messageId);
+    fetchGrade(chatId, messageId, msgEl);
+  }, delay);
+  gradeRetryTimers.set(messageId, timer);
+}
+
+function clearGradeRetry(messageId) {
+  const timer = gradeRetryTimers.get(messageId);
+  if (timer != null) window.clearTimeout(timer);
+  gradeRetryTimers.delete(messageId);
+}
+
 async function fetchGrade(chatId, messageId, msgEl) {
+  if (gradeRequests.has(messageId)) return;
+  gradeRequests.add(messageId);
   try {
     const r = await api(`/api/chats/${chatId}/messages/${messageId}/grade`, {
       method: "POST",
     });
     const graded = r && r.eval;
     if (!graded) return;
+
+    if (gradeNeedsRetry(graded)) {
+      scheduleGradeRetry(chatId, messageId, msgEl, graded.retry_after_ms);
+    } else {
+      clearGradeRetry(messageId);
+    }
 
     // Re-find the message rather than trusting the element we started with:
     // ten seconds is long enough for a chat refresh to have replaced it.
@@ -2191,6 +2240,8 @@ async function fetchGrade(chatId, messageId, msgEl) {
     // A failed grade leaves the answer ungraded, which is a state the UI
     // already draws honestly. It must never take the answer down with it.
     console.warn("grading failed", err);
+  } finally {
+    gradeRequests.delete(messageId);
   }
 }
 
@@ -2273,7 +2324,7 @@ $("ask-form").onsubmit = async (e) => {
     }
     // Not awaited: the answer is already readable, and the reader is free to
     // type the next question while the judges work.
-    if (result.eval?.pending && result.message_id) {
+    if (gradeNeedsRetry(result.eval) && result.message_id) {
       fetchGrade(state.currentChatId, result.message_id, msg);
     }
     markBeat("asked");                             // beat 2 — an answer exists
@@ -2360,10 +2411,10 @@ $("excerpt-close").onclick = () => {
 // moved is the whole diagnosis.
 //
 // The groups also make the framework honest, and `from` finishes the job by
-// naming where each metric came from. Four are RAGAS's. The not-found rate is
-// this app's own — nothing in RAGAS measures refusing correctly — and it says
-// RAG-it, because a metric you invented is worth claiming rather than hiding
-// among borrowed ones.
+// naming where each metric came from. Context Recall is the app's own
+// golden-passage measurement; the three generation metrics are RAGAS-style LLM
+// judges, not package-produced RAGAS scores. The not-found rate is also this
+// app's own — nothing in RAGAS measures refusing correctly.
 //
 // Precision@k, MRR, NDCG@k and Hit rate@k carry no label. The last three are
 // classic information-retrieval metrics that predate RAGAS by decades and
@@ -2383,14 +2434,14 @@ const EVAL_GROUPS = {
 };
 
 const EVAL_TARGETS = {
-  context_recall: { group: "retrieval", from: "RAGAS", label: "Found the right passages", sub: "Context Recall", target: 0.80, higher: true },
+  context_recall: { group: "retrieval", from: "RAG-it", label: "Found the right passages", sub: "Context Recall", target: 0.80, higher: true },
   precision_at_k: { group: "retrieval", label: "Sent mostly relevant text", sub: "Precision@k", target: 0.70, higher: true },
   mrr: { group: "ranking", label: "Best passage ranked high", sub: "MRR", target: 0.65, higher: true },
   ndcg_at_k: { group: "ranking", label: "Good overall ordering", sub: "NDCG@k", target: 0.70, higher: true },
   hit_rate_at_k: { group: "ranking", label: "Right passage made the cut", sub: "Hit rate@k", target: 0.80, higher: true },
-  faithfulness: { group: "generation", from: "RAGAS", label: "Stuck to the sources", sub: "Faithfulness", target: 0.90, higher: true },
-  answer_relevancy: { group: "generation", from: "RAGAS", label: "Answered what was asked", sub: "Answer relevancy", target: 0.85, higher: true },
-  answer_correctness: { group: "generation", from: "RAGAS", label: "Matched the expected answer", sub: "Answer correctness", target: 0.80, higher: true },
+  faithfulness: { group: "generation", from: "RAGAS-style", label: "Stuck to the sources", sub: "Faithfulness", target: 0.90, higher: true },
+  answer_relevancy: { group: "generation", from: "RAGAS-style", label: "Answered what was asked", sub: "Answer relevancy", target: 0.85, higher: true },
+  answer_correctness: { group: "generation", from: "RAGAS-style", label: "Matched the expected answer", sub: "Answer correctness", target: 0.80, higher: true },
   not_found_rate_unanswerables: { group: "generation", from: "RAG-it", label: "Admitted when it could not answer", sub: "Not-found rate", target: 0.90, higher: true },
 };
 
@@ -2401,38 +2452,26 @@ function fmtPct(v) {
 
 // Which per-answer reading belongs on which benchmark bar.
 //
-// The Evaluation pane used to show benchmark averages, and every answer
-// repeated its own scores underneath itself, and the two never met — so a
-// reader had two sets of numbers and no way to relate them. They now share one
-// axis: the benchmark is the reference tick, the answer just given is the bar.
-//
-// Only three of the readings have an honest counterpart. `latency` has none —
-// it is a speed, not a quality — so it is reported on its own rather than
-// drawn against a bar it has no relationship with. Inventing a fourth pairing
-// to make the layout tidy would be the dishonest option.
+// Context recall asks whether known answer passages were retrieved. A normal
+// chat has no gold passages, so its top query-to-passage similarity must never
+// impersonate Context Recall. Similarity is reported separately below instead.
 const LIVE_TO_BENCHMARK = {
-  top_sim: "context_recall",
   faithful: "faithfulness",
   relevant: "answer_relevancy",
 };
 
-// What the per-answer field means on a 0-1 axis. The judges answer yes/no for
-// one answer while the benchmark reports a RATE across 53 questions, so the two
-// are not the same statistic and the row says so in words: "this answer" vs
-// "benchmark". Drawing a single pass at 100% against a 94% rate is only
-// misleading if the labels pretend they are the same measurement.
+// A judge answers yes/no for one answer while the benchmark reports a RATE
+// across the golden set. The labels say “this answer” and “benchmark” so the
+// shared bar does not claim they are the same statistic.
 function liveValue(evalData, field) {
-  if (!evalData) return null;
-  const raw = evalData[field];
+  const raw = evalData?.[field];
   if (raw == null) return null;
-  if (field === "top_sim") return Math.max(0, Math.min(1, raw));
   return raw ? 1 : 0;
 }
 
 function liveLabel(evalData, field) {
   const raw = evalData?.[field];
   if (raw == null) return null;
-  if (field === "top_sim") return raw.toFixed(2);
   return raw ? "passed" : "failed";
 }
 
@@ -2468,8 +2507,8 @@ function renderScorecard(metrics, runMode) {
     const v = field ? liveValue(live, field) : null;
     const hasLive = v != null;
     if (hasLive) anyLive = true;
-    // Top similarity is known the moment the answer is; the two judged rows are
-    // not, and they are what the second request is fetching. Only those wait.
+    // Only the two live judges share benchmark bars, and they are the readings
+    // fetched by the follow-up request. Retrieval similarity stays separate.
     const waiting = !hasLive && !!(live && live.pending) && !!field;
 
     const benchPct = Math.round(bench * 100);
@@ -2504,7 +2543,7 @@ function renderScorecard(metrics, runMode) {
             ? `benchmark ${benchPct}% · waiting on the judge`
             : field
               ? `benchmark ${benchPct}%`
-              // Six of the nine can never carry a live reading, and saying so
+              // Seven of the nine can never carry a live reading, and saying so
               // where the question arises beats leaving a row that looks
               // broken. They need a KNOWN answer to score against: precision,
               // MRR, NDCG and hit rate all ask "was the right passage
@@ -2522,35 +2561,40 @@ function renderScorecard(metrics, runMode) {
     return;
   }
 
-  // Latency has no bar because it has no counterpart in the benchmark. Given a
-  // row of its own rather than squeezed onto an axis it does not belong on.
-  if (live && live.latency_ms != null) {
+  // Similarity and latency have no benchmark counterpart. Similarity says how
+  // close the best retrieved passage was to the query; it cannot say whether
+  // every required answer passage was found, which is what Context Recall does.
+  if (live && (live.latency_ms != null || live.top_sim != null)) {
     const t = document.createElement("div");
     t.className = "score-aside";
-    // Two numbers, not one. `latency_ms` is the answer; the grading that fills
-    // the bars above costs its own time and the reader waits for it too, so
-    // folding it into "Answered in" overstated the answer and dropping it
-    // understated the wait. Both are shown, and the second is the honest price
-    // of the first.
     const secs = (ms) => `${(ms / 1000).toFixed(1)}s`;
-    t.innerHTML =
-      `<span class="score-aside-pair"><span>Answered in</span>` +
-      `<strong>${secs(live.latency_ms)}</strong></span>` +
-      (live.pending
-        ? `<span class="score-aside-pair"><span>grading</span>` +
-          `<strong class="score-aside-wait">…</strong></span>`
-        : live.grade_ms != null && live.grade_ms > 0
-          ? `<span class="score-aside-pair"><span>then graded in</span>` +
-            `<strong>${secs(live.grade_ms)}</strong></span>`
-          : "");
+    const readings = [];
+    if (live.top_sim != null) {
+      readings.push(`<span class="score-aside-pair"><span>Top retrieval similarity</span>` +
+        `<strong>${live.top_sim.toFixed(2)}</strong></span>`);
+    }
+    if (live.latency_ms != null) {
+      readings.push(`<span class="score-aside-pair"><span>Answered in</span>` +
+        `<strong>${secs(live.latency_ms)}</strong></span>`);
+    }
+    if (live.pending) {
+      readings.push(`<span class="score-aside-pair"><span>grading</span>` +
+        `<strong class="score-aside-wait">…</strong></span>`);
+    } else if (live.grade_ms != null && live.grade_ms > 0) {
+      readings.push(`<span class="score-aside-pair"><span>then graded in</span>` +
+        `<strong>${secs(live.grade_ms)}</strong></span>`);
+    }
+    t.innerHTML = readings.join("");
     el.appendChild(t);
   }
 
   const legend = document.createElement("p");
   legend.className = "score-legend";
   legend.textContent = anyLive
-    ? "Three of these can be measured on a live answer; the rest need a question whose right answer is already known, so they show the benchmark alone. The tick is that benchmark — a reference, not a pass mark."
-    : "Benchmark across the sample corpus. Ask a question and the three measurable rows show that answer against it.";
+    ? "Faithfulness and answer relevancy can be judged for this answer. Retrieval similarity is reported separately; Context Recall and the other ground-truth metrics need a known answer, so they show the benchmark alone. The tick is that benchmark — a reference, not a pass mark."
+    : live?.top_sim != null
+      ? "Top retrieval similarity is reported separately. Faithfulness and answer relevancy will appear when grading completes; Context Recall and the other ground-truth metrics need a known answer, so they show the benchmark alone."
+      : "Benchmark across the sample corpus. Ask a question and faithfulness and answer relevancy will show that answer against it once grading completes.";
   el.appendChild(legend);
 }
 

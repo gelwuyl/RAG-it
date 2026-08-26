@@ -166,3 +166,56 @@ def test_empty_answer_is_a_real_fail_not_an_error():
     """Grading an empty answer is still a legitimate FAIL, not a judge outage."""
     assert judges.faithfulness("q", "ctx", "   ") == (False, "empty answer")
     assert judges.answer_relevancy("q", "  ") == (False, "empty answer")
+
+
+# ---------- live-grade retries ----------
+
+
+def test_live_retry_only_calls_the_judge_without_a_verdict(monkeypatch):
+    from ragchat import pipeline
+
+    calls = {"faithful": 0, "relevant": 0}
+
+    def _faithful(*args):
+        calls["faithful"] += 1
+        return False, "unsupported figure"
+
+    def _relevant(*args):
+        calls["relevant"] += 1
+        return True, "on-topic"
+
+    class _Cfg:
+        eval_show = True
+
+    monkeypatch.setattr(judges, "faithfulness", _faithful)
+    monkeypatch.setattr(judges, "answer_relevancy", _relevant)
+    out = pipeline.grade_answer(
+        "q",
+        "a",
+        "ctx",
+        _Cfg(),
+        {"faithful": False, "faithful_reason": "unsupported figure", "relevant": None},
+    )
+
+    assert calls == {"faithful": 0, "relevant": 1}
+    assert out["faithful"] is False
+    assert out["relevant"] is True
+
+
+def test_live_judge_error_identifies_the_missing_metric(monkeypatch):
+    from ragchat import pipeline
+
+    class _Cfg:
+        eval_show = True
+
+    monkeypatch.setattr(judges, "faithfulness", lambda *args: (True, "supported"))
+
+    def _broken_relevancy(*args):
+        raise RuntimeError("429 rate limited")
+
+    monkeypatch.setattr(judges, "answer_relevancy", _broken_relevancy)
+    out = pipeline.grade_answer("q", "a", "ctx", _Cfg())
+
+    assert out["faithful"] is True and out["relevant"] is None
+    assert "Answer relevancy unavailable: 429 rate limited" in out["judge_error"]
+    assert "Faithfulness unavailable" not in out["judge_error"]

@@ -60,6 +60,13 @@ NOT_FOUND_ANSWER = "I couldn't find this in your documents."
 # config.yaml to pin real behavior.
 NOT_FOUND_MIN_SIM = 0.12
 
+# A browser drives these bounded follow-up requests after an answer arrives.
+# They are deliberately not an in-process retry: Vercel freezes a function when
+# it responds, so durable grading progress has to be carried by Message.eval_data
+# and resumed by another HTTP request.
+GRADE_MAX_ATTEMPTS = 3
+GRADE_RETRY_AFTER_MS = 1_500
+
 SYSTEM_PROMPT = """You are a helpful assistant answering questions using ONLY the provided source excerpts.
 
 Rules:
@@ -423,19 +430,52 @@ def _effective_threshold(cfg: PipelineConfig) -> float:
     return cfg.similarity_threshold if cfg.similarity_threshold > 0 else NOT_FOUND_MIN_SIM
 
 
-def _eval_answer(question: str, answer: str, context_text: str, cfg: PipelineConfig) -> dict | None:
-    """LLM-as-judge faithfulness + relevancy for the live grey eval line.
+def _eval_answer(
+    question: str,
+    answer: str,
+    context_text: str,
+    cfg: PipelineConfig,
+    previous: dict | None = None,
+) -> dict | None:
+    """LLM-judge the unresolved live metrics without replacing a verdict.
 
-    Returns {faithful, faithful_reason, relevant, relevant_reason} or None when
-    eval is disabled or the judge call fails. Never raises — a judge failure
-    must not turn a good answer into a 500.
+    A returned boolean is durable evidence from a completed judge call. Only a
+    ``None`` is retried, so one transient provider failure cannot spend another
+    call on the metric that already completed — or replace that result with a
+    later outage. Finality belongs to the HTTP route, where the persisted attempt
+    count is available.
     """
     if not cfg.eval_show:
         return None
+
+    previous = previous or {}
+    faithful_done = previous.get("faithful") is not None
+    relevant_done = previous.get("relevant") is not None
+    fh = previous.get("faithful") if faithful_done else None
+    fh_r = previous.get("faithful_reason") if faithful_done else ""
+    ar = previous.get("relevant") if relevant_done else None
+    ar_r = previous.get("relevant_reason") if relevant_done else ""
+
     try:
         from eval.judges import faithfulness, answer_relevancy
     except Exception as exc:
-        return {"judge_error": f"judges unavailable: {exc}"}
+        reason = f"judges unavailable: {exc}"
+        missing = []
+        if not faithful_done:
+            fh_r = reason
+            missing.append(f"Faithfulness unavailable: {reason}")
+        if not relevant_done:
+            ar_r = reason
+            missing.append(f"Answer relevancy unavailable: {reason}")
+        out = {
+            "faithful": fh,
+            "faithful_reason": fh_r,
+            "relevant": ar,
+            "relevant_reason": ar_r,
+        }
+        if missing:
+            out["judge_error"] = " · ".join(missing)
+        return out
 
     def _run(fn, *args):
         """Return (verdict|None, reason). None = not graded, NOT a failure.
@@ -449,18 +489,24 @@ def _eval_answer(question: str, answer: str, context_text: str, cfg: PipelineCon
         except Exception as exc:  # noqa: BLE001
             return None, str(exc)
 
-    fh, fh_r = _run(faithfulness, question, context_text, answer)
-    ar, ar_r = _run(answer_relevancy, question, answer)
+    if not faithful_done:
+        fh, fh_r = _run(faithfulness, question, context_text, answer)
+    if not relevant_done:
+        ar, ar_r = _run(answer_relevancy, question, answer)
+
     out = {
         "faithful": fh,
         "faithful_reason": fh_r,
         "relevant": ar,
         "relevant_reason": ar_r,
     }
-    # Surface *why* grading is missing so a misconfigured judge model is
-    # visible in the UI instead of silently blanking the metrics.
-    if fh is None or ar is None:
-        out["judge_error"] = fh_r or ar_r or "judge returned no verdict"
+    missing = []
+    if fh is None:
+        missing.append(f"Faithfulness unavailable: {fh_r or 'judge returned no verdict'}")
+    if ar is None:
+        missing.append(f"Answer relevancy unavailable: {ar_r or 'judge returned no verdict'}")
+    if missing:
+        out["judge_error"] = " · ".join(missing)
     return out
 
 
@@ -474,20 +520,26 @@ def _ungraded_eval(cfg: PipelineConfig) -> dict | None:
     """
     if not cfg.eval_show:
         return None
-    return {"pending": True, "faithful": None, "relevant": None}
+    return {
+        "pending": True,
+        "faithful": None,
+        "relevant": None,
+        "grade_attempts": 0,
+        "grade_max_attempts": GRADE_MAX_ATTEMPTS,
+    }
 
 
-def grade_answer(question: str, answer: str, context_text: str, cfg: PipelineConfig) -> dict:
-    """Run the judges on an answer that has already been delivered.
-
-    Split out of ask() so the reader is not kept waiting on two model calls
-    that grade what they are already reading. Returns the same shape
-    _eval_answer does, plus how long grading took.
-    """
+def grade_answer(
+    question: str,
+    answer: str,
+    context_text: str,
+    cfg: PipelineConfig,
+    previous: dict | None = None,
+) -> dict:
+    """Run only unresolved judges on an answer already delivered to the reader."""
     t0 = time.time()
-    out = _eval_answer(question, answer, context_text, cfg) or {}
+    out = _eval_answer(question, answer, context_text, cfg, previous) or {}
     out["grade_ms"] = round((time.time() - t0) * 1000)
-    out["pending"] = False
     return out
 
 

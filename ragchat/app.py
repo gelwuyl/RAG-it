@@ -15,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from . import auth as authn
@@ -67,6 +68,12 @@ LOCAL_USERNAME = "local"
 # document served at "/app" (vercel.json rewrites it to /app.html). Named once
 # so the OAuth callback and any future redirect cannot drift apart.
 APP_PATH = "/app"
+
+# Browser-driven follow-up grading gets a bounded retry budget. The count is
+# persisted with the message so a reload or a different serverless instance
+# cannot restart it indefinitely.
+GRADE_MAX_ATTEMPTS = pipeline.GRADE_MAX_ATTEMPTS
+GRADE_RETRY_AFTER_MS = pipeline.GRADE_RETRY_AFTER_MS
 
 # Cookies are marked `secure` only where the app is actually served over HTTPS.
 # It cannot be unconditional: a `secure` cookie is silently dropped on plain
@@ -1453,32 +1460,101 @@ def grade_message(
 ):
     """Grade an answer that has already been delivered.
 
-    Second half of the split above. Kept idempotent: the client fires it once
-    per answer, but a retry after a timeout must not spend two more judge calls
-    and must not overwrite a verdict with a fresh failure.
+    Second half of the split above. A completed verdict is idempotent; a partial
+    result retries only the missing judge through a small persisted budget, never
+    overwriting the completed verdict with a fresh provider failure.
     """
     conv = db.get(Conversation, chat_id)
     if not conv or conv.user_id != user.id:
         raise HTTPException(status_code=404, detail="Chat not found")
-    msg = db.get(Message, message_id)
-    if not msg or msg.conversation_id != chat_id:
+
+    # One retry budget serves every tab and device. On Neon this lock stays held
+    # through the judge calls, so a concurrent request sees the committed result
+    # rather than spending the same logical attempt a second time.
+    msg = db.execute(
+        select(Message)
+        .where(Message.id == message_id, Message.conversation_id == chat_id)
+        .with_for_update()
+    ).scalar_one_or_none()
+    if not msg:
         raise HTTPException(status_code=404, detail="Message not found")
 
     stored = json.loads(msg.eval_data) if msg.eval_data else {}
-    if stored and not stored.get("pending"):
+    complete = stored.get("faithful") is not None and stored.get("relevant") is not None
+    # A legacy partial result may have been marked final by the old route. It is
+    # intentionally eligible again: a transient judge outage should not become
+    # a permanent “Partly graded” message after this fix is deployed.
+    if complete or stored.get("grade_exhausted") or stored.get("grade_unavailable"):
         return {"eval": stored, "eval_line": msg.eval_line}
+
+    cfg = load_config()
+    if not cfg.eval_show and not stored.get("pending"):
+        # A normal answer made while live grading is off still stores its
+        # retrieval timing line. A stray later grade request must leave it alone.
+        return {"eval": stored or None, "eval_line": msg.eval_line}
     if not msg.eval_context:
         # Nothing to grade against — a not-found answer, or a message written
-        # before this split existed. Say so rather than inventing a verdict.
+        # before this split existed. Say so rather than inventing a verdict or
+        # repeatedly scheduling an impossible grade request.
         stored["pending"] = False
+        stored["grade_unavailable"] = "No source passages were stored for this answer."
+        msg.eval_data = json.dumps(stored)
+        db.commit()
+        return {"eval": stored, "eval_line": msg.eval_line}
+
+    if not cfg.eval_show:
+        # This can change between the answer and its later grade request. It is
+        # an intentional setting, not a judge failure, so it must spend no retry
+        # budget and must not be reported as a provider outage.
+        stored["pending"] = False
+        stored["grade_unavailable"] = "Live grading is disabled in Settings."
+        stored.pop("judge_error", None)
+        stored.pop("grade_exhausted", None)
+        stored.pop("retry_after_ms", None)
+        msg.eval_data = json.dumps(stored)
+        msg.eval_line = pipeline.eval_line_from(stored, stored.get("latency_ms"))
+        db.commit()
+        return {"eval": stored, "eval_line": msg.eval_line}
+
+    raw_attempts = stored.get("grade_attempts", 0)
+    attempts = raw_attempts if isinstance(raw_attempts, int) and raw_attempts >= 0 else 0
+    if attempts >= GRADE_MAX_ATTEMPTS:
+        # Defensive recovery for a message persisted by an interrupted older
+        # request. Normal calls mark this in the branch below.
+        stored["pending"] = False
+        stored["grade_exhausted"] = True
+        stored.pop("retry_after_ms", None)
         msg.eval_data = json.dumps(stored)
         db.commit()
         return {"eval": stored, "eval_line": msg.eval_line}
 
     ctx = json.loads(msg.eval_context)
-    graded = pipeline.grade_answer(ctx.get("q") or "", msg.content,
-                                   ctx.get("context") or "", load_config())
+    graded = pipeline.grade_answer(
+        ctx.get("q") or "",
+        msg.content,
+        ctx.get("context") or "",
+        cfg,
+        stored,
+    )
     stored.update(graded)
+    attempts += 1
+    stored["grade_attempts"] = attempts
+    stored["grade_max_attempts"] = GRADE_MAX_ATTEMPTS
+    incomplete = stored.get("faithful") is None or stored.get("relevant") is None
+    if incomplete and attempts < GRADE_MAX_ATTEMPTS:
+        stored["pending"] = True
+        stored["retry_after_ms"] = GRADE_RETRY_AFTER_MS
+        stored.pop("grade_exhausted", None)
+    else:
+        stored["pending"] = False
+        stored.pop("retry_after_ms", None)
+        if incomplete:
+            stored["grade_exhausted"] = True
+            reason = stored.get("judge_error") or "judge returned no verdict"
+            stored["judge_error"] = f"{reason} (unavailable after {attempts} attempts)"
+        else:
+            stored.pop("judge_error", None)
+            stored.pop("grade_exhausted", None)
     msg.eval_data = json.dumps(stored)
     msg.eval_line = pipeline.eval_line_from(stored, stored.get("latency_ms"))
     db.commit()
