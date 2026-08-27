@@ -47,7 +47,7 @@
         }
       })();
     </script>
-    <link rel="stylesheet" href="/styles.css?v=62" />
+    <link rel="stylesheet" href="/styles.css?v=63" />
     <script>
       // Boot diagnostics: collect load/runtime errors so a broken app.js
       // shows a visible message instead of a silently dead UI.
@@ -189,30 +189,25 @@
               <input id="url-input" type="text" placeholder="Add a web page URL" />
               <button id="add-url-btn" class="btn btn-small" type="button">Add</button>
             </div>
-            <div class="add-row">
-              <input id="folder-input" type="text" placeholder="Add folder path (e.g. ~/documents)" />
-              <button id="add-folder-btn" class="btn btn-small" type="button">Add</button>
-            </div>
 
             <div id="sources-empty" class="empty-state hidden">
               <span class="empty-icon" aria-hidden="true">◇</span>
               <p class="empty-title">Upload a source to begin</p>
-              <p class="empty-text">Drop a file above, paste a URL, or point at a folder.
+              <p class="empty-text">Drop a file above or paste a URL.
                 Everything you add is chunked, embedded and cited.</p>
               <!-- Filled by app.js with the four-beat loop, but only while THIS
                    is the beat you are on — see beatsHtml(). -->
               <div id="sources-beats"></div>
             </div>
 
-            <div id="folder-list" class="source-list"></div>
             <div id="doc-list" class="source-list"></div>
           </div>
 
           <div class="pane-foot">
             <!-- Long jobs report here and KEEP reporting (plan §5). Re-index all
-                 and folder rescans used to announce themselves through a toast
-                 that vanished after four seconds and then said nothing until
-                 they finished, which is indistinguishable from having failed. -->
+                 used to announce itself through a toast that vanished after four
+                 seconds and then said nothing until it finished, which is
+                 indistinguishable from having failed. -->
             <div id="job-status" class="job-status hidden" role="status" aria-live="polite"></div>
             <span class="term-pair">
               <button id="reindex-btn" class="btn btn-small" type="button">↻ Re-index all</button>
@@ -666,6 +661,6 @@
       </div>
     </div>
 
-    <script type="module" src="/app.js?v=75"></script>
+    <script type="module" src="/app.js?v=76"></script>
   </body>
 </html>

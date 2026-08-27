@@ -1,4 +1,4 @@
-"""SQLite-backed application database (PRD T4): users, documents, folders, chats."""
+"""SQLite-backed application database (PRD T4): users, documents, chats."""
 from __future__ import annotations
 
 import time
@@ -70,7 +70,6 @@ class User(Base):
     # _reconcile_columns() adds it to databases created before it existed.
     last_seen_at = Column(Float, default=now)
     documents = relationship("Document", back_populates="user")
-    folder_sources = relationship("FolderSource", back_populates="user")
     conversations = relationship("Conversation", back_populates="user")
 
 
@@ -78,10 +77,14 @@ class Document(Base):
     __tablename__ = "documents"
     id = Column(String, primary_key=True, default=new_id)
     user_id = Column(String, ForeignKey("users.id"), index=True)
-    source_type = Column(String)  # upload | url | folder
+    source_type = Column(String)  # upload | url
     title = Column(String)
-    path_or_url = Column(String)  # server path for folder docs, URL for url docs
-    content_hash = Column(String, index=True)  # change detection for folder sync
+    path_or_url = Column(String)  # URL for url docs, file path for uploads
+    # Change detection. Only the demo template's value is ever READ: its stamp
+    # covers both the source text and the revision of the metadata rendered onto
+    # its chunks (guests._demo_stamp). Uploads and URL documents carry a plain
+    # content hash that nothing consumes yet — folder sync was the last reader.
+    content_hash = Column(String, index=True)
     config_fingerprint = Column(String)  # chunking config it was indexed under (F18)
     status = Column(String, default="pending")  # pending | indexing | ready | failed
     error = Column(Text, nullable=True)
@@ -111,16 +114,6 @@ class Document(Base):
     indexed_chunks = Column(Integer, default=0)
     created_at = Column(Float, default=now)
     user = relationship("User", back_populates="documents")
-
-
-class FolderSource(Base):
-    __tablename__ = "folder_sources"
-    id = Column(String, primary_key=True, default=new_id)
-    user_id = Column(String, ForeignKey("users.id"), index=True)
-    path = Column(String)
-    created_at = Column(Float, default=now)
-    last_scan_at = Column(Float, nullable=True)
-    user = relationship("User", back_populates="folder_sources")
 
 
 class Conversation(Base):

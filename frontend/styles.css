@@ -694,7 +694,6 @@ html[data-kind="guest"] .identity-hint .hint-badge { display: inline-block; }
 .src-icon[data-kind="web"]    { background: var(--kind-web-bg);    color: var(--kind-web-fg);    border-color: var(--kind-web-bd); }
 .src-icon[data-kind="audio"]  { background: var(--kind-audio-bg);  color: var(--kind-audio-fg);  border-color: var(--kind-audio-bd); }
 .src-icon[data-kind="video"]  { background: var(--kind-video-bg);  color: var(--kind-video-fg);  border-color: var(--kind-video-bd); }
-.src-icon[data-kind="folder"] { background: var(--kind-folder-bg); color: var(--kind-folder-fg); border-color: var(--kind-folder-bd); }
 
 .src-title {
   grid-column: 2;
@@ -1953,7 +1952,7 @@ fieldset legend {
 
      "Available but demoted" is per-item maintenance: new chat, delete a chat,
      delete a source, re-index one source. Those stay. What goes is the bulk and
-     tuning surface — a benchmark run, a folder scan, re-index everything, the
+     tuning surface — a benchmark run, re-index everything, the
      advanced fields — because each is a long-running operation aimed at a corpus,
      not a question aimed at a document, and each was spending topbar rows on a
      screen with none to spare.
@@ -1964,8 +1963,6 @@ fieldset legend {
      latter and stays on every width — it is a decision about the question being
      typed, which is the one decision a phone reader does make. */
   .eval-desktop-note { display: block; }
-  /* Folder sources need a server-side path — not something typed on a phone. */
-  .add-row:has(#folder-input) { display: none; }
   .term-pair:has(#reindex-btn) { display: none; }
   /* Which leaves the foot holding only the job status, and that hides itself when
      nothing is running — so the empty strip goes too. */

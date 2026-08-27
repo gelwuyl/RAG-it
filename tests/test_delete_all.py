@@ -41,7 +41,7 @@ def rig(monkeypatch):
     import ragchat.db as _db
 
     _db._initialized = False
-    for tbl in ("messages", "conversations", "users", "documents", "folders"):
+    for tbl in ("messages", "conversations", "users", "documents"):
         with engine.begin() as conn:
             conn.execute(_t(f"DROP TABLE IF EXISTS {tbl}"))
 
@@ -55,26 +55,23 @@ def rig(monkeypatch):
     return c, uid, cleared
 
 
-def _seed(user_id: str, n_docs: int = 3, n_folders: int = 1) -> None:
-    from ragchat.db import Document, FolderSource, SessionLocal
+def _seed(user_id: str, n_docs: int = 3) -> None:
+    from ragchat.db import Document, SessionLocal
 
     s = SessionLocal()
     for i in range(n_docs):
         s.add(Document(user_id=user_id, source_type="upload", title=f"doc{i}.md",
                        status="ready", n_chunks=4, size_bytes=10))
-    for i in range(n_folders):
-        s.add(FolderSource(user_id=user_id, path=f"/tmp/f{i}"))
     s.commit()
     s.close()
 
 
 def _counts(user_id: str) -> dict:
-    from ragchat.db import Conversation, Document, FolderSource, Message, SessionLocal
+    from ragchat.db import Conversation, Document, Message, SessionLocal
 
     s = SessionLocal()
     out = {
         "documents": s.query(Document).filter(Document.user_id == user_id).count(),
-        "folders": s.query(FolderSource).filter(FolderSource.user_id == user_id).count(),
         "conversations": s.query(Conversation).filter(
             Conversation.user_id == user_id).count(),
         "messages": s.query(Message).count(),
@@ -85,16 +82,15 @@ def _counts(user_id: str) -> dict:
 
 # --- it empties what it says it empties -----------------------------------
 
-def test_it_removes_every_document_and_folder(rig):
+def test_it_removes_every_document(rig):
     client, uid, _ = rig
     _seed(uid)
     assert _counts(uid)["documents"] == 3
 
     r = client.delete("/api/documents")
     assert r.status_code == 200, r.text
-    assert r.json() == {"ok": True, "documents": 3, "folders": 1}
+    assert r.json() == {"ok": True, "documents": 3}
     assert _counts(uid)["documents"] == 0
-    assert _counts(uid)["folders"] == 0
 
 
 def test_the_vectors_go_with_them(rig):
@@ -151,7 +147,7 @@ def test_another_users_workspace_is_untouched(rig):
 
     client, uid, cleared = rig
     _seed(uid)
-    _seed("somebody-else", n_docs=2, n_folders=0)
+    _seed("somebody-else", n_docs=2)
 
     client.delete("/api/documents")
     s = SessionLocal()

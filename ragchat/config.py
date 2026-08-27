@@ -84,9 +84,6 @@ class Settings:
         # daily. Empty means the route is DISABLED, not open: an unset secret
         # must never degrade into an unauthenticated deletion endpoint.
         self.sweep_secret = os.environ.get("GUEST_SWEEP_SECRET", "")
-        self.allowed_root = Path(
-            os.environ.get("RAG_ALLOWED_ROOT", str(Path.home()))
-        ).resolve()
         # Google OAuth (PRD F1). Optional: when unset, only the password
         # fallback auth is available (documented risk fallback in PRD §9).
         self.google_client_id = os.environ.get("GOOGLE_CLIENT_ID", "")

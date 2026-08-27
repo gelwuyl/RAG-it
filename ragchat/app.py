@@ -36,7 +36,6 @@ from .config import (
 from .db import (
     Conversation,
     Document,
-    FolderSource,
     Message,
     SessionLocal,
     User,
@@ -46,7 +45,7 @@ from .db import (
     new_id,
     now,
 )
-from .loaders import fetch_url, load_bytes, page_title, TEXT_EXTENSIONS, HTML_EXTENSIONS, PDF_EXTENSIONS
+from .loaders import fetch_url, load_bytes, page_title
 from .pipeline import ingest_document_text, ingest_slice, plan_chunks, ask
 from .vectordb import delete_document_chunks, prune_chunks
 
@@ -244,9 +243,6 @@ def _retire_stale_config_override() -> None:
 
 # ---------- helpers ----------
 
-SUPPORTED_SUFFIXES = TEXT_EXTENSIONS | HTML_EXTENSIONS | PDF_EXTENSIONS
-
-
 def _content_hash(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
@@ -331,81 +327,6 @@ def _index_progress(doc: Document) -> dict:
         "error": doc.error,
         "done": doc.status in ("ready", "failed"),
     }
-
-
-def _sync_folder(db: Session, user: User, folder: FolderSource) -> dict:
-    """Rescan a folder source: add new files, re-index changed ones, drop gone ones (F6a)."""
-    root = Path(folder.path)
-    if not root.is_dir():
-        raise HTTPException(status_code=400, detail="Folder does not exist")
-    root_resolved = root.resolve()
-    if not str(root_resolved).startswith(str(settings.allowed_root)):
-        raise HTTPException(status_code=403, detail="Folder is outside the allowed root")
-
-    files = [
-        p
-        for p in sorted(root_resolved.rglob("*"))
-        if p.is_file() and p.suffix.lower() in SUPPORTED_SUFFIXES
-    ]
-    seen_hashes = {}
-    added = reindexed = unchanged = failed = 0
-
-    existing = {
-        d.path_or_url: d
-        for d in db.query(Document).filter(
-            Document.user_id == user.id,
-            Document.source_type == "folder",
-            Document.path_or_url.like(f"{root_resolved}%"),
-        ).all()
-    }
-
-    for p in files:
-        data = p.read_bytes()
-        chash = _content_hash(data)
-        seen_hashes[str(p)] = True
-        doc = existing.get(str(p))
-        if doc is None:
-            doc = Document(
-                user_id=user.id,
-                source_type="folder",
-                title=p.name,
-                path_or_url=str(p),
-                content_hash=chash,
-            )
-            db.add(doc)
-            db.commit()
-            try:
-                text = load_bytes(p.name, data)
-                _index_document(db, user, doc, text)
-                added += 1
-            except Exception as exc:
-                doc.status = "failed"
-                doc.error = str(exc)[:500]
-                db.commit()
-                failed += 1
-        elif doc.content_hash != chash:
-            delete_document_chunks(user.id, doc.id)
-            doc.content_hash = chash
-            try:
-                text = load_bytes(p.name, data)
-                _index_document(db, user, doc, text)
-                reindexed += 1
-            except Exception as exc:
-                doc.status = "failed"
-                doc.error = str(exc)[:500]
-                db.commit()
-                failed += 1
-        else:
-            unchanged += 1
-
-    # Remove documents whose files disappeared from disk
-    for path, doc in existing.items():
-        if path not in seen_hashes:
-            delete_document_chunks(user.id, doc.id)
-            db.delete(doc)
-    folder.last_scan_at = now()
-    db.commit()
-    return {"added": added, "reindexed": reindexed, "unchanged": unchanged, "failed": failed}
 
 
 def _conversation_messages(db: Session, conversation_id: str) -> list[dict]:
@@ -880,10 +801,6 @@ class UrlIn(BaseModel):
     url: str = Field(min_length=8, max_length=2000)
 
 
-class FolderIn(BaseModel):
-    path: str = Field(min_length=1, max_length=1000)
-
-
 def _doc_view(d: Document) -> dict:
     return {
         "id": d.id,
@@ -1069,7 +986,7 @@ def delete_all_documents(
     user: User = Depends(require_account),
     db: Session = Depends(get_session),
 ):
-    """Empty this workspace: every document, every folder, every vector.
+    """Empty this workspace: every document, every vector.
 
     Scoped to SOURCES on purpose. Conversations are left alone — they are not
     embedded, they cost no vector storage, and an answer keeps its citations
@@ -1077,14 +994,13 @@ def delete_all_documents(
     gone. "Delete my documents" should not quietly also mean "delete my chat
     history"; the two are separate decisions and this is the irreversible one.
 
-    Set-based, like purge_users: three statements whatever the workspace holds.
+    Set-based, like purge_users: two statements whatever the workspace holds.
     Per-document deletes are a network hop each on Neon, which is what made
     clearing twenty guest workspaces take 39.7 seconds.
     """
     from .vectordb import delete_users_chunks
 
     docs = db.query(Document).filter(Document.user_id == user.id).count()
-    folders = db.query(FolderSource).filter(FolderSource.user_id == user.id).count()
 
     # Vectors first. If this fails the rows stay, and a workspace with rows and
     # no vectors is recoverable — re-index rebuilds it. The reverse leaves
@@ -1094,12 +1010,9 @@ def delete_all_documents(
     db.query(Document).filter(Document.user_id == user.id).delete(
         synchronize_session=False
     )
-    db.query(FolderSource).filter(FolderSource.user_id == user.id).delete(
-        synchronize_session=False
-    )
     db.commit()
-    log.info("workspace cleared for %s: %d documents, %d folders", user.id, docs, folders)
-    return {"ok": True, "documents": docs, "folders": folders}
+    log.info("workspace cleared for %s: %d documents", user.id, docs)
+    return {"ok": True, "documents": docs}
 
 
 @app.post("/api/documents/prune")
@@ -1172,101 +1085,13 @@ def _load_source_text(doc: Document) -> Optional[str]:
         if doc.source_type == "url":
             _url, content = fetch_url(doc.path_or_url)
             return load_bytes("page.html", content, url=doc.path_or_url)
-        if doc.source_type in ("folder", "upload") and doc.path_or_url:
+        if doc.source_type == "upload" and doc.path_or_url:
             p = Path(doc.path_or_url)
             if p.is_file():
                 return load_bytes(p.name, p.read_bytes())
     except Exception:
         return None
     return None
-
-
-@app.post("/api/folders")
-def add_folder(
-    body: FolderIn,
-    # Guests are excluded from folder sources entirely: a folder path names the
-    # SERVER's filesystem, not the visitor's. Letting anonymous callers walk the
-    # deployment's own files under allowed_root is a disclosure risk with no
-    # upside — a guest has nothing on that disk. It would also bypass the
-    # 3-document cap, since one scan ingests a whole tree.
-    user: User = Depends(require_account),
-    db: Session = Depends(get_session),
-):
-    root = Path(body.path).expanduser().resolve()
-    if not root.is_dir():
-        raise HTTPException(status_code=400, detail="Folder does not exist")
-    if not str(root).startswith(str(settings.allowed_root)):
-        raise HTTPException(status_code=403, detail="Folder is outside the allowed root")
-    exists = (
-        db.query(FolderSource)
-        .filter(FolderSource.user_id == user.id, FolderSource.path == str(root))
-        .first()
-    )
-    if exists:
-        raise HTTPException(status_code=409, detail="Folder already added")
-    folder = FolderSource(user_id=user.id, path=str(root))
-    db.add(folder)
-    db.commit()
-    result = _sync_folder(db, user, folder)
-    return {"id": folder.id, "path": folder.path, **result}
-
-
-@app.get("/api/folders")
-def list_folders(user: User = Depends(authn.get_current_user), db: Session = Depends(get_session)):
-    folders = db.query(FolderSource).filter(FolderSource.user_id == user.id).all()
-    out = []
-    for f in folders:
-        n_docs = (
-            db.query(Document)
-            .filter(
-                Document.user_id == user.id,
-                Document.source_type == "folder",
-                Document.path_or_url.like(f"{f.path}%"),
-            )
-            .count()
-        )
-        out.append(
-            {"id": f.id, "path": f.path, "n_docs": n_docs, "last_scan_at": f.last_scan_at}
-        )
-    return out
-
-
-@app.post("/api/folders/{folder_id}/rescan")
-def rescan_folder(
-    folder_id: str,
-    user: User = Depends(require_account),
-    db: Session = Depends(get_session),
-):
-    folder = db.get(FolderSource, folder_id)
-    if not folder or folder.user_id != user.id:
-        raise HTTPException(status_code=404, detail="Folder not found")
-    return _sync_folder(db, user, folder)
-
-
-@app.delete("/api/folders/{folder_id}")
-def remove_folder(
-    folder_id: str,
-    user: User = Depends(authn.get_current_user),
-    db: Session = Depends(get_session),
-):
-    folder = db.get(FolderSource, folder_id)
-    if not folder or folder.user_id != user.id:
-        raise HTTPException(status_code=404, detail="Folder not found")
-    docs = (
-        db.query(Document)
-        .filter(
-            Document.user_id == user.id,
-            Document.source_type == "folder",
-            Document.path_or_url.like(f"{folder.path}%"),
-        )
-        .all()
-    )
-    for d in docs:
-        delete_document_chunks(user.id, d.id)
-        db.delete(d)
-    db.delete(folder)
-    db.commit()
-    return {"ok": True}
 
 
 # ---------- chats ----------

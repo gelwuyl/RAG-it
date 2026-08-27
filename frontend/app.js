@@ -31,7 +31,7 @@ const state = {
   webSearch: false,
   answerEvalId: null,   // which answer's readings the benchmark bars show
   webAvailable: false,   // server-reported: needs a key AND an account
-  // Documents + folders currently in the workspace. Only the COUNT is kept:
+  // Documents currently in the workspace. Only the COUNT is kept:
   // it is what the empty conversation needs to say something true, and holding
   // the full lists here would be a second copy of the DOM's own state.
   sourceCount: 0,
@@ -535,7 +535,6 @@ function renderAuthGate(status) {
 // real workspace, not a display case.
 const GUEST_LOCKED = {
   "reindex-btn": "re-index every source",
-  "add-folder-btn": "add a folder source",
   "settings-save": "save tuning settings",
 };
 
@@ -557,15 +556,6 @@ function applyGuestLocks() {
     if (state.isGuest) el.setAttribute("aria-disabled", "true");
     else el.removeAttribute("aria-disabled");
     el.title = state.isGuest ? `Sign in with Google to ${what}.` : el.dataset.title || el.title;
-  }
-  const folderInput = $("folder-input");
-  if (folderInput) {
-    folderInput.disabled = state.isGuest;
-    // Short enough not to truncate in the narrow sources pane — the previous
-    // wording ended as "Folder sources need an accc".
-    folderInput.placeholder = state.isGuest
-      ? "Sign in to add folders"
-      : "Add folder path (e.g. ~/documents)";
   }
 }
 
@@ -629,7 +619,7 @@ function renderSourcesEmptyState() {
   } else {
     title.textContent = "Upload a source to begin";
     text.textContent =
-      "Drop a file above, paste a URL, or point at a folder. " +
+      "Drop a file above or paste a URL. " +
       "Everything you add is chunked, embedded and cited.";
   }
 }
@@ -813,50 +803,6 @@ function sourceKind(doc) {
   return { kind: "text", tag: (ext || "file").slice(0, 4).toUpperCase() };
 }
 
-function renderFolders(folders) {
-  const list = $("folder-list");
-  list.innerHTML = "";
-  for (const f of folders) {
-    const item = document.createElement("div");
-    item.className = "source-item";
-    item.innerHTML = `
-      <span class="src-icon" data-kind="folder" aria-hidden="true">DIR</span>
-      <span class="src-title" title="${escapeHtml(f.path)}">${escapeHtml(f.path)}</span>
-      <span class="src-actions">
-        <button class="icon-btn" data-act="rescan" title="Rescan folder">↻</button>
-        <button class="icon-btn" data-act="remove" title="Remove folder source">✕</button>
-      </span>
-      <span class="src-sub">
-        <span class="badge-status ready">folder</span>
-        <span class="src-meta">${f.n_docs} docs</span>
-      </span>`;
-    item.querySelector('[data-act="rescan"]').onclick = async () => {
-      try {
-        // A folder scan walks the disk and can queue many documents, so it
-        // reports in the persistent job line rather than in a toast that is gone
-        // before the scan is.
-        setJobStatus(`Scanning ${f.path}…`, { busy: true });
-        const r = await api(`/api/folders/${f.id}/rescan`, { method: "POST" });
-        setJobStatus(
-          `Rescan: +${r.added} new, ${r.reindexed} updated, ${r.unchanged} unchanged${r.failed ? `, ${r.failed} failed` : ""}`,
-          { sticky: true }
-        );
-        await refreshSources();
-      } catch (e) {
-        setJobStatus(`Rescan failed: ${e.message}`, { sticky: true });
-        toast(e.message, true);
-      }
-    };
-    item.querySelector('[data-act="remove"]').onclick = async () => {
-      try {
-        await api(`/api/folders/${f.id}`, { method: "DELETE" });
-        await refreshSources();
-      } catch (e) { toast(e.message, true); }
-    };
-    list.appendChild(item);
-  }
-}
-
 function renderDocs(docs) {
   const list = $("doc-list");
   list.innerHTML = "";
@@ -967,11 +913,7 @@ function paintProgress(docId, p) {
 }
 
 async function refreshSources() {
-  const [docs, folders] = await Promise.all([
-    api("/api/documents"),
-    api("/api/folders"),
-  ]);
-  renderFolders(folders);
+  const docs = await api("/api/documents");
   renderDocs(docs);
   // Resume any document left mid-index — after a reload, or a step that failed
   // to be driven because the tab was closed. Without this a half-indexed
@@ -983,7 +925,7 @@ async function refreshSources() {
         .finally(() => { state.indexing.delete(d.id); refreshSources(); });
     }
   }
-  state.sourceCount = docs.length + folders.length;
+  state.sourceCount = docs.length;
   $("source-count").textContent = String(state.sourceCount);
   renderSourcesEmptyState();
   // Suggested questions are only honest while the document they are about is
@@ -1106,24 +1048,6 @@ $("add-url-btn").onclick = async () => {
     toast(e.message, true);
   } finally {
     $("add-url-btn").disabled = false;
-  }
-};
-
-$("add-folder-btn").onclick = async () => {
-  if (guestBlocked("add-folder-btn")) return;
-  const path = $("folder-input").value.trim();
-  if (!path) return;
-  try {
-    toast("Scanning folder…");
-    $("add-folder-btn").disabled = true;
-    const r = await api("/api/folders", { method: "POST", body: JSON.stringify({ path }) });
-    $("folder-input").value = "";
-    toast(`Folder indexed: +${r.added} docs`);
-    await refreshSources();
-  } catch (e) {
-    toast(e.message, true);
-  } finally {
-    $("add-folder-btn").disabled = false;
   }
 };
 
@@ -1719,9 +1643,9 @@ $("settings-save").onclick = async () => {
 
 // ---------- persistent job status (IDEA.md §5) ----------
 //
-// Re-index all and folder rescans announced themselves in a toast that vanished
-// after four seconds and then reported nothing until they finished — which looks
-// exactly like having failed. This line stays until the work is actually done.
+// Re-index all announced itself in a toast that vanished after four seconds
+// and then reported nothing until it finished — which looks exactly like
+// having failed. This line stays until the work is actually done.
 //
 // `sticky` marks a result worth leaving on screen; a plain progress message is
 // replaced by the next refresh, and cleared when nothing is running.
@@ -1776,7 +1700,7 @@ async function reindexAll() {
 
 $("reindex-btn").onclick = reindexAll;
 
-// Empty the workspace: every document, every folder, every vector.
+// Empty the workspace: every document, every vector.
 //
 // The confirm names the count and says what SURVIVES, because "delete all" in
 // a pane called Sources could reasonably be read as taking the chats with it.
@@ -1806,8 +1730,7 @@ This cannot be undone. Your chats are kept.`,
   try {
     const r = await api("/api/documents", { method: "DELETE" });
     setJobStatus(
-      `Deleted ${r.documents} document${r.documents === 1 ? "" : "s"}` +
-      (r.folders ? ` and ${r.folders} folder source${r.folders === 1 ? "" : "s"}` : ""),
+      `Deleted ${r.documents} document${r.documents === 1 ? "" : "s"}`,
       { sticky: true },
     );
     await refreshSources();
@@ -3473,7 +3396,7 @@ function paletteCommands() {
   }
   // Sources come from the DOM rather than from state: the card list is already
   // the authoritative rendering of them, and "jump to" means "show me that card".
-  for (const el of document.querySelectorAll("#doc-list .source-item, #folder-list .source-item")) {
+  for (const el of document.querySelectorAll("#doc-list .source-item")) {
     const title = el.querySelector(".src-title")?.textContent?.trim();
     if (!title) continue;
     rows.push({ group: "Source", label: title, run: () => revealSource(el) });

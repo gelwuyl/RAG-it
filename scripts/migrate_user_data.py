@@ -4,8 +4,8 @@ Written for the `local` -> Google-account handover: per-user isolation was alway
 enforced, so signing in with Google lands you in a brand-new empty space while
 everything you uploaded stays attached to the built-in `local` user.
 
-Moves documents, folder sources, conversations (messages follow their
-conversation) and the vector chunks, so nothing has to be re-embedded.
+Moves documents, conversations (messages follow their conversation) and the
+vector chunks, so nothing has to be re-embedded.
 
 The two vector backends scope users differently and both are handled:
   * neon   - `chunks.user_id` column -> UPDATE
@@ -30,7 +30,6 @@ from ragchat.config import settings  # noqa: E402
 from ragchat.db import (  # noqa: E402
     Conversation,
     Document,
-    FolderSource,
     Message,
     SessionLocal,
     User,
@@ -50,7 +49,6 @@ def _describe(db, user: User) -> dict:
     convs = db.query(Conversation).filter(Conversation.user_id == user.id).all()
     return {
         "documents": db.query(Document).filter(Document.user_id == user.id).count(),
-        "folders": db.query(FolderSource).filter(FolderSource.user_id == user.id).count(),
         "conversations": len(convs),
         "messages": sum(
             db.query(Message).filter(Message.conversation_id == c.id).count()
@@ -146,9 +144,6 @@ def main() -> int:
         n_docs = db.query(Document).filter(Document.user_id == src.id).update(
             {Document.user_id: dst.id}, synchronize_session=False
         )
-        n_folders = db.query(FolderSource).filter(FolderSource.user_id == src.id).update(
-            {FolderSource.user_id: dst.id}, synchronize_session=False
-        )
         n_convs = db.query(Conversation).filter(Conversation.user_id == src.id).update(
             {Conversation.user_id: dst.id}, synchronize_session=False
         )
@@ -156,7 +151,6 @@ def main() -> int:
 
         print(f"\nvector backend: {backend}")
         print(f"  documents     {n_docs}")
-        print(f"  folders       {n_folders}")
         print(f"  conversations {n_convs}")
         print(f"  {unit:<13} {n_vec}")
 

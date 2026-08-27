@@ -164,7 +164,6 @@
   --kind-web-bg:    #ecfdf3;  --kind-web-fg:    #027a48;  --kind-web-bd:    #a6f4c5;
   --kind-audio-bg:  #f4efff;  --kind-audio-fg:  #6941c6;  --kind-audio-bd:  #ddd0fb;
   --kind-video-bg:  #fdf2fa;  --kind-video-fg:  #c11574;  --kind-video-bd:  #fcceee;
-  --kind-folder-bg: #f0f9ff;  --kind-folder-fg: #026aa2;  --kind-folder-bd: #b9e6fe;
 
   /* ---------- landing-page atmosphere ----------
      Used only by landing.css. Defined here because the palette lives in one
@@ -298,7 +297,6 @@
   --kind-web-bg:    #0d2119;  --kind-web-fg:    #5cc296;  --kind-web-bd:    #1c4335;
   --kind-audio-bg:  #1c1630;  --kind-audio-fg:  #a58ae0;  --kind-audio-bd:  #382c5c;
   --kind-video-bg:  #2a1122;  --kind-video-fg:  #e07bb8;  --kind-video-bd:  #522242;
-  --kind-folder-bg: #0b1f2b;  --kind-folder-fg: #5fb4d4;  --kind-folder-bd: #163d52;
 
   /* ---------- landing-page atmosphere ----------
      Three star brightnesses so the field reads as depth rather than as noise.

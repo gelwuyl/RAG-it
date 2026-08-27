@@ -23,7 +23,7 @@ import time
 
 from sqlalchemy.orm import Session
 
-from .db import Conversation, Document, FolderSource, Message, User, new_id, now
+from .db import Conversation, Document, Message, User, new_id, now
 
 log = logging.getLogger(__name__)
 
@@ -118,7 +118,7 @@ def purge_users(db: Session, users: list[User], *, drop_users: bool) -> dict:
 
     ids = [u.id for u in users]
     if not ids:
-        return {"users": 0, "documents": 0, "folders": 0,
+        return {"users": 0, "documents": 0,
                 "conversations": 0, "messages": 0}
 
     try:
@@ -142,11 +142,6 @@ def purge_users(db: Session, users: list[User], *, drop_users: bool) -> dict:
     n_convs = (
         db.query(Conversation)
         .filter(Conversation.user_id.in_(ids))
-        .delete(synchronize_session=False)
-    )
-    n_folders = (
-        db.query(FolderSource)
-        .filter(FolderSource.user_id.in_(ids))
         .delete(synchronize_session=False)
     )
     n_docs = (
@@ -178,7 +173,6 @@ def purge_users(db: Session, users: list[User], *, drop_users: bool) -> dict:
     return {
         "users": len(ids),
         "documents": int(n_docs),
-        "folders": int(n_folders),
         "conversations": int(n_convs),
         "messages": int(n_msgs),
     }
@@ -282,11 +276,6 @@ def promote_guest(db: Session, guest: User, target: User) -> dict:
         .filter(Document.user_id == guest.id)
         .update({Document.user_id: target.id}, synchronize_session=False)
     )
-    n_folders = (
-        db.query(FolderSource)
-        .filter(FolderSource.user_id == guest.id)
-        .update({FolderSource.user_id: target.id}, synchronize_session=False)
-    )
     n_convs = (
         db.query(Conversation)
         .filter(Conversation.user_id == guest.id)
@@ -297,7 +286,6 @@ def promote_guest(db: Session, guest: User, target: User) -> dict:
     db.commit()
     return {
         "documents": int(n_docs),
-        "folders": int(n_folders),
         "conversations": int(n_convs),
     }
 

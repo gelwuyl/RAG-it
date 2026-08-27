@@ -149,21 +149,21 @@ mixing per-user isolation exists to prevent.
 - Guests are reaped after **30 minutes idle** (`GUEST_IDLE_TTL_SECONDS`).
 
 **What a guest may not do** — enforced server-side by `require_account`, not
-merely hidden in the UI. Exactly seven routes:
+merely hidden in the UI. Exactly six routes:
 
 | Denied | Why |
 |---|---|
 | `PUT /api/eval/config`, `POST /api/eval/config/reset` | `config_overrides` is a **single row shared by the whole deployment**. A config write re-points the embedding model for *everyone* and invalidates their chunks. |
 | `POST /api/eval/run`, `POST /api/eval/step` | Spends a full scored benchmark of real LLM quota. |
-| `POST /api/folders`, `POST /api/folders/{id}/rescan` | A folder path names the **server's** filesystem, not the visitor's. Also bypasses the document cap — one scan ingests a tree. |
 | `POST /api/documents/reindex` | Re-embeds from scratch, undoing the vector-copy saving. |
+| `DELETE /api/documents` | A guest's demo documents were vector-COPIED; they cannot get them back without a re-seed, and the workspace throws itself away after 30 minutes regardless — a delete-everything button there destroys the demo and solves nothing. |
 
-Everything else — upload, delete, ask, deep search, new chat, prune, theme — a
-guest keeps. A guest workspace is a **trial, not a display case**.
+Everything else — upload, delete a source, ask, deep search, new chat, prune,
+theme — a guest keeps. A guest workspace is a **trial, not a display case**.
 
 **Private tier (signed in).** Google OAuth (§14) grants an uncapped workspace,
 and signing in **promotes** the guest's work into the permanent account:
-documents, folders, conversations and chunks are re-pointed, nothing is
+documents, conversations and chunks are re-pointed, nothing is
 re-embedded (`_promote_prior_guest`). This applies to every sign-in path.
 
 **Identity has to paint before the server replies.** The session cookie is
@@ -219,8 +219,8 @@ No About page. Explanation lives where it is needed, layered.
 - **Glossary on demand.** Jargon gets a dotted-underline term with a tap/click
   definition — **not** a `title` attribute, which does not exist on touch and
   strands mobile users.
-- **Long jobs get persistent status, not disappearing toasts.** Re-index, folder
-  scan and benchmark announce themselves in a status row that stays until the
+- **Long jobs get persistent status, not disappearing toasts.** Re-index and
+  benchmark announce themselves in a status row that stays until the
   job ends.
 - **Wording avoids insider terms.** "Prune ghosts" became a plain-language
   command in the `/` palette; it was a glossary entry for a button, which is a
@@ -333,7 +333,7 @@ glance at the quality indicator.
 **Available but demoted:** new chat, delete chat, delete a source, re-index a
 single source.
 
-**Desktop-only:** benchmark runs, folder scan, re-index all, advanced tuning
+**Desktop-only:** benchmark runs, re-index all, advanced tuning
 fields, the command palette. Presets stay reachable.
 
 **Mechanics:**

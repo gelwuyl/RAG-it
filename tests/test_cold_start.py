@@ -46,7 +46,7 @@ def client():
     _db._initialized = False
 
     # Fully fresh DB each test.
-    for tbl in ("messages", "conversations", "users", "documents", "folders"):
+    for tbl in ("messages", "conversations", "users", "documents"):
         with engine.begin() as conn:
             conn.execute(_t(f"DROP TABLE IF EXISTS {tbl}"))
     yield TestClient(rapp.app, raise_server_exceptions=True)

@@ -210,9 +210,9 @@ def ingest_document_text(
 ) -> int:
     """Chunk, embed, and store a document's text in ONE call. Returns the count.
 
-    Kept for callers that are not request-bound — folder sync, the benchmark
-    corpus, demo seeding. The upload path uses ingest_slice instead, because a
-    large document cannot finish inside one serverless request.
+    Kept for callers that are not request-bound — the benchmark corpus, demo
+    seeding. The upload path uses ingest_slice instead, because a large
+    document cannot finish inside one serverless request.
     """
     chunks = split_document(text, title, cfg)
     chunks = refine_refs(chunks, text)

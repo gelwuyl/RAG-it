@@ -40,7 +40,7 @@ def rig(monkeypatch):
     import ragchat.db as _db
 
     _db._initialized = False
-    for tbl in ("messages", "conversations", "users", "documents", "folders"):
+    for tbl in ("messages", "conversations", "users", "documents"):
         with engine.begin() as conn:
             conn.execute(_t(f"DROP TABLE IF EXISTS {tbl}"))
 

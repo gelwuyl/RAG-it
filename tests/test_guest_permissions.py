@@ -44,7 +44,6 @@ GLOBAL_WRITE_ROUTES = [
     ("POST", "/api/eval/run", {"retrieval_only": True}),
     ("POST", "/api/eval/step", {"retrieval_only": True}),
     ("POST", "/api/documents/reindex", None),
-    ("POST", "/api/folders", {"path": "."}),
 ]
 
 
@@ -108,6 +107,36 @@ def test_anonymous_cannot_write_global_state(client, method, path, body):
     )
 
 
+def test_folder_routes_are_gone(client):
+    """The folder-source feature was removed outright, not merely hidden.
+
+    A folder path names the SERVER's filesystem, which on Vercel is the
+    read-only Lambda image — the feature could only ever work in local dev,
+    where the backend and the browser happen to share a disk. Removal must not
+    leave routes answering behind a UI that no longer links to them, so all
+    four are asserted absent. An anonymous cookie makes the point sharpest: a
+    non-existent route 404s before authentication is even considered, for
+    every caller alike.
+
+    405 is accepted alongside 404 because the static mount (frontend/dist,
+    when a local build exists) claims every unmatched path for GET and turns
+    a POST to a dead route into Method Not Allowed. 405 proves the same
+    absence — no folder handler answers — which is what this test exists to
+    pin; the exact status depends on the machine's filesystem, not the code.
+    """
+    client.cookies.clear()
+    for method, path, body in [
+        ("POST", "/api/folders", {"path": "."}),
+        ("GET", "/api/folders", None),
+        ("POST", "/api/folders/some-id/rescan", None),
+        ("DELETE", "/api/folders/some-id", None),
+    ]:
+        r = _call(client, method, path, body)
+        assert r.status_code in (404, 405), (
+            f"{method} {path} answered {r.status_code}"
+        )
+
+
 # --------------------------------------------------------------------------
 # Guests
 # --------------------------------------------------------------------------
@@ -165,7 +194,6 @@ def test_guest_workspace_stays_usable(client):
     """Guest mode is a trial, not a diorama — these must NOT be locked down."""
     _as_guest(client)
     assert client.get("/api/documents").status_code == 200
-    assert client.get("/api/folders").status_code == 200
     assert client.get("/api/chats").status_code == 200
     # Reading the last benchmark is deliberately open: the scorecard is the most
     # portfolio-legible thing in the app, and showing it costs nothing.
