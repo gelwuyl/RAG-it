@@ -1336,9 +1336,14 @@ html[data-kind="guest"] .identity-hint .hint-badge { display: inline-block; }
    answer vs the sample corpus. */
 .score-bar-wrap { position: relative; }
 .score-target {
-  position: absolute; top: -3px; bottom: -3px; width: 2px;
-  transform: translateX(-1px);       /* centre the 2px line ON the % position */
-  background: var(--muted); border-radius: 1px;
+  position: absolute; top: -3px; bottom: -3px; width: 3px;
+  transform: translateX(-1.5px);     /* centre the 3px line ON the % position */
+  background: var(--inverse-bg);     /* near-white in dark, near-black in light */
+  border-radius: 1.5px;
+  /* A ring in the panel colour separates the marker from BOTH surfaces it
+     crosses — the accent fill and the empty track — so it reads as a handle
+     sitting on the bar rather than a scratch on it. */
+  box-shadow: 0 0 0 1px var(--panel);
 }
 .score-foot {
   font-family: var(--font-mono);
