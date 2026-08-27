@@ -92,6 +92,13 @@ _LIVE_GRADE_LABELS = {
     "context_sufficiency": "Context sufficiency",
     "correct": "Answer correctness",
 }
+# Live grading runs the SCORED judge variants, which return a 0-1 reading in
+# addition to the verdict; it lands in eval_data as f"{field}_score". The
+# scorecard draws the bar from the score (65% fills at 65 against the 86%
+# benchmark tick) and keeps the verdict for the passed/failed chip. A score of
+# None means the judge predates scoring or did not emit one — the bar falls
+# back to the binary 100/0 rendering.
+LIVE_SCORE_FIELDS = {f: f"{f}_score" for f in LIVE_GRADE_FIELDS}
 # Value carried by eval_data["expected_reason"] when synthesize_expected ruled
 # that the passages cannot answer the question. Bound lazily from the judge
 # module (its producer) inside _eval_answer — importing it at module load risks
@@ -499,11 +506,11 @@ def _eval_answer(
     try:
         from eval.judges import (
             NO_ANSWER_DERIVABLE_SENTINEL,
-            answer_correctness,
-            answer_relevancy,
-            context_relevance,
-            context_sufficiency,
-            faithfulness,
+            answer_correctness_scored,
+            answer_relevancy_scored,
+            context_relevance_scored,
+            context_sufficiency_scored,
+            faithfulness_scored,
             synthesize_expected,
         )
         # Bind the module-level placeholder so comparisons below (and any
@@ -536,55 +543,65 @@ def _eval_answer(
         # Resume a graded "nothing to be right about" verdict instead of
         # re-running synthesis for an answer it already ruled on.
         values["correct"] = False
+        values[LIVE_SCORE_FIELDS["correct"]] = 0.0
         reasons["correct"] = "no reference derivable: the passages do not answer this"
     correct_done = values["correct"] is not None
     # A draft that failed once is retried (the outage may have healed); one that
     # already RANKED as no-answer-derivable was a completed verdict, handled above.
 
     def _run(fn, *args):
-        """Return (verdict|None, reason). None = not graded, NOT a failure.
+        """Return (verdict, score|None, reason). None verdict = not graded.
 
         A judge that 404s, times out, or replies without a verdict must never
         be reported as FAIL — that renders as a confident hallucination finding
-        when in reality nothing was graded at all.
+        when in reality nothing was graded at all. The score rides along: None
+        when no verdict, and also None when the judge omitted its SCORE line
+        (the bar then falls back to the binary rendering).
         """
         try:
-            return fn(*args)
+            verdict, score, why = fn(*args)
+            return verdict, score, why
         except Exception as exc:  # noqa: BLE001
-            return None, str(exc)
+            return None, None, str(exc)
+
+    def _put(field, res):
+        verdict, score, why = res
+        values[field] = verdict
+        values[LIVE_SCORE_FIELDS[field]] = score
+        reasons[field] = why
 
     if not done["faithful"]:
-        values["faithful"], reasons["faithful"] = _run(
-            faithfulness, question, context_text, answer
-        )
+        _put("faithful", _run(faithfulness_scored, question, context_text, answer))
     if not done["relevant"]:
-        values["relevant"], reasons["relevant"] = _run(
-            answer_relevancy, question, answer
-        )
+        _put("relevant", _run(answer_relevancy_scored, question, answer))
     if not done["context_relevance"]:
-        values["context_relevance"], reasons["context_relevance"] = _run(
-            context_relevance, question, context_text
-        )
+        _put("context_relevance", _run(context_relevance_scored, question, context_text))
     if not done["context_sufficiency"]:
-        values["context_sufficiency"], reasons["context_sufficiency"] = _run(
-            context_sufficiency, question, context_text
-        )
+        _put("context_sufficiency", _run(context_sufficiency_scored, question, context_text))
+
+    def _run2(fn, *args):
+        """_run for the two-tuple synthesis judge (text, reason)."""
+        try:
+            text, why = fn(*args)
+            return text, why
+        except Exception as exc:  # noqa: BLE001
+            return None, str(exc)
 
     if not correct_done:
         # Resume a draft-outage marker ("expected_answer": "" + a reason) by
         # re-running synthesis; NO_ANSWER_DERIVABLE was already converted to a
         # FAIL verdict above. An absent key means "not yet attempted".
         if previous.get("expected_answer") == "" or expected_text is None:
-            expected_text, expected_reason = _run(
+            expected_text, expected_reason = _run2(
                 synthesize_expected, question, context_text
             )
         if expected_text:
             # A real reference exists: score against it and persist it so a
             # retry never re-purchases the same draft call.
             values["expected_answer"] = expected_text
-            values["correct"], reasons["correct"] = _run(
-                answer_correctness, question, expected_text, answer
-            )
+            _put("correct", _run(
+                answer_correctness_scored, question, expected_text, answer
+            ))
         else:
             # No usable text. Two different meanings: the passages genuinely
             # cannot answer (a graded verdict — correctness is FAIL by
@@ -596,6 +613,7 @@ def _eval_answer(
                 values["expected_reason"] = expected_reason
             if expected_reason == NO_ANSWER_DERIVABLE:
                 values["correct"] = False
+                values[LIVE_SCORE_FIELDS["correct"]] = 0.0
                 reasons["correct"] = (
                     "no reference derivable: the passages do not answer this"
                 )
@@ -728,7 +746,12 @@ def _line(eval_d: dict | None, top_sim: float | None, deep: int, latency_ms: flo
         if eval_d.get("context_sufficiency") is not None:
             parts.append("ctx suff " + ("PASS" if eval_d["context_sufficiency"] else "FAIL"))
         if eval_d.get("correct") is not None:
-            parts.append("correct " + ("PASS" if eval_d["correct"] else "FAIL"))
+            # Prefer the score: "correct 75" says what "correct PASS" hides.
+            cs = eval_d.get("correct_score")
+            parts.append(
+                "correct " + (f"{round(cs * 100)}" if cs is not None
+                              else "PASS" if eval_d["correct"] else "FAIL")
+            )
     if latency_ms is not None:
         parts.append(f"{latency_ms:.0f} ms")
     return " · ".join(parts)

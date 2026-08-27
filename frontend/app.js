@@ -2518,6 +2518,11 @@ function renderScorecard(metrics, runMode) {
       (f) => LIVE_TO_BENCHMARK[f] === key,
     );
     const v = field ? liveValue(live, field) : null;
+    // A scored judge also emits a 0-1 reading (f"{field}_score"). The bar draws
+    // THAT when present — 65% fills to 65 against the benchmark tick, instead
+    // of a binary pass rendering as a flat 100%. No score (older graded
+    // messages, or a judge that omitted the line) falls back to 100/0.
+    const score = field && live ? live[`${field}_score`] : null;
     const hasLive = v != null;
     if (hasLive) anyLive = true;
     // Only the two live judges share benchmark bars, and they are the readings
@@ -2525,11 +2530,20 @@ function renderScorecard(metrics, runMode) {
     const waiting = !hasLive && !!(live && live.pending) && !!field;
 
     const benchPct = Math.round(bench * 100);
-    const livePct = hasLive ? Math.round(v * 100) : 0;
+    const livePct = hasLive ? Math.round((score != null ? score : v) * 100) : 0;
     // Below the benchmark is not a failure — one answer against an average of
     // 53 is a comparison, not a verdict — so the bar is the accent when there
     // is a live reading and muted when it is only showing the benchmark.
-    const below = hasLive && v < bench;
+    const below = hasLive && (score != null ? score : v) < bench;
+    // The verdict chip says passed/failed; with a score the chip carries the
+    // number instead — "65%" reads truer next to a 65%-full bar than "passed".
+    const chip = hasLive
+      ? score != null
+        ? `${livePct}%`
+        : escapeHtml(liveLabel(live, field))
+      : waiting
+        ? "grading…"
+        : `${benchPct}%`;
 
     const row = document.createElement("div");
     row.className =
@@ -2539,9 +2553,7 @@ function renderScorecard(metrics, runMode) {
         <span class="score-name">${t.label}<span class="score-sub">${t.sub}${
           t.from ? `<span class="score-from">${t.from}</span>` : ""
         }</span></span>
-        <span class="score-val ${hasLive ? (below ? "under" : "over") : "quiet"}">${
-          hasLive ? escapeHtml(liveLabel(live, field)) : waiting ? "grading…" : `${benchPct}%`
-        }</span>
+        <span class="score-val ${hasLive ? (below ? "under" : "over") : "quiet"}">${chip}</span>
       </div>
       <div class="score-bar">
         <div class="score-fill ${hasLive ? "live" : "bench"}"

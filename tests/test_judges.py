@@ -178,23 +178,23 @@ def test_live_retry_only_calls_the_judge_without_a_verdict(monkeypatch):
 
     def _faithful(*args):
         calls["faithful"] += 1
-        return False, "unsupported figure"
+        return False, 0.0, "unsupported figure"
 
     def _relevant(*args):
         calls["relevant"] += 1
-        return True, "on-topic"
+        return True, 1.0, "on-topic"
 
     class _Cfg:
         eval_show = True
 
-    monkeypatch.setattr(judges, "faithfulness", _faithful)
-    monkeypatch.setattr(judges, "answer_relevancy", _relevant)
-    monkeypatch.setattr(judges, "context_relevance", lambda *a: (True, "on point"))
-    monkeypatch.setattr(judges, "context_sufficiency", lambda *a: (True, "enough"))
+    monkeypatch.setattr(judges, "faithfulness_scored", _faithful)
+    monkeypatch.setattr(judges, "answer_relevancy_scored", _relevant)
+    monkeypatch.setattr(judges, "context_relevance_scored", lambda *a: (True, 1.0, "on point"))
+    monkeypatch.setattr(judges, "context_sufficiency_scored", lambda *a: (True, 1.0, "enough"))
     monkeypatch.setattr(
         judges, "synthesize_expected", lambda *a: ("the expected answer.", "")
     )
-    monkeypatch.setattr(judges, "answer_correctness", lambda *a: (True, "matches"))
+    monkeypatch.setattr(judges, "answer_correctness_scored", lambda *a: (True, 1.0, "matches"))
     out = pipeline.grade_answer(
         "q",
         "a",
@@ -218,18 +218,18 @@ def test_live_judge_error_identifies_the_missing_metric(monkeypatch):
     class _Cfg:
         eval_show = True
 
-    monkeypatch.setattr(judges, "faithfulness", lambda *args: (True, "supported"))
-    monkeypatch.setattr(judges, "context_relevance", lambda *a: (True, "on point"))
-    monkeypatch.setattr(judges, "context_sufficiency", lambda *a: (True, "enough"))
+    monkeypatch.setattr(judges, "faithfulness_scored", lambda *args: (True, 1.0, "supported"))
+    monkeypatch.setattr(judges, "context_relevance_scored", lambda *a: (True, 1.0, "on point"))
+    monkeypatch.setattr(judges, "context_sufficiency_scored", lambda *a: (True, 1.0, "enough"))
     monkeypatch.setattr(
         judges, "synthesize_expected", lambda *a: ("the expected answer.", "")
     )
-    monkeypatch.setattr(judges, "answer_correctness", lambda *a: (True, "matches"))
+    monkeypatch.setattr(judges, "answer_correctness_scored", lambda *a: (True, 1.0, "matches"))
 
     def _broken_relevancy(*args):
         raise RuntimeError("429 rate limited")
 
-    monkeypatch.setattr(judges, "answer_relevancy", _broken_relevancy)
+    monkeypatch.setattr(judges, "answer_relevancy_scored", _broken_relevancy)
     out = pipeline.grade_answer("q", "a", "ctx", _Cfg())
 
     assert out["faithful"] is True and out["relevant"] is None
@@ -244,20 +244,49 @@ def test_context_checks_are_reported_when_they_fail(monkeypatch):
     class _Cfg:
         eval_show = True
 
-    monkeypatch.setattr(judges, "faithfulness", lambda *a: (True, "supported"))
-    monkeypatch.setattr(judges, "answer_relevancy", lambda *a: (True, "on-topic"))
-    monkeypatch.setattr(judges, "context_relevance", lambda *a: (False, "mostly unrelated"))
-    monkeypatch.setattr(judges, "context_sufficiency", lambda *a: (True, "enough"))
+    monkeypatch.setattr(judges, "faithfulness_scored", lambda *a: (True, 1.0, "supported"))
+    monkeypatch.setattr(judges, "answer_relevancy_scored", lambda *a: (True, 1.0, "on-topic"))
+    monkeypatch.setattr(judges, "context_relevance_scored", lambda *a: (False, 0.0, "mostly unrelated"))
+    monkeypatch.setattr(judges, "context_sufficiency_scored", lambda *a: (True, 1.0, "enough"))
     monkeypatch.setattr(
         judges, "synthesize_expected", lambda *a: ("the expected answer.", "")
     )
-    monkeypatch.setattr(judges, "answer_correctness", lambda *a: (True, "matches"))
+    monkeypatch.setattr(judges, "answer_correctness_scored", lambda *a: (True, 1.0, "matches"))
     out = pipeline.grade_answer("q", "a", "ctx", _Cfg())
 
     assert out["context_relevance"] is False
     assert out["context_relevance_reason"] == "mostly unrelated"
     assert out["context_sufficiency"] is True
     assert "judge_error" not in out
+
+
+def test_scored_judges_store_their_reading_for_the_bar(monkeypatch):
+    """The scorecard draws bars from the 0-1 reading (65% fills to 65 against
+    the benchmark tick); a binary pass rendering as 100% was indistinguishable
+    from a measurement. The score rides next to each verdict in eval_data."""
+    from ragchat import pipeline
+
+    class _Cfg:
+        eval_show = True
+
+    monkeypatch.setattr(judges, "faithfulness_scored", lambda *a: (True, 0.75, "3 of 4 claims"))
+    monkeypatch.setattr(judges, "answer_relevancy_scored", lambda *a: (True, 0.9, "direct"))
+    monkeypatch.setattr(judges, "context_relevance_scored", lambda *a: (True, 0.65, "mixed"))
+    monkeypatch.setattr(judges, "context_sufficiency_scored", lambda *a: (True, 0.8, "enough"))
+    monkeypatch.setattr(judges, "synthesize_expected", lambda *a: ("expected.", ""))
+    monkeypatch.setattr(judges, "answer_correctness_scored", lambda *a: (False, 0.4, "partial"))
+    out = pipeline.grade_answer("q", "a", "ctx", _Cfg())
+
+    assert out["faithful_score"] == 0.75
+    assert out["relevant_score"] == 0.9
+    assert out["context_relevance_score"] == 0.65
+    assert out["context_sufficiency_score"] == 0.8
+    assert out["correct_score"] == 0.4 and out["correct"] is False
+    # A judge that omits its SCORE line degrades to the verdict, not an error.
+    monkeypatch.setattr(judges, "faithfulness_scored", lambda *a: (True, 1.0, "no line"))
+    out2 = pipeline.grade_answer("q", "a", "ctx", _Cfg())
+    assert out2["faithful_score"] == 1.0
+    assert "judge_error" not in out2
 
 
 # ---------- estimated correctness (option 3) ----------
@@ -280,14 +309,14 @@ def test_correctness_scores_against_a_drafted_reference(monkeypatch):
 
     def _correct(question, expected, answer):
         seen["expected_used"] = expected
-        return False, "range mismatch"
+        return False, 0.4, "range mismatch"
 
-    monkeypatch.setattr(judges, "faithfulness", lambda *a: (True, "supported"))
-    monkeypatch.setattr(judges, "answer_relevancy", lambda *a: (True, "on-topic"))
-    monkeypatch.setattr(judges, "context_relevance", lambda *a: (True, "on point"))
-    monkeypatch.setattr(judges, "context_sufficiency", lambda *a: (True, "enough"))
+    monkeypatch.setattr(judges, "faithfulness_scored", lambda *a: (True, 1.0, "supported"))
+    monkeypatch.setattr(judges, "answer_relevancy_scored", lambda *a: (True, 1.0, "on-topic"))
+    monkeypatch.setattr(judges, "context_relevance_scored", lambda *a: (True, 1.0, "on point"))
+    monkeypatch.setattr(judges, "context_sufficiency_scored", lambda *a: (True, 1.0, "enough"))
     monkeypatch.setattr(judges, "synthesize_expected", _synth)
-    monkeypatch.setattr(judges, "answer_correctness", _correct)
+    monkeypatch.setattr(judges, "answer_correctness_scored", _correct)
     out = pipeline.grade_answer("q", "a", "the passages", _Cfg())
 
     assert out["correct"] is False
@@ -313,10 +342,10 @@ def test_no_derivable_reference_is_a_graded_not_an_outage(monkeypatch):
         calls["n"] += 1
         return "", pipeline.NO_ANSWER_DERIVABLE
 
-    monkeypatch.setattr(judges, "faithfulness", lambda *a: (True, "supported"))
-    monkeypatch.setattr(judges, "answer_relevancy", lambda *a: (True, "on-topic"))
-    monkeypatch.setattr(judges, "context_relevance", lambda *a: (False, "unrelated"))
-    monkeypatch.setattr(judges, "context_sufficiency", lambda *a: (False, "not enough"))
+    monkeypatch.setattr(judges, "faithfulness_scored", lambda *a: (True, 1.0, "supported"))
+    monkeypatch.setattr(judges, "answer_relevancy_scored", lambda *a: (True, 1.0, "on-topic"))
+    monkeypatch.setattr(judges, "context_relevance_scored", lambda *a: (False, 0.0, "unrelated"))
+    monkeypatch.setattr(judges, "context_sufficiency_scored", lambda *a: (False, 0.0, "not enough"))
     monkeypatch.setattr(judges, "synthesize_expected", _no_answer)
 
     fresh = pipeline.grade_answer("q", "a", "empty-ish context", _Cfg())
@@ -364,10 +393,10 @@ def test_synthesis_outage_is_named_and_retry_heals(monkeypatch):
         eval_show = True
 
     judges.faithfulness  # keep the import referenced even if stubs change
-    monkeypatch.setattr(judges, "faithfulness", lambda *a: (True, "supported"))
-    monkeypatch.setattr(judges, "answer_relevancy", lambda *a: (True, "on-topic"))
-    monkeypatch.setattr(judges, "context_relevance", lambda *a: (True, "on point"))
-    monkeypatch.setattr(judges, "context_sufficiency", lambda *a: (True, "enough"))
+    monkeypatch.setattr(judges, "faithfulness_scored", lambda *a: (True, 1.0, "supported"))
+    monkeypatch.setattr(judges, "answer_relevancy_scored", lambda *a: (True, 1.0, "on-topic"))
+    monkeypatch.setattr(judges, "context_relevance_scored", lambda *a: (True, 1.0, "on point"))
+    monkeypatch.setattr(judges, "context_sufficiency_scored", lambda *a: (True, 1.0, "enough"))
 
     def _boom(*a):
         raise RuntimeError("draft call 504")
@@ -383,13 +412,13 @@ def test_synthesis_outage_is_named_and_retry_heals(monkeypatch):
 
     def _counting_faithful(*a):
         finished_judge_calls["n"] += 1
-        return True, "supported"
+        return True, 1.0, "supported"
 
-    monkeypatch.setattr(judges, "faithfulness", _counting_faithful)
+    monkeypatch.setattr(judges, "faithfulness_scored", _counting_faithful)
     monkeypatch.setattr(
         judges, "synthesize_expected", lambda *a: ("drafted text.", "")
     )
-    monkeypatch.setattr(judges, "answer_correctness", lambda *a: (True, "matches"))
+    monkeypatch.setattr(judges, "answer_correctness_scored", lambda *a: (True, 1.0, "matches"))
 
     healed = pipeline.grade_answer("q", "a", "ctx", _Cfg(), previous={
         "faithful": True, "faithful_reason": "supported",
