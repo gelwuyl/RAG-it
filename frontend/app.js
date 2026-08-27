@@ -1995,6 +1995,201 @@ async function openChat(chatId) {
   box.scrollTop = box.scrollHeight;
 }
 
+// ---------- minimal markdown ----------
+// The models answer in markdown, and the old renderer set the raw text, so the
+// reader saw literal "###" and "**" in the thread. Hand-rolled rather than a
+// dependency: the frontend is dependency-free vanilla JS (CLAUDE.md), and a
+// chat answer needs a small known subset — headings, lists, bold/italic/code,
+// links, tables, quotes — not all of CommonMark.
+//
+// INPUT MUST ALREADY BE HTML-ESCAPED. Nothing here escapes again, and every
+// tag it emits is written literally below; the only attribute built from data
+// is href, and the link matcher admits http(s) URLs only. Blocks are joined
+// with "" (no newlines): .msg is white-space:pre-wrap for plain-text
+// messages, and a stray newline between block tags would show as a blank line.
+function mdInline(s) {
+  // Code spans first, so their content is never read as emphasis or links.
+  s = s.replace(/`([^`]+)`/g, "<code>$1</code>");
+  s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  s = s.replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>");
+  s = s.replace(/__([^_]+)__/g, "<strong>$1</strong>");
+  s = s.replace(/(^|[\s(])_([^_\n]+)_/g, "$1<em>$2</em>");
+  s = s.replace(/~~([^~]+)~~/g, "<del>$1</del>");
+  // http(s) only. Citation markers like [2] are NOT links; they carry no
+  // (…) part so this leaves them for renderAssistantContent's marker pass.
+  s = s.replace(
+    /\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g,
+    '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>',
+  );
+  return s;
+}
+
+function mdBlocks(src) {
+  const lines = src.split("\n");
+  const out = [];
+  let para = [];
+  let quote = [];
+  let lists = []; // stack of {tag, indent, openItem}, outermost first
+  let code = null; // {lines} while inside a ``` fence
+
+  const flushPara = () => {
+    if (para.length) {
+      out.push(`<p>${mdInline(para.join("<br>"))}</p>`);
+      para = [];
+    }
+  };
+  const flushQuote = () => {
+    if (quote.length) {
+      out.push(`<blockquote><p>${mdInline(quote.join("<br>"))}</p></blockquote>`);
+      quote = [];
+    }
+  };
+  // The </li> is held open on the LIST it belongs to (not one global flag): a
+  // parent item stays open across the whole nested list inside it, so sibling
+  // items at the outer level still need their own closes.
+  const closeLi = () => {
+    const top = lists[lists.length - 1];
+    if (top && top.openItem) {
+      out.push("</li>");
+      top.openItem = false;
+    }
+  };
+  const closeLists = (toIndent) => {
+    while (lists.length && lists[lists.length - 1].indent > toIndent) {
+      closeLi();
+      out.push(`</${lists.pop().tag}>`);
+    }
+  };
+  const flushAll = () => {
+    flushPara();
+    flushQuote();
+    closeLists(-1);
+  };
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    if (code) {
+      if (/^\s*```/.test(line)) {
+        out.push(`<pre><code>${code.lines.join("\n")}</code></pre>`);
+        code = null;
+      } else {
+        code.lines.push(line);
+      }
+      continue;
+    }
+
+    if (/^\s*```/.test(line)) {
+      flushAll();
+      code = { lines: [] };
+      continue;
+    }
+
+    // Table: a row of pipes followed by a |---|---| separator. Parsed here
+    // rather than left as pipe text — spec-style answers tabulate naturally.
+    const next = lines[i + 1] || "";
+    if (
+      line.includes("|") &&
+      /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)+\|?\s*$/.test(next)
+    ) {
+      flushAll();
+      const cells = (row) =>
+        row.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((c) => c.trim());
+      const head = cells(line);
+      let body = [];
+      for (i += 2; i < lines.length && lines[i].includes("|"); i++) {
+        body.push(cells(lines[i]));
+      }
+      i--; // the for-loop above advanced one past the table
+      out.push(
+        `<table><thead><tr>${head.map((c) => `<th>${mdInline(c)}</th>`).join("")}</tr></thead>` +
+        `<tbody>${body
+          .map((r) => `<tr>${head.map((_, j) => `<td>${mdInline(r[j] ?? "")}</td>`).join("")}</tr>`)
+          .join("")}</tbody></table>`,
+      );
+      continue;
+    }
+
+    const heading = line.match(/^(#{1,6})\s+(.*)$/);
+    if (heading) {
+      flushAll();
+      // Demoted one level (floor h3): a "#"-heading is the top of the ANSWER,
+      // not the top of the page — chat text never warrants an <h1>.
+      const n = Math.min(Math.max(heading[1].length + 1, 3), 6);
+      out.push(`<h${n}>${mdInline(heading[2])}</h${n}>`);
+      continue;
+    }
+
+    if (/^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/.test(line)) {
+      flushAll();
+      out.push("<hr>");
+      continue;
+    }
+
+    // Blockquote. The input is already HTML-escaped, so ">" arrives as &gt;.
+    if (/^\s*&gt;\s?/.test(line)) {
+      flushPara();
+      closeLists(-1);
+      quote.push(line.replace(/^\s*&gt;\s?/, ""));
+      continue;
+    }
+
+    const item = line.match(/^(\s*)([-*+]|\d+[.)])\s+(.*)$/);
+    if (item) {
+      flushPara();
+      flushQuote();
+      const indent = item[1].replace(/\t/g, "    ").length;
+      const tag = /\d/.test(item[2]) ? "ol" : "ul";
+      const top = lists[lists.length - 1];
+      if (top && indent > top.indent) {
+        // Deeper: the nested list lives INSIDE the open item — that item's
+        // openItem stays true, which is what indents the nesting. No </li> here.
+        out.push(`<${tag}>`);
+        lists.push({ tag, indent, openItem: false });
+      } else {
+        closeLists(indent);
+        const nowTop = lists[lists.length - 1];
+        if (!nowTop || nowTop.indent !== indent) {
+          closeLi();
+          out.push(`<${tag}>`);
+          lists.push({ tag, indent, openItem: false });
+        } else {
+          closeLi();
+          if (nowTop.tag !== tag) {
+            // Same level, flipped marker (1. then -): close and reopen.
+            out.push(`</${nowTop.tag}>`);
+            lists.pop();
+            out.push(`<${tag}>`);
+            lists.push({ tag, indent, openItem: false });
+          }
+        }
+      }
+      out.push(`<li>${mdInline(item[3])}`);
+      lists[lists.length - 1].openItem = true;
+      continue;
+    }
+
+    if (!line.trim()) {
+      flushAll();
+      continue;
+    }
+    // A paragraph line after a list: indented under it, it continues the open
+    // item; at the left margin it ends the list and starts a new paragraph.
+    // With no list open, plain lines simply accumulate — <br>-joined on
+    // flush, so a wrapped sentence does not become one <p> per line.
+    const top = lists[lists.length - 1];
+    if (top && /^\s{2,}/.test(line)) {
+      para.push(line.trim());
+    } else {
+      if (top) flushAll();
+      para.push(line);
+    }
+  }
+  if (code) out.push(`<pre><code>${code.lines.join("\n")}</code></pre>`);
+  flushAll();
+  return out.join("");
+}
+
 // Render [1] markers as clickable spans; citations list becomes chips below.
 function renderAssistantContent(el, content, citations) {
   // Models write "[2, 3, 4]" as readily as "[2]", and the old pattern read only
@@ -2004,10 +2199,12 @@ function renderAssistantContent(el, content, citations) {
   // marker: "[2, 3, 4]" renders as [2][3][4], three separate targets, because a
   // single span over three numbers has no one passage to open.
   //
-  // Must stay in step with pipeline.cited_in, which decides which sources get a
+  // Markdown first, markers second: the pass runs over the RENDERED html, so
+  // the marker spans themselves are never inside the markdown parser. It must
+  // stay in step with pipeline.cited_in, which decides which sources get a
   // chip. If one reads a form the other does not, the reader sees a reference
   // with no chip or a chip nothing points at.
-  const withMarkers = escapeHtml(content).replace(
+  const withMarkers = mdBlocks(escapeHtml(content)).replace(
     /\[\s*(\d+(?:\s*,\s*\d+)*)\s*\]/g,
     (m, group) =>
       group
@@ -2456,16 +2653,20 @@ const EVAL_GROUPS = {
   generation: { label: "Generation", sub: "Was the answer any good?" },
 };
 
+// Key order IS display order — renderScorecard walks Object.entries and emits
+// a group heading when the group changes. Generation sits above Ranking
+// because the reader reads top-down: did the right passages come back, was the
+// answer any good, and only then how well they were ordered.
 const EVAL_TARGETS = {
   context_recall: { group: "retrieval", from: "RAG-it", label: "Found the right passages", sub: "Context Recall", target: 0.80, higher: true },
   precision_at_k: { group: "retrieval", label: "Sent mostly relevant text", sub: "Precision@k", target: 0.70, higher: true },
-  mrr: { group: "ranking", label: "Best passage ranked high", sub: "MRR", target: 0.65, higher: true },
-  ndcg_at_k: { group: "ranking", label: "Good overall ordering", sub: "NDCG@k", target: 0.70, higher: true },
-  hit_rate_at_k: { group: "ranking", label: "Right passage made the cut", sub: "Hit rate@k", target: 0.80, higher: true },
   faithfulness: { group: "generation", from: "RAGAS-style", label: "Stuck to the sources", sub: "Faithfulness", target: 0.90, higher: true },
   answer_relevancy: { group: "generation", from: "RAGAS-style", label: "Answered what was asked", sub: "Answer relevancy", target: 0.85, higher: true },
   answer_correctness: { group: "generation", from: "RAGAS-style", label: "Matched the expected answer", sub: "Answer correctness", target: 0.80, higher: true },
   not_found_rate_unanswerables: { group: "generation", from: "RAG-it", label: "Admitted when it could not answer", sub: "Not-found rate", target: 0.90, higher: true },
+  mrr: { group: "ranking", label: "Best passage ranked high", sub: "MRR", target: 0.65, higher: true },
+  ndcg_at_k: { group: "ranking", label: "Good overall ordering", sub: "NDCG@k", target: 0.70, higher: true },
+  hit_rate_at_k: { group: "ranking", label: "Right passage made the cut", sub: "Hit rate@k", target: 0.80, higher: true },
 };
 
 function fmtPct(v) {
