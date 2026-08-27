@@ -77,9 +77,15 @@ _VERDICT_CONTRACT = (
 # for a 0-100 reading too. The BENCHMARK keeps using the boolean judges above:
 # its published numbers are pass rates over 53 golden questions, and switching
 # its judges would silently change what those numbers mean.
+#
+# "Do NOT show your working" is load-bearing, not decorative: with a longer
+# prompt the thinking-capable judge model reasons at length about each passage,
+# burns the whole token budget, and the reply dies inside <thought> before any
+# verdict — five-for-five on the preview deployment before this line existed.
 _VERDICT_CONTRACT_SCORED = (
     "Reply in exactly this format, with NO preamble, NO chain-of-thought, "
-    "NO commentary outside these three lines:\n"
+    "NO commentary outside these three lines. Do NOT show your working — "
+    "decide silently and output only:\n"
     "VERDICT: PASS or FAIL\n"
     "SCORE: an integer from 0 to 100\n"
     "REASON: one short sentence citing the specific evidence.\n"
@@ -107,13 +113,14 @@ _UNCLOSED_THINK_BLOCK = re.compile(
 )
 
 
-def _judge(prompt: str) -> str:
+def _judge(prompt: str, max_tokens: int = 512) -> str:
     """Ask the judge model for a verdict. Raises JudgeError if it can't answer.
 
     ``max_tokens`` is deliberately generous (was 96). On thinking-capable models
     the reasoning tokens are billed against this budget, so a tight cap made the
     model spend the whole allowance thinking and return EMPTY content — which
-    the old parser then scored as FAIL.
+    the old parser then scored as FAIL. The scored judges pass 4096: even 2048
+    was exhausted mid-<thought> on full-document contexts (finish_reason="length").
     """
     client = openai_client()
     model = judge_model()
@@ -122,7 +129,7 @@ def _judge(prompt: str) -> str:
             model=model,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.0,
-            max_tokens=512,
+            max_tokens=max_tokens,
         )
     except Exception as exc:  # 404 on an unserved model, quota, network...
         raise JudgeError(f"judge model {model!r} failed: {exc}") from exc
@@ -312,7 +319,11 @@ def faithfulness_scored(question: str, context: str, answer: str) -> tuple[bool,
         f"Answer: {answer}\n\n"
         + _VERDICT_CONTRACT_SCORED
     )
-    return _parse_verdict_scored(_judge(prompt))
+    # 4096, not 512: the configured judge is thinking-capable and enumerates
+    # every passage inside <thought> on long contexts. Probed live: 2048 still
+    # ends finish_reason="length" with no verdict emitted; 4096 returns stop
+    # with a parseable verdict.
+    return _parse_verdict_scored(_judge(prompt, max_tokens=4096))
 
 
 def answer_relevancy_scored(question: str, answer: str) -> tuple[bool, float, str]:
@@ -330,7 +341,11 @@ def answer_relevancy_scored(question: str, answer: str) -> tuple[bool, float, st
         f"Answer: {answer}\n\n"
         + _VERDICT_CONTRACT_SCORED
     )
-    return _parse_verdict_scored(_judge(prompt))
+    # 4096, not 512: the configured judge is thinking-capable and enumerates
+    # every passage inside <thought> on long contexts. Probed live: 2048 still
+    # ends finish_reason="length" with no verdict emitted; 4096 returns stop
+    # with a parseable verdict.
+    return _parse_verdict_scored(_judge(prompt, max_tokens=4096))
 
 
 def context_relevance_scored(question: str, context: str) -> tuple[bool, float, str]:
@@ -349,7 +364,11 @@ def context_relevance_scored(question: str, context: str) -> tuple[bool, float, 
         f"Retrieved context:\n{context}\n\n"
         + _VERDICT_CONTRACT_SCORED
     )
-    return _parse_verdict_scored(_judge(prompt))
+    # 4096, not 512: the configured judge is thinking-capable and enumerates
+    # every passage inside <thought> on long contexts. Probed live: 2048 still
+    # ends finish_reason="length" with no verdict emitted; 4096 returns stop
+    # with a parseable verdict.
+    return _parse_verdict_scored(_judge(prompt, max_tokens=4096))
 
 
 def context_sufficiency_scored(question: str, context: str) -> tuple[bool, float, str]:
@@ -367,7 +386,11 @@ def context_sufficiency_scored(question: str, context: str) -> tuple[bool, float
         f"Retrieved context:\n{context}\n\n"
         + _VERDICT_CONTRACT_SCORED
     )
-    return _parse_verdict_scored(_judge(prompt))
+    # 4096, not 512: the configured judge is thinking-capable and enumerates
+    # every passage inside <thought> on long contexts. Probed live: 2048 still
+    # ends finish_reason="length" with no verdict emitted; 4096 returns stop
+    # with a parseable verdict.
+    return _parse_verdict_scored(_judge(prompt, max_tokens=4096))
 
 
 def answer_correctness_scored(
@@ -387,7 +410,11 @@ def answer_correctness_scored(
         f"System answer: {answer}\n\n"
         + _VERDICT_CONTRACT_SCORED
     )
-    return _parse_verdict_scored(_judge(prompt))
+    # 4096, not 512: the configured judge is thinking-capable and enumerates
+    # every passage inside <thought> on long contexts. Probed live: 2048 still
+    # ends finish_reason="length" with no verdict emitted; 4096 returns stop
+    # with a parseable verdict.
+    return _parse_verdict_scored(_judge(prompt, max_tokens=4096))
 
 
 def synthesize_expected(question: str, context: str) -> tuple[str, str]:
@@ -420,8 +447,10 @@ def synthesize_expected(question: str, context: str) -> tuple[str, str]:
         "Reference answer:"
     )
     # Reuses the same client/model as every other judge; raw text here rather
-    # than a verdict, so _judge + strip directly.
-    out = _judge(prompt)
+    # than a verdict, so _judge + strip directly. 4096 for the same
+    # thinking-budget reason as the scored judges: a draft cut off mid-thought
+    # raises "empty content" and reads as an outage.
+    out = _judge(prompt, max_tokens=4096)
     text = _THINK_BLOCK.sub("", out or "")
     text = _UNCLOSED_THINK_BLOCK.sub("", text).strip()
     if not text:

@@ -371,13 +371,13 @@ def test_refusal_token_quoted_in_a_trace_is_not_a_refusal(monkeypatch):
     from eval import judges
 
     raw = "<thought>Do NOT reply NO_ANSWER_DERIVABLE here.</thought>\nThe fridge must read 1-4C."
-    monkeypatch.setattr(judges, "_judge", lambda prompt: raw)
+    monkeypatch.setattr(judges, "_judge", lambda prompt, max_tokens=512: raw)
     text, reason = judges.synthesize_expected("how cold?", "[1] The fridge must read 1-4C.")
     assert text == "The fridge must read 1-4C."
     assert reason == ""
 
     # And the genuine all-integer-refusal case still parses.
-    monkeypatch.setattr(judges, "_judge", lambda prompt: f" {judges.NO_ANSWER_DERIVABLE_SENTINEL.upper()} ")
+    monkeypatch.setattr(judges, "_judge", lambda prompt, max_tokens=512: f" {judges.NO_ANSWER_DERIVABLE_SENTINEL.upper()} ")
     text2, reason2 = judges.synthesize_expected("how cold?", "[1] nothing relevant")
     assert text2 == ""
     assert reason2 == judges.NO_ANSWER_DERIVABLE_SENTINEL
