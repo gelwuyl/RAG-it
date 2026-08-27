@@ -104,7 +104,32 @@ def test_reason_is_truncated_to_first_sentence():
 # ---------- judge model resolution ----------
 
 def test_judge_model_follows_live_config(monkeypatch):
-    """The judge must use the model the app actually generates with."""
+    """A dedicated judge_model config field wins; it is not the answerer's job."""
+
+    class _Cfg:
+        llm_model = "models/gemma-4-26b-a4b-it"
+        judge_model = "models/gemini-3.5-flash-lite"
+
+    monkeypatch.setattr(judges, "load_config", lambda: _Cfg())
+    assert judges.judge_model() == "models/gemini-3.5-flash-lite"
+
+
+def test_empty_judge_model_grades_with_the_answerer(monkeypatch):
+    """"Empty means the answerer grades" — the historical behaviour, kept as the
+    explicit fallback choice in Settings."""
+
+    class _Cfg:
+        llm_model = "models/gemma-4-26b-a4b-it"
+        judge_model = ""
+
+    monkeypatch.setattr(judges, "load_config", lambda: _Cfg())
+    assert judges.judge_model() == "models/gemma-4-26b-a4b-it"
+
+
+def test_judge_field_tolerates_an_older_config_object(monkeypatch):
+    """Configs built before the field existed (stale callers, test doubles) must
+    not break judge resolution — getattr, not attribute access."""
+
     class _Cfg:
         llm_model = "models/gemma-4-26b-a4b-it"
 

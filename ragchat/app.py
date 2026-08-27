@@ -1701,6 +1701,7 @@ def eval_config():
         "reranker": cfg.reranker,
         "query_rewrite": cfg.query_rewrite,
         "llm_model": cfg.llm_model,
+        "judge_model": cfg.judge_model,
         "temperature": cfg.temperature,
         "embedding_model": cfg.embedding_model,
         "embedding_provider": cfg.embedding_provider,
@@ -1749,6 +1750,11 @@ class ConfigUpdateIn(BaseModel):
     reranker: bool | None = None
     query_rewrite: bool | None = None
     llm_model: str | None = None
+    # Which model grades answers. Empty string means "grade with the answerer" —
+    # distinct from None, which Pydantic drops (exclude_none) and would leave
+    # the field unwritable once set. Served from the same chat catalog as the
+    # answerer: any model that can read a prompt can grade one.
+    judge_model: str | None = None
     temperature: float | None = Field(default=None, ge=0.0, le=1.0)
     embedding_model: str | None = None
     embedding_provider: str | None = None
@@ -1799,6 +1805,13 @@ def update_config(body: ConfigUpdateIn, _: User = Depends(require_account)):
     # deployment default (so a discovery miss can't lock you out).
     if "llm_model" in updates and not is_known_model(updates["llm_model"], "chat"):
         raise HTTPException(status_code=422, detail=f"Unknown LLM model: {updates['llm_model']}")
+    # Empty string is the explicit "grade with the answerer" choice — allowed
+    # without a catalog check. A non-empty judge must be a real served model,
+    # or every grade request would 404 its way to "not graded".
+    if "judge_model" in updates and updates["judge_model"].strip() and not is_known_model(
+        updates["judge_model"], "chat"
+    ):
+        raise HTTPException(status_code=422, detail=f"Unknown judge model: {updates['judge_model']}")
     if "embedding_model" in updates:
         # Validate against the provider being saved (which may differ from the
         # currently-booted one), so a model valid for OpenRouter isn't rejected
@@ -1855,6 +1868,7 @@ def update_config(body: ConfigUpdateIn, _: User = Depends(require_account)):
             "reranker": cfg.reranker,
             "query_rewrite": cfg.query_rewrite,
             "llm_model": cfg.llm_model,
+            "judge_model": cfg.judge_model,
             "temperature": cfg.temperature,
             "embedding_model": cfg.embedding_model,
             "embedding_provider": cfg.embedding_provider,

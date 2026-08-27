@@ -51,11 +51,24 @@ def judge_model() -> str:
     override written by the Settings UI) can name a different model. On this
     deployment the env default was the bare ``gemma-4-26b-it`` while the served
     id is ``models/gemma-4-26b-a4b-it``, so every judge call 404'd and both
-    metrics rendered as FAIL. Reading the live config keeps the judge on the
-    same model that just answered the question.
+    metrics rendered as FAIL. Reading the live config keeps the judge on whatever
+    config actually says.
+
+    Since the dedicated ``judge_model`` config field exists: when it names a
+    model, that model grades — grading wants terse consistency and speed, and a
+    non-thinking judge cannot burn its token budget reasoning inside <thought>
+    (measured: scored readings timed out 5/5 under a thinking judge on full
+    documents). When the field is EMPTY, the answerer grades — the historical
+    behaviour, and the safe fallback if the configured judge ever 404s is a
+    JudgeError (fail-open to "not graded"), never a wrong verdict.
     """
     try:
-        model = (load_config().llm_model or "").strip()
+        live = load_config()
+        own = (getattr(live, "judge_model", "") or "").strip()
+        if own:
+            return own
+        # No dedicated judge configured: the answerer grades.
+        model = (live.llm_model or "").strip()
         if model:
             return model
     except Exception:

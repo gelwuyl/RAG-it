@@ -1468,6 +1468,27 @@ function fillModelSelect(id, models, current) {
   if (current) sel.value = current;
 }
 
+// The judge dropdown gets ONE extra entry no other select has: the explicit
+// "same as answerer" choice, stored as "" and resolved server-side. A missing
+// option would make an empty judge_model render as whichever catalog entry
+// sorts first — silently re-pointing grading at a model nobody chose.
+const JUDGE_SAME_AS_ANSWERER = { value: "", label: "Same as answerer" };
+
+function fillJudgeModelSelect(models, current) {
+  const sel = $("set-judge-model");
+  if (!sel) return;
+  const list = Array.isArray(models) ? models.filter(Boolean) : [];
+  const entries = [JUDGE_SAME_AS_ANSWERER,
+    ...list.map((m) => ({ value: m, label: modelLabel(m) }))];
+  if (current && !entries.some((e) => e.value === current)) {
+    entries.push({ value: current, label: modelLabel(current) });
+  }
+  sel.innerHTML = entries
+    .map((e) => `<option value="${escapeHtml(e.value)}">${escapeHtml(e.label)}</option>`)
+    .join("");
+  sel.value = current ?? "";
+}
+
 // Replace the embedding-model dropdown with exactly the models the given
 // provider serves. Called on open AND on every provider change, so the list is
 // always scoped to one provider (Gemini has a single embedder; the rest are
@@ -1519,6 +1540,7 @@ async function loadSettingsIntoForm() {
     $("set-reranker").value = String(cfg.reranker);
     $("set-query-rewrite").value = String(cfg.query_rewrite);
     fillModelSelect("set-llm-model", models.chat, cfg.llm_model);
+    fillJudgeModelSelect(models.chat, cfg.judge_model);
     $("set-temperature").value = cfg.temperature;
     const savedProvider = (cfg.embedding_provider || "gemini").toLowerCase();
     $("set-embedding-provider").value = savedProvider;
@@ -1635,6 +1657,7 @@ $("settings-save").onclick = async () => {
       reranker: $("set-reranker").value === "true",
         query_rewrite: $("set-query-rewrite").value === "true",
       llm_model: $("set-llm-model").value,
+      judge_model: $("set-judge-model")?.value ?? "",
       temperature: parseFloat($("set-temperature").value),
       embedding_model: $("set-embedding-model").value,
       embedding_provider: $("set-embedding-provider").value,
