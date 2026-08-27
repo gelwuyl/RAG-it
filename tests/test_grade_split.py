@@ -17,6 +17,7 @@ and persistence contract, not the models.
 """
 from __future__ import annotations
 
+import json
 import os
 import sys
 import tempfile
@@ -67,6 +68,8 @@ def answered(client, monkeypatch):
             "citations": [],
             "eval_line": "top sim 0.38 - 8255 ms",
             "eval": {"pending": True, "faithful": None, "relevant": None,
+                     "context_relevance": None, "context_sufficiency": None,
+                     "correct": None,
                      "top_sim": 0.38, "deep_n": 0, "latency_ms": 8255},
             "context": CONTEXT,
             "effective_query": "milk fridge temperature",
@@ -85,11 +88,16 @@ def _stub_judges(monkeypatch, verdict=(True, True)):
 
     calls = {"n": 0}
 
-    def _fake(question, answer, context_text, cfg):
+    def _fake(question, answer, context_text, cfg, previous=None):
         calls["n"] += 1
-        _fake.seen = {"q": question, "answer": answer, "context": context_text}
+        _fake.seen = {"q": question, "answer": answer, "context": context_text,
+                      "previous": previous}
         return {"faithful": verdict[0], "faithful_reason": "r",
-                "relevant": verdict[1], "relevant_reason": "r"}
+                "relevant": verdict[1], "relevant_reason": "r",
+                "context_relevance": verdict[0], "context_relevance_reason": "r",
+                "context_sufficiency": verdict[1], "context_sufficiency_reason": "r",
+                "correct": verdict[0], "correct_reason": "r",
+                "expected_answer": "the fridge must read 1-4C"}
 
     monkeypatch.setattr(pipeline, "_eval_answer", _fake)
     return calls, _fake
@@ -123,6 +131,273 @@ def test_grading_fills_the_verdicts_in(answered, monkeypatch):
     assert ev["faithful"] is True and ev["relevant"] is True
     assert ev["pending"] is False
     assert "grade_ms" in ev
+
+
+def test_partial_grade_stays_pending_until_the_missing_judge_recovers(answered, monkeypatch):
+    """A completed result survives while only the missing judge is retried."""
+    from ragchat import pipeline
+
+    client, cid, body = answered
+    calls = []
+
+    def _partial_then_complete(question, answer, context_text, cfg, previous=None):
+        calls.append(previous or {})
+        if len(calls) == 1:
+            return {
+                "faithful": True,
+                "faithful_reason": "supported",
+                "relevant": None,
+                "relevant_reason": "429 rate limited",
+                "context_relevance": True,
+                "context_relevance_reason": "on point",
+                "context_sufficiency": None,
+                "context_sufficiency_reason": "judge timeout",
+                "correct": None,
+                "correct_reason": "",
+                "expected_answer": "the fridge must read 1-4C",
+                "judge_error": "Answer relevancy unavailable: 429 rate limited"
+                " · Context sufficiency unavailable: judge timeout",
+            }
+        assert previous["faithful"] is True
+        assert previous["context_relevance"] is True
+        assert previous["expected_answer"] == "the fridge must read 1-4C", \
+            "the drafted reference must survive into the retry"
+        return {
+            "faithful": previous["faithful"],
+            "faithful_reason": previous["faithful_reason"],
+            "relevant": True,
+            "relevant_reason": "on-topic",
+            "context_relevance": previous["context_relevance"],
+            "context_relevance_reason": previous["context_relevance_reason"],
+            "context_sufficiency": True,
+            "context_sufficiency_reason": "enough",
+            "correct": True,
+            "correct_reason": "matches the drafted reference",
+            "expected_answer": previous["expected_answer"],
+        }
+
+    monkeypatch.setattr(pipeline, "_eval_answer", _partial_then_complete)
+    url = f"/api/chats/{cid}/messages/{body['message_id']}/grade"
+    first = client.post(url).json()["eval"]
+    assert first["faithful"] is True and first["relevant"] is None
+    assert first["context_relevance"] is True and first["context_sufficiency"] is None
+    assert first["correct"] is None
+    assert first["pending"] is True
+    assert first["grade_attempts"] == 1
+
+    second = client.post(url).json()["eval"]
+    assert len(calls) == 2
+    assert second["faithful"] is True and second["relevant"] is True
+    assert second["context_sufficiency"] is True
+    assert second["correct"] is True
+    assert second["pending"] is False
+    assert second["grade_attempts"] == 2
+    assert "judge_error" not in second
+
+
+def test_legacy_partial_result_is_eligible_for_the_new_retry(answered, monkeypatch):
+    """Pre-fix messages said pending=false despite a missing verdict."""
+    from ragchat.db import Message, SessionLocal
+
+    client, cid, body = answered
+    session = SessionLocal()
+    msg = session.get(Message, body["message_id"])
+    msg.eval_data = json.dumps({
+        "pending": False,
+        "faithful": True,
+        "faithful_reason": "supported",
+        "relevant": None,
+        "relevant_reason": "judge timeout",
+        "context_relevance": None,
+        "context_sufficiency": None,
+        "correct": None,
+    })
+    session.commit()
+    session.close()
+
+    calls, fake = _stub_judges(monkeypatch)
+    ev = client.post(f"/api/chats/{cid}/messages/{body['message_id']}/grade").json()["eval"]
+
+    assert calls["n"] == 1
+    assert fake.seen["previous"]["faithful"] is True
+    assert ev["faithful"] is True and ev["relevant"] is True
+    assert ev["pending"] is False
+
+
+def test_partial_grade_exhaustion_stops_after_the_bounded_budget(answered, monkeypatch):
+    from ragchat import app as rapp
+    from ragchat import pipeline
+
+    client, cid, body = answered
+    calls = {"n": 0}
+
+    def _always_missing(question, answer, context_text, cfg, previous=None):
+        calls["n"] += 1
+        return {
+            "faithful": True,
+            "faithful_reason": "supported",
+            "relevant": None,
+            "relevant_reason": "judge timeout",
+            "context_relevance": True,
+            "context_relevance_reason": "on point",
+            "context_sufficiency": None,
+            "context_sufficiency_reason": "judge timeout",
+            "correct": None,
+            "correct_reason": "",
+            "judge_error": "Answer relevancy unavailable: judge timeout"
+            " · Context sufficiency unavailable: judge timeout",
+        }
+
+    monkeypatch.setattr(pipeline, "_eval_answer", _always_missing)
+    url = f"/api/chats/{cid}/messages/{body['message_id']}/grade"
+    results = [client.post(url).json()["eval"] for _ in range(rapp.GRADE_MAX_ATTEMPTS)]
+    assert [ev["pending"] for ev in results] == [True] * (rapp.GRADE_MAX_ATTEMPTS - 1) + [False]
+    exhausted = results[-1]
+    assert exhausted["grade_exhausted"] is True
+    assert "unavailable after 4 attempts" in exhausted["judge_error"]
+    # The recovered check is named too — a partial outage does not hide behind
+    # the one judge that stayed down.
+    assert "Answer relevancy unavailable: judge timeout" in exhausted["judge_error"]
+    assert "Context sufficiency unavailable: judge timeout" in exhausted["judge_error"]
+
+    client.post(url)
+    assert calls["n"] == rapp.GRADE_MAX_ATTEMPTS
+
+
+def test_a_paused_pass_neither_spends_a_retry_nor_reports_an_outage(answered, monkeypatch):
+    """Found on the deployment: six judge calls at an honest token budget no
+    longer fit one 60s serverless request. The grader honours a wall-clock
+    deadline and returns early — which is a PAUSE, not a failure: no retry
+    budget is spent (pauses are not attempts) and no 'unavailable' error is
+    rendered for work the next request will simply finish."""
+    from ragchat import pipeline
+
+    client, cid, body = answered
+    calls, _ = _stub_judges(monkeypatch)
+
+    def _time_starved(question, answer, context_text, cfg, previous=None):
+        return {
+            "faithful": True, "faithful_reason": "r",
+            "relevant": True, "relevant_reason": "r",
+            "context_relevance": None,
+            "context_relevance_reason": (
+                "paused at this request's time limit; grading continues next try"),
+            "context_sufficiency": None,
+            "context_sufficiency_reason": (
+                "paused at this request's time limit; grading continues next try"),
+            "correct": None, "correct_reason": "",
+            "paused": True,
+        }
+
+    monkeypatch.setattr(pipeline, "_eval_answer", _time_starved)
+    url = f"/api/chats/{cid}/messages/{body['message_id']}/grade"
+
+    ev = client.post(url).json()["eval"]
+    assert ev["pending"] is True, "a pause must reschedule"
+    assert ev["paused"] is True
+    assert "judge_error" not in ev, "a pause is not an outage"
+    # Pauses never advance the attempt counter...
+    assert ev["grade_attempts"] == 0
+    # ...so they cannot exhaust it either.
+    ev2 = client.post(url).json()["eval"]
+    assert ev2["grade_attempts"] == 0
+    assert "grade_exhausted" not in ev2
+    assert ev2["retry_after_ms"]
+
+
+def test_a_pause_is_not_confused_with_a_judge_failure(answered, monkeypatch):
+    """A paused pass that then runs to completion must leave no stale pause
+    marker and no attempt-count inflation from the paused requests."""
+    from ragchat import pipeline
+
+    client, cid, body = answered
+    calls, _ = _stub_judges(monkeypatch)
+    url = f"/api/chats/{cid}/messages/{body['message_id']}/grade"
+
+    ev = client.post(url).json()["eval"]
+    assert ev["faithful"] is True
+    assert "paused" not in ev
+    assert ev["pending"] is False
+    assert calls["n"] == 1
+
+
+def test_grading_disabled_midflight_does_not_spend_a_retry(answered, monkeypatch):
+    from ragchat import app as rapp
+
+    class _Cfg:
+        eval_show = False
+
+    client, cid, body = answered
+    calls, _ = _stub_judges(monkeypatch)
+    monkeypatch.setattr(rapp, "load_config", lambda: _Cfg())
+    url = f"/api/chats/{cid}/messages/{body['message_id']}/grade"
+
+    first = client.post(url).json()["eval"]
+    second = client.post(url).json()["eval"]
+
+    assert calls["n"] == 0
+    assert first["pending"] is False
+    assert first["grade_unavailable"] == "Live grading is disabled in Settings."
+    assert "grade_attempts" not in first
+    assert "grade_exhausted" not in first
+    assert second == first
+
+
+def test_disabled_grading_preserves_an_answer_timing_line(answered, monkeypatch):
+    """A stray grade call must not erase facts recorded while grading was off."""
+    from ragchat import app as rapp
+    from ragchat.db import Message, SessionLocal
+
+    class _Cfg:
+        eval_show = False
+
+    client, cid, body = answered
+    original_line = "top sim 0.38 - 8255 ms"
+    session = SessionLocal()
+    msg = session.get(Message, body["message_id"])
+    msg.eval_data = None
+    msg.eval_line = original_line
+    session.commit()
+    session.close()
+
+    calls, _ = _stub_judges(monkeypatch)
+    monkeypatch.setattr(rapp, "load_config", lambda: _Cfg())
+    url = f"/api/chats/{cid}/messages/{body['message_id']}/grade"
+    response = client.post(url)
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {"eval": None, "eval_line": original_line}
+    assert calls["n"] == 0
+
+    session = SessionLocal()
+    stored = session.get(Message, body["message_id"])
+    assert stored.eval_data is None
+    assert stored.eval_line == original_line
+    session.close()
+
+
+def test_grade_request_locks_its_message_before_judging(answered, monkeypatch):
+    """The production row lock serializes attempts across browser tabs."""
+    from sqlalchemy.dialects import postgresql
+    from sqlalchemy.orm import Session
+
+    client, cid, body = answered
+    calls, _ = _stub_judges(monkeypatch)
+    locked = []
+    execute = Session.execute
+
+    def _track_lock(self, statement, *args, **kwargs):
+        if getattr(statement, "_for_update_arg", None) is not None:
+            locked.append(statement)
+        return execute(self, statement, *args, **kwargs)
+
+    monkeypatch.setattr(Session, "execute", _track_lock)
+    r = client.post(f"/api/chats/{cid}/messages/{body['message_id']}/grade")
+
+    assert r.status_code == 200, r.text
+    assert calls["n"] == 1
+    assert len(locked) == 1
+    assert "FOR UPDATE" in str(locked[0].compile(dialect=postgresql.dialect()))
 
 
 def test_the_judge_sees_what_the_answer_was_built_from(answered, monkeypatch):
@@ -228,6 +503,7 @@ def test_an_answer_with_no_context_stops_pending_instead_of_hanging(client, monk
     ev = client.post(f"/api/chats/{cid}/messages/{body['message_id']}/grade").json()["eval"]
     assert calls["n"] == 0
     assert ev.get("pending") is False
+    assert ev["grade_unavailable"] == "No source passages were stored for this answer."
 
 
 def test_the_thread_carries_message_ids(answered):

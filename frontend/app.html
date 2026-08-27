@@ -47,7 +47,7 @@
         }
       })();
     </script>
-    <link rel="stylesheet" href="/styles.css?v=56" />
+    <link rel="stylesheet" href="/styles.css?v=57" />
     <script>
       // Boot diagnostics: collect load/runtime errors so a broken app.js
       // shows a visible message instead of a silently dead UI.
@@ -592,8 +592,14 @@
             <div class="field">
               <label for="set-llm-model">LLM model</label>
               <select id="set-llm-model"></select>
-              <span class="field-hint">Writes the answer from the retrieved chunks —
-                and grades it afterwards.</span>
+              <span class="field-hint">Writes the answer from the retrieved chunks.</span>
+            </div>
+            <div class="field">
+              <label for="set-judge-model">Judge model</label>
+              <select id="set-judge-model"></select>
+              <span class="field-hint">Grades every answer on the live scorecard. A fast
+                non-thinking model grades in seconds; “same as answerer” hands the job
+                back to the LLM above.</span>
             </div>
             <div class="field">
               <label for="set-temperature">Temperature</label>
@@ -660,6 +666,6 @@
       </div>
     </div>
 
-    <script type="module" src="/app.js?v=65"></script>
+    <script type="module" src="/app.js?v=70"></script>
   </body>
 </html>

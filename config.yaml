@@ -81,6 +81,17 @@ generation:
   # reports the EFFECTIVE model rather than this file's opinion of it, and
   # Settings -> Reset to shipped defaults to clear one.
   llm_model: models/gemma-4-26b-a4b-it
+  # The model that GRADES (live scorecard + benchmark judge). Deliberately NOT
+  # the answerer: gemma is thinking-capable, bills its <thought> trace against
+  # max_tokens, and on full-document contexts truncated before any verdict —
+  # scored readings graded 0/5 before the dedicated budget fix. Flash-lite
+  # answers nothing a reader sees; it only emits VERDICT/SCORE/REASON lines.
+  # Empty string means "grade with the answerer".
+  #
+  # Caveat: judge scores are calibrated per judge model. A 65 from flash-lite
+  # and a 65 from gemma are not guaranteed to mean the same thing; switching
+  # judges mid-conversation adds a little noise to the bars.
+  judge_model: models/gemini-3.5-flash-lite
   temperature: 0.0
   # NOTE: there is no `web_augmentation` key here any more, and nothing reads
   # one. Web fallback is gone; deep search replaced it (ragchat/deepsearch.py).

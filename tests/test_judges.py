@@ -104,7 +104,32 @@ def test_reason_is_truncated_to_first_sentence():
 # ---------- judge model resolution ----------
 
 def test_judge_model_follows_live_config(monkeypatch):
-    """The judge must use the model the app actually generates with."""
+    """A dedicated judge_model config field wins; it is not the answerer's job."""
+
+    class _Cfg:
+        llm_model = "models/gemma-4-26b-a4b-it"
+        judge_model = "models/gemini-3.5-flash-lite"
+
+    monkeypatch.setattr(judges, "load_config", lambda: _Cfg())
+    assert judges.judge_model() == "models/gemini-3.5-flash-lite"
+
+
+def test_empty_judge_model_grades_with_the_answerer(monkeypatch):
+    """"Empty means the answerer grades" — the historical behaviour, kept as the
+    explicit fallback choice in Settings."""
+
+    class _Cfg:
+        llm_model = "models/gemma-4-26b-a4b-it"
+        judge_model = ""
+
+    monkeypatch.setattr(judges, "load_config", lambda: _Cfg())
+    assert judges.judge_model() == "models/gemma-4-26b-a4b-it"
+
+
+def test_judge_field_tolerates_an_older_config_object(monkeypatch):
+    """Configs built before the field existed (stale callers, test doubles) must
+    not break judge resolution — getattr, not attribute access."""
+
     class _Cfg:
         llm_model = "models/gemma-4-26b-a4b-it"
 
@@ -166,3 +191,267 @@ def test_empty_answer_is_a_real_fail_not_an_error():
     """Grading an empty answer is still a legitimate FAIL, not a judge outage."""
     assert judges.faithfulness("q", "ctx", "   ") == (False, "empty answer")
     assert judges.answer_relevancy("q", "  ") == (False, "empty answer")
+
+
+# ---------- live-grade retries ----------
+
+
+def test_live_retry_only_calls_the_judge_without_a_verdict(monkeypatch):
+    from ragchat import pipeline
+
+    calls = {"faithful": 0, "relevant": 0}
+
+    def _faithful(*args):
+        calls["faithful"] += 1
+        return False, 0.0, "unsupported figure"
+
+    def _relevant(*args):
+        calls["relevant"] += 1
+        return True, 1.0, "on-topic"
+
+    class _Cfg:
+        eval_show = True
+
+    monkeypatch.setattr(judges, "faithfulness_scored", _faithful)
+    monkeypatch.setattr(judges, "answer_relevancy_scored", _relevant)
+    monkeypatch.setattr(judges, "context_relevance_scored", lambda *a: (True, 1.0, "on point"))
+    monkeypatch.setattr(judges, "context_sufficiency_scored", lambda *a: (True, 1.0, "enough"))
+    monkeypatch.setattr(
+        judges, "synthesize_expected", lambda *a: ("the expected answer.", "")
+    )
+    monkeypatch.setattr(judges, "answer_correctness_scored", lambda *a: (True, 1.0, "matches"))
+    out = pipeline.grade_answer(
+        "q",
+        "a",
+        "ctx",
+        _Cfg(),
+        {"faithful": False, "faithful_reason": "unsupported figure", "relevant": None},
+    )
+
+    assert calls == {"faithful": 0, "relevant": 1}
+    assert out["faithful"] is False
+    assert out["relevant"] is True
+    # The two context checks grade the SAME stored context, so a completed
+    # verdict is preserved exactly like the answer judges' is.
+    assert out["context_relevance"] is True
+    assert out["context_sufficiency"] is True
+
+
+def test_live_judge_error_identifies_the_missing_metric(monkeypatch):
+    from ragchat import pipeline
+
+    class _Cfg:
+        eval_show = True
+
+    monkeypatch.setattr(judges, "faithfulness_scored", lambda *args: (True, 1.0, "supported"))
+    monkeypatch.setattr(judges, "context_relevance_scored", lambda *a: (True, 1.0, "on point"))
+    monkeypatch.setattr(judges, "context_sufficiency_scored", lambda *a: (True, 1.0, "enough"))
+    monkeypatch.setattr(
+        judges, "synthesize_expected", lambda *a: ("the expected answer.", "")
+    )
+    monkeypatch.setattr(judges, "answer_correctness_scored", lambda *a: (True, 1.0, "matches"))
+
+    def _broken_relevancy(*args):
+        raise RuntimeError("429 rate limited")
+
+    monkeypatch.setattr(judges, "answer_relevancy_scored", _broken_relevancy)
+    out = pipeline.grade_answer("q", "a", "ctx", _Cfg())
+
+    assert out["faithful"] is True and out["relevant"] is None
+    assert "Answer relevancy unavailable: 429 rate limited" in out["judge_error"]
+    assert "Faithfulness unavailable" not in out["judge_error"]
+
+
+def test_context_checks_are_reported_when_they_fail(monkeypatch):
+    """A FAIL from a reference-free proxy is a real verdict, not an outage."""
+    from ragchat import pipeline
+
+    class _Cfg:
+        eval_show = True
+
+    monkeypatch.setattr(judges, "faithfulness_scored", lambda *a: (True, 1.0, "supported"))
+    monkeypatch.setattr(judges, "answer_relevancy_scored", lambda *a: (True, 1.0, "on-topic"))
+    monkeypatch.setattr(judges, "context_relevance_scored", lambda *a: (False, 0.0, "mostly unrelated"))
+    monkeypatch.setattr(judges, "context_sufficiency_scored", lambda *a: (True, 1.0, "enough"))
+    monkeypatch.setattr(
+        judges, "synthesize_expected", lambda *a: ("the expected answer.", "")
+    )
+    monkeypatch.setattr(judges, "answer_correctness_scored", lambda *a: (True, 1.0, "matches"))
+    out = pipeline.grade_answer("q", "a", "ctx", _Cfg())
+
+    assert out["context_relevance"] is False
+    assert out["context_relevance_reason"] == "mostly unrelated"
+    assert out["context_sufficiency"] is True
+    assert "judge_error" not in out
+
+
+def test_scored_judges_store_their_reading_for_the_bar(monkeypatch):
+    """The scorecard draws bars from the 0-1 reading (65% fills to 65 against
+    the benchmark tick); a binary pass rendering as 100% was indistinguishable
+    from a measurement. The score rides next to each verdict in eval_data."""
+    from ragchat import pipeline
+
+    class _Cfg:
+        eval_show = True
+
+    monkeypatch.setattr(judges, "faithfulness_scored", lambda *a: (True, 0.75, "3 of 4 claims"))
+    monkeypatch.setattr(judges, "answer_relevancy_scored", lambda *a: (True, 0.9, "direct"))
+    monkeypatch.setattr(judges, "context_relevance_scored", lambda *a: (True, 0.65, "mixed"))
+    monkeypatch.setattr(judges, "context_sufficiency_scored", lambda *a: (True, 0.8, "enough"))
+    monkeypatch.setattr(judges, "synthesize_expected", lambda *a: ("expected.", ""))
+    monkeypatch.setattr(judges, "answer_correctness_scored", lambda *a: (False, 0.4, "partial"))
+    out = pipeline.grade_answer("q", "a", "ctx", _Cfg())
+
+    assert out["faithful_score"] == 0.75
+    assert out["relevant_score"] == 0.9
+    assert out["context_relevance_score"] == 0.65
+    assert out["context_sufficiency_score"] == 0.8
+    assert out["correct_score"] == 0.4 and out["correct"] is False
+    # A judge that omits its SCORE line degrades to the verdict, not an error.
+    monkeypatch.setattr(judges, "faithfulness_scored", lambda *a: (True, 1.0, "no line"))
+    out2 = pipeline.grade_answer("q", "a", "ctx", _Cfg())
+    assert out2["faithful_score"] == 1.0
+    assert "judge_error" not in out2
+
+
+# ---------- estimated correctness (option 3) ----------
+
+
+def test_correctness_scores_against_a_drafted_reference(monkeypatch):
+    """No gold answer exists for an arbitrary chat; the judge drafts one from
+    the passages and scores against it. The draft is persisted so a retry does
+    not re-purchase it."""
+    from ragchat import pipeline
+
+    class _Cfg:
+        eval_show = True
+
+    seen = {}
+
+    def _synth(question, context):
+        seen["synth_ctx"] = context
+        return "The fridge must read 1-4C.", ""
+
+    def _correct(question, expected, answer):
+        seen["expected_used"] = expected
+        return False, 0.4, "range mismatch"
+
+    monkeypatch.setattr(judges, "faithfulness_scored", lambda *a: (True, 1.0, "supported"))
+    monkeypatch.setattr(judges, "answer_relevancy_scored", lambda *a: (True, 1.0, "on-topic"))
+    monkeypatch.setattr(judges, "context_relevance_scored", lambda *a: (True, 1.0, "on point"))
+    monkeypatch.setattr(judges, "context_sufficiency_scored", lambda *a: (True, 1.0, "enough"))
+    monkeypatch.setattr(judges, "synthesize_expected", _synth)
+    monkeypatch.setattr(judges, "answer_correctness_scored", _correct)
+    out = pipeline.grade_answer("q", "a", "the passages", _Cfg())
+
+    assert out["correct"] is False
+    assert seen["expected_used"] == "The fridge must read 1-4C."
+    # The drafter never sees the system's answer — it reads the passages.
+    assert "the passages" in seen["synth_ctx"]
+    assert out["expected_answer"] == "The fridge must read 1-4C."
+    assert "judge_error" not in out
+
+
+def test_no_derivable_reference_is_a_graded_not_an_outage(monkeypatch):
+    """When the passages cannot answer the question at all, the synthesized
+    'no answer' ruling is a completed FAIL verdict for correctness — the retry
+    must not re-run synthesis or report a judge_error."""
+    from ragchat import pipeline
+
+    class _Cfg:
+        eval_show = True
+
+    calls = {"n": 0}
+
+    def _no_answer(*a):
+        calls["n"] += 1
+        return "", pipeline.NO_ANSWER_DERIVABLE
+
+    monkeypatch.setattr(judges, "faithfulness_scored", lambda *a: (True, 1.0, "supported"))
+    monkeypatch.setattr(judges, "answer_relevancy_scored", lambda *a: (True, 1.0, "on-topic"))
+    monkeypatch.setattr(judges, "context_relevance_scored", lambda *a: (False, 0.0, "unrelated"))
+    monkeypatch.setattr(judges, "context_sufficiency_scored", lambda *a: (False, 0.0, "not enough"))
+    monkeypatch.setattr(judges, "synthesize_expected", _no_answer)
+
+    fresh = pipeline.grade_answer("q", "a", "empty-ish context", _Cfg())
+    assert fresh["correct"] is False
+    assert fresh["expected_reason"] == pipeline.NO_ANSWER_DERIVABLE
+    assert "judge_error" not in fresh
+    assert calls["n"] == 1
+
+    # A retry resumes the stored verdict without spending another call.
+    resumed = pipeline.grade_answer("q", "a", "empty-ish context", _Cfg(), previous={
+        "expected_answer": "", "expected_reason": pipeline.NO_ANSWER_DERIVABLE})
+    assert resumed["correct"] is False
+    assert calls["n"] == 1
+    assert "judge_error" not in resumed
+
+
+def test_refusal_token_quoted_in_a_trace_is_not_a_refusal(monkeypatch):
+    """Found on the preview deployment: the drafter reasoned 'maybe reply
+    NO_ANSWER_DERIVABLE?' inside a thinking trace and still drafted a real
+    reference, but a substring match read the quoted token as a refusal — so an
+    answerable question got `correct: None` with 'context does not contain an
+    answer'. The refusal must be the WHOLE reply to count."""
+    from eval import judges
+
+    raw = "<thought>Do NOT reply NO_ANSWER_DERIVABLE here.</thought>\nThe fridge must read 1-4C."
+    monkeypatch.setattr(judges, "_judge", lambda prompt, max_tokens=512: raw)
+    text, reason = judges.synthesize_expected("how cold?", "[1] The fridge must read 1-4C.")
+    assert text == "The fridge must read 1-4C."
+    assert reason == ""
+
+    # And the genuine all-integer-refusal case still parses.
+    monkeypatch.setattr(judges, "_judge", lambda prompt, max_tokens=512: f" {judges.NO_ANSWER_DERIVABLE_SENTINEL.upper()} ")
+    text2, reason2 = judges.synthesize_expected("how cold?", "[1] nothing relevant")
+    assert text2 == ""
+    assert reason2 == judges.NO_ANSWER_DERIVABLE_SENTINEL
+
+
+def test_synthesis_outage_is_named_and_retry_heals(monkeypatch):
+    """A failed DRAFT is an outage, not a verdict: it names the cause, stays
+    None, and a healed retry finishes correctness without re-running the
+    already-finished judges."""
+    from ragchat import pipeline
+
+    class _Cfg:
+        eval_show = True
+
+    judges.faithfulness  # keep the import referenced even if stubs change
+    monkeypatch.setattr(judges, "faithfulness_scored", lambda *a: (True, 1.0, "supported"))
+    monkeypatch.setattr(judges, "answer_relevancy_scored", lambda *a: (True, 1.0, "on-topic"))
+    monkeypatch.setattr(judges, "context_relevance_scored", lambda *a: (True, 1.0, "on point"))
+    monkeypatch.setattr(judges, "context_sufficiency_scored", lambda *a: (True, 1.0, "enough"))
+
+    def _boom(*a):
+        raise RuntimeError("draft call 504")
+
+    monkeypatch.setattr(judges, "synthesize_expected", _boom)
+    out = pipeline.grade_answer("q", "a", "ctx", _Cfg())
+
+    assert out["correct"] is None
+    assert out["expected_reason"] == "draft call 504"
+    assert "Answer correctness unavailable: draft call 504" in out["judge_error"]
+
+    finished_judge_calls = {"n": 0}
+
+    def _counting_faithful(*a):
+        finished_judge_calls["n"] += 1
+        return True, 1.0, "supported"
+
+    monkeypatch.setattr(judges, "faithfulness_scored", _counting_faithful)
+    monkeypatch.setattr(
+        judges, "synthesize_expected", lambda *a: ("drafted text.", "")
+    )
+    monkeypatch.setattr(judges, "answer_correctness_scored", lambda *a: (True, 1.0, "matches"))
+
+    healed = pipeline.grade_answer("q", "a", "ctx", _Cfg(), previous={
+        "faithful": True, "faithful_reason": "supported",
+        "relevant": True, "relevant_reason": "on-topic",
+        "context_relevance": True, "context_relevance_reason": "on point",
+        "context_sufficiency": True, "context_sufficiency_reason": "enough",
+        "expected_answer": "", "expected_reason": "draft call 504"})
+
+    assert healed["correct"] is True
+    assert finished_judge_calls["n"] == 0, "finished judges are never re-run"
+    assert "judge_error" not in healed

@@ -1043,6 +1043,7 @@ html[data-kind="guest"] .identity-hint .hint-badge { display: inline-block; }
   letter-spacing: normal; text-transform: none;
   line-height: 1.5;
 }
+.eval-gloss.eval-judge-error { color: var(--warn); }
 
 .cite-marker {
   display: inline-block; background: var(--primary-soft); color: var(--primary-ink);
@@ -1145,13 +1146,11 @@ html[data-kind="guest"] .identity-hint .hint-badge { display: inline-block; }
   color: var(--text);
 }
 .score-group-sub { font-size: var(--text-nano); color: var(--faint); }
-/* Where a metric came from: RAGAS's, or this app's own. Lime, like the term it
-   sits beside, because provenance is part of the identity of the row rather
-   than a caveat about it — and a grey badge next to a lime term read as a
-   disclaimer. The border keeps it a separate object at a glance; without one,
-   two lime words in a row are just a longer name.
-   Four say RAGAS, one says RAG-it. The rest are classic IR metrics that belong
-   to nobody in particular and carry nothing. */
+/* Where a metric came from: an in-house measurement or a RAGAS-style judge.
+   Lime, like the term it sits beside, because provenance is part of the identity
+   of the row rather than a caveat about it — and a grey badge next to a lime
+   term read as a disclaimer. The border keeps it a separate object at a glance;
+   without one, two lime words in a row are just a longer name. */
 .score-from {
   margin-left: 6px; padding: 0 4px;
   border: 1px solid var(--primary-soft-border); border-radius: var(--r-pill);

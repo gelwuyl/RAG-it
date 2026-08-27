@@ -94,6 +94,12 @@ class Settings:
         self.google_redirect_uri = os.environ.get("GOOGLE_REDIRECT_URI", "")
         # Default generation model; overridden by config.yaml
         self.default_llm_model = os.environ.get("RAG_LLM_MODEL", "gemma-4-26b-it")
+        # Boot default for the JUDGE model. Empty means "grade with the answerer"
+        # — the historical behaviour. Flash-lite when set because judging wants
+        # terse consistency, not creativity, and a non-thinking judge cannot
+        # burn its token budget reasoning inside <thought> (the failure mode
+        # that made every scored reading time out on the deployment).
+        self.default_judge_model = os.environ.get("RAG_JUDGE_MODEL", "models/gemini-3.5-flash-lite")
         # Boot default only, like every other default_* here: the live
         # value comes from load_config(). Flash-lite because it is the
         # cheapest model on this endpoint that actually emits tool calls.
@@ -394,6 +400,12 @@ class PipelineConfig:
     embedding_provider: str
     reranker_provider: str
     eval_show: bool
+    # The model that GRADES. Empty string means "use the answerer" — resolved
+    # in eval.judges.judge_model(), not here, so the fallback needs no branching
+    # at every read site. Defaults empty so hand-built configs (tests, tools)
+    # stay valid and mean the historical behaviour. Not in fingerprint():
+    # judges embed nothing.
+    judge_model: str = ""
 
     def fingerprint(self) -> str:
         """Hash of the index-affecting settings (PRD F18).
@@ -478,6 +490,13 @@ def load_config() -> PipelineConfig:
         # answering model here emits no tool calls at all (verified live against
         # the endpoint), so a single-model design cannot choose anything.
         router_model=str(g.get("router_model", settings.default_router_model)),
+        # Which model judges answers. Distinct from the answerer for the same
+        # reason the router is: the requirement differs. Grading wants terse,
+        # fast, consistent verdicts; a thinking judge reasons inside <thought>,
+        # bills reasoning against max_tokens, and can truncate before any
+        # verdict (measured on the deployment: scored readings 0/5 with a full
+        # document as context). Empty string = grade with the answerer.
+        judge_model=str(g.get("judge_model", settings.default_judge_model)),
         temperature=float(g.get("temperature", 0.0)),
         embedding_model=str(e.get("model", settings.default_embedding_model)),
         embedding_provider=str(e.get("provider", settings.default_embedding_provider)),
@@ -523,6 +542,7 @@ def save_config_override(cfg: "PipelineConfig") -> None:
         "generation": {
             "llm_model": cfg.llm_model,
             "router_model": cfg.router_model,
+            "judge_model": cfg.judge_model,
             "temperature": cfg.temperature,
         },
         "embedding": {"model": cfg.embedding_model, "provider": cfg.embedding_provider},
