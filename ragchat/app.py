@@ -1448,6 +1448,9 @@ def ask_chat(
     result["message_id"] = msg.id
     result.pop("context", None)
     result.pop("effective_query", None)
+    # Internal marker for the gold-match logic (a broken call is not a refusal);
+    # the client has no use for it.
+    result.pop("errored", None)
     return result
 
 

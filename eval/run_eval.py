@@ -248,7 +248,10 @@ def score_item(
     if retrieval_only:
         return entry
 
-    res = ask(EVAL_USER, question, [], cfg)
+    # use_gold=False: this IS the golden run. Every question here matches the
+    # bank by construction, so re-matching would only spend embeddings on
+    # scoring the harness already does itself.
+    res = ask(EVAL_USER, question, [], cfg, use_gold=False)
     entry["answer"] = res["answer"]
     entry["not_found"] = res["not_found"]
     # The context the model was ACTUALLY given, straight from ask().
