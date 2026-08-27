@@ -1538,14 +1538,25 @@ def grade_message(
         cfg,
         stored,
     )
+    # A pass that ran out of its own wall clock made NO calls fail — it just did
+    # not finish, so it does not spend the retry budget the way a judge failure
+    # does.
+    if not graded.get("paused"):
+        attempts += 1
     stored.update(graded)
-    attempts += 1
     stored["grade_attempts"] = attempts
     stored["grade_max_attempts"] = GRADE_MAX_ATTEMPTS
     incomplete = any(
         stored.get(field) is None for field in pipeline.LIVE_GRADE_FIELDS
     )
-    if incomplete and attempts < GRADE_MAX_ATTEMPTS:
+    if graded.get("paused"):
+        # Wait for the judges' own latency rather than hammering: the next
+        # request re-enters with all completed verdicts preserved.
+        stored["pending"] = True
+        stored["retry_after_ms"] = GRADE_RETRY_AFTER_MS
+        stored.pop("grade_exhausted", None)
+        stored.pop("judge_error", None)
+    elif incomplete and attempts < GRADE_MAX_ATTEMPTS:
         stored["pending"] = True
         stored["retry_after_ms"] = GRADE_RETRY_AFTER_MS
         stored.pop("grade_exhausted", None)

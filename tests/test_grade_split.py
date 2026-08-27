@@ -251,10 +251,10 @@ def test_partial_grade_exhaustion_stops_after_the_bounded_budget(answered, monke
     monkeypatch.setattr(pipeline, "_eval_answer", _always_missing)
     url = f"/api/chats/{cid}/messages/{body['message_id']}/grade"
     results = [client.post(url).json()["eval"] for _ in range(rapp.GRADE_MAX_ATTEMPTS)]
-    assert [ev["pending"] for ev in results] == [True, True, False]
+    assert [ev["pending"] for ev in results] == [True] * (rapp.GRADE_MAX_ATTEMPTS - 1) + [False]
     exhausted = results[-1]
     assert exhausted["grade_exhausted"] is True
-    assert "unavailable after 3 attempts" in exhausted["judge_error"]
+    assert "unavailable after 4 attempts" in exhausted["judge_error"]
     # The recovered check is named too — a partial outage does not hide behind
     # the one judge that stayed down.
     assert "Answer relevancy unavailable: judge timeout" in exhausted["judge_error"]
@@ -262,6 +262,63 @@ def test_partial_grade_exhaustion_stops_after_the_bounded_budget(answered, monke
 
     client.post(url)
     assert calls["n"] == rapp.GRADE_MAX_ATTEMPTS
+
+
+def test_a_paused_pass_neither_spends_a_retry_nor_reports_an_outage(answered, monkeypatch):
+    """Found on the deployment: six judge calls at an honest token budget no
+    longer fit one 60s serverless request. The grader honours a wall-clock
+    deadline and returns early — which is a PAUSE, not a failure: no retry
+    budget is spent (pauses are not attempts) and no 'unavailable' error is
+    rendered for work the next request will simply finish."""
+    from ragchat import pipeline
+
+    client, cid, body = answered
+    calls, _ = _stub_judges(monkeypatch)
+
+    def _time_starved(question, answer, context_text, cfg, previous=None):
+        return {
+            "faithful": True, "faithful_reason": "r",
+            "relevant": True, "relevant_reason": "r",
+            "context_relevance": None,
+            "context_relevance_reason": (
+                "paused at this request's time limit; grading continues next try"),
+            "context_sufficiency": None,
+            "context_sufficiency_reason": (
+                "paused at this request's time limit; grading continues next try"),
+            "correct": None, "correct_reason": "",
+            "paused": True,
+        }
+
+    monkeypatch.setattr(pipeline, "_eval_answer", _time_starved)
+    url = f"/api/chats/{cid}/messages/{body['message_id']}/grade"
+
+    ev = client.post(url).json()["eval"]
+    assert ev["pending"] is True, "a pause must reschedule"
+    assert ev["paused"] is True
+    assert "judge_error" not in ev, "a pause is not an outage"
+    # Pauses never advance the attempt counter...
+    assert ev["grade_attempts"] == 0
+    # ...so they cannot exhaust it either.
+    ev2 = client.post(url).json()["eval"]
+    assert ev2["grade_attempts"] == 0
+    assert "grade_exhausted" not in ev2
+    assert ev2["retry_after_ms"]
+
+
+def test_a_pause_is_not_confused_with_a_judge_failure(answered, monkeypatch):
+    """A paused pass that then runs to completion must leave no stale pause
+    marker and no attempt-count inflation from the paused requests."""
+    from ragchat import pipeline
+
+    client, cid, body = answered
+    calls, _ = _stub_judges(monkeypatch)
+    url = f"/api/chats/{cid}/messages/{body['message_id']}/grade"
+
+    ev = client.post(url).json()["eval"]
+    assert ev["faithful"] is True
+    assert "paused" not in ev
+    assert ev["pending"] is False
+    assert calls["n"] == 1
 
 
 def test_grading_disabled_midflight_does_not_spend_a_retry(answered, monkeypatch):

@@ -69,8 +69,25 @@ NOT_FOUND_MIN_SIM = 0.12
 # They are deliberately not an in-process retry: Vercel freezes a function when
 # it responds, so durable grading progress has to be carried by Message.eval_data
 # and resumed by another HTTP request.
-GRADE_MAX_ATTEMPTS = 3
+GRADE_MAX_ATTEMPTS = 4
 GRADE_RETRY_AFTER_MS = 1_500
+
+# Wall-clock ceiling for ONE /grade request's judging work. Six sequential judge
+# calls (four readings + reference draft + correctness) at an honest 4096-token
+# budget no longer fit the 60s maxDuration on the deployment — the probe that
+# found the thinking-budget bug made every /grade 504, and a 504 discards the
+# whole purchase, draft included. So the grader honours a deadline: when it is
+# about to expire it stops rather than starts another call, returns what it has,
+# and the caller persists the partial result. The client's existing retry loop
+# picks the remaining fields up in a fresh request — sliced across requests
+# exactly the way the benchmark is, because a serverless function frozen the
+# instant it responds cannot host a long loop.
+#
+# 36s, not 56s: below we refuse to START a call with less than _SLICE_MIN_SECONDS
+# left, and a judge call itself can run ~25s on the proxy — starting one at the
+# 44th second would sail past 60s and hand everything back to the 504 problem.
+GRADE_MAX_SECONDS = 36
+_SLICE_MIN_SECONDS = 12
 # Every normal chat answer gets these five live readings. Faithfulness and
 # relevancy are judged directly. Correctness is ESTIMATED: the judge drafts an
 # expected answer from the retrieved passages and scores the real answer against
@@ -487,6 +504,14 @@ def _eval_answer(
     if not cfg.eval_show:
         return None
 
+    # Deadline for this pass. The route's 60s maxDuration, minus response
+    # overhead, decides when to stop STARTING calls; anything unfinished is
+    # picked up by the next grade request (persisted partials + client retry).
+    started_at = time.monotonic()
+
+    def _time_left() -> float:
+        return GRADE_MAX_SECONDS - (time.monotonic() - started_at)
+
     previous = previous or {}
     done = {field: previous.get(field) is not None for field in LIVE_GRADE_FIELDS}
     values = {
@@ -570,14 +595,23 @@ def _eval_answer(
         values[LIVE_SCORE_FIELDS[field]] = score
         reasons[field] = why
 
-    if not done["faithful"]:
-        _put("faithful", _run(faithfulness_scored, question, context_text, answer))
-    if not done["relevant"]:
-        _put("relevant", _run(answer_relevancy_scored, question, answer))
-    if not done["context_relevance"]:
-        _put("context_relevance", _run(context_relevance_scored, question, context_text))
-    if not done["context_sufficiency"]:
-        _put("context_sufficiency", _run(context_sufficiency_scored, question, context_text))
+    # Each stage refuses to START a judge call when too little wall clock
+    # remains to expect it back — an unfinished pass is a persisted partial the
+    # retry heals, while a 504 would discard even the calls that did finish.
+    def _stage(field, fn, *args):
+        if done[field]:
+            return
+        if _time_left() <= _SLICE_MIN_SECONDS:
+            reasons[field] = (
+                "paused at this request's time limit; grading continues next try"
+            )
+            return
+        _put(field, _run(fn, *args))
+
+    _stage("faithful", faithfulness_scored, question, context_text, answer)
+    _stage("relevant", answer_relevancy_scored, question, answer)
+    _stage("context_relevance", context_relevance_scored, question, context_text)
+    _stage("context_sufficiency", context_sufficiency_scored, question, context_text)
 
     def _run2(fn, *args):
         """_run for the two-tuple synthesis judge (text, reason)."""
@@ -587,7 +621,7 @@ def _eval_answer(
         except Exception as exc:  # noqa: BLE001
             return None, str(exc)
 
-    if not correct_done:
+    if not correct_done and _time_left() > _SLICE_MIN_SECONDS:
         # Resume a draft-outage marker ("expected_answer": "" + a reason) by
         # re-running synthesis; NO_ANSWER_DERIVABLE was already converted to a
         # FAIL verdict above. An absent key means "not yet attempted".
@@ -597,11 +631,19 @@ def _eval_answer(
             )
         if expected_text:
             # A real reference exists: score against it and persist it so a
-            # retry never re-purchases the same draft call.
-            values["expected_answer"] = expected_text
-            _put("correct", _run(
-                answer_correctness_scored, question, expected_text, answer
-            ))
+            # retry never re-purchases the same draft call. Correctness is TWO
+            # sequential calls (draft + score), so the deadline is re-checked
+            # between them rather than only before the pair.
+            if _time_left() > _SLICE_MIN_SECONDS:
+                values["expected_answer"] = expected_text
+                _put("correct", _run(
+                    answer_correctness_scored, question, expected_text, answer
+                ))
+            else:
+                # Draft bought but not yet scored: persist just the text.
+                # A resumed pass finds a non-empty expected_answer with
+                # correct=None, skips synthesis above, and scores directly.
+                values["expected_answer"] = expected_text
         else:
             # No usable text. Two different meanings: the passages genuinely
             # cannot answer (a graded verdict — correctness is FAIL by
@@ -623,25 +665,34 @@ def _eval_answer(
         **{f"{field}_reason": reasons[field] for field in LIVE_GRADE_FIELDS},
     }
     missing = []
+    paused = False
     for field in LIVE_GRADE_FIELDS:
-        if values[field] is None and not (
-            # A graded "the passages do not answer this" carries its own reason
-            # in expected_reason; it is a verdict, not a judge outage.
-            field == "correct"
-            and values.get("expected_reason") == NO_ANSWER_DERIVABLE
-        ):
-            if field == "correct":
-                # The reference draft is upstream of the correctness judge; if
-                # IT failed, naming "no verdict" would send someone debugging
-                # the wrong call.
-                cause = values.get("expected_reason") or (
-                    reasons[field] or "judge returned no verdict"
-                )
-            else:
-                cause = reasons[field] or "judge returned no verdict"
-            missing.append(f"{_LIVE_GRADE_LABELS[field]} unavailable: {cause}")
+        if values[field] is not None:
+            continue
+        # A graded "the passages do not answer this" carries its own reason in
+        # expected_reason; it is a verdict, not a judge outage.
+        if field == "correct" and values.get("expected_reason") == NO_ANSWER_DERIVABLE:
+            continue
+        cause = values.get("expected_reason") if field == "correct" else ""
+        cause = cause or (reasons[field] or "judge returned no verdict")
+        if cause.endswith("grading continues next try"):
+            # Out of wall clock, out of judge failure: the retry loop will
+            # finish this. Naming it "unavailable" would render as a broken
+            # grader and waste the reader's patience on a non-problem.
+            paused = True
+            continue
+        if field == "correct":
+            # The reference draft is upstream of the correctness judge; if
+            # IT failed, naming "no verdict" would send someone debugging
+            # the wrong call.
+            cause = values.get("expected_reason") or (
+                reasons[field] or "judge returned no verdict"
+            )
+        missing.append(f"{_LIVE_GRADE_LABELS[field]} unavailable: {cause}")
     if missing:
         out["judge_error"] = " · ".join(missing)
+    elif paused:
+        out["paused"] = True
     return out
 
 
