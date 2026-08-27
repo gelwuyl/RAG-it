@@ -2836,9 +2836,11 @@ function renderScorecard(metrics, runMode) {
         }</span></span>
         <span class="score-val ${hasLive ? (below ? "under" : "over") : "quiet"}">${chip}</span>
       </div>
-      <div class="score-bar">
-        <div class="score-fill ${hasLive ? "live" : "bench"}"
-             style="width:${Math.min(100, hasLive ? livePct : benchPct)}%"></div>
+      <div class="score-bar-wrap">
+        <div class="score-bar">
+          <div class="score-fill ${hasLive ? "live" : "bench"}"
+               style="width:${Math.min(100, hasLive ? livePct : benchPct)}%"></div>
+        </div>
         <div class="score-target" style="left:${Math.min(100, benchPct)}%"
              title="benchmark ${benchPct}%"></div>
       </div>

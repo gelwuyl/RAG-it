@@ -1327,7 +1327,19 @@ html[data-kind="guest"] .identity-hint .hint-badge { display: inline-block; }
 }
 .eval-chip:hover .eval-chip-cta { color: var(--primary-ink); }
 .eval-chip.is-shown .eval-chip-cta { color: var(--primary-ink); border-bottom-style: solid; }
-.score-target { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--inverse-bg); opacity: 0.55; }
+/* The benchmark tick lives in a WRAPPER, not inside the bar: the bar needs
+   overflow:hidden (rounded fill corners, the waiting sweep), and a marker
+   inside it was a 2px half-transparent sliver on the same groove it marked —
+   invisible in exactly the cases that matter (over the empty track, at the
+   edges). Outside the clip it can cross the groove like a slider handle at
+   the benchmark value, which is the relationship the row is about: THIS
+   answer vs the sample corpus. */
+.score-bar-wrap { position: relative; }
+.score-target {
+  position: absolute; top: -3px; bottom: -3px; width: 2px;
+  transform: translateX(-1px);       /* centre the 2px line ON the % position */
+  background: var(--muted); border-radius: 1px;
+}
 .score-foot {
   font-family: var(--font-mono);
   font-size: var(--text-nano); color: var(--faint); letter-spacing: 0.04em;
