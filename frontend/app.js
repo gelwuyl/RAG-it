@@ -2697,6 +2697,20 @@ const LIVE_ESTIMATED_FIELDS = new Set([
   "context_sufficiency",
 ]);
 
+// Ranking rows whose live reading comes from the RANK ESTIMATE: the first
+// citation marker names the pool position of the passage the answer was built
+// from, which is MRR's per-question statistic (1/rank) and NDCG's (1/log2 of
+// rank, one relevant item). It measures ordering only — a relevant passage
+// that never came back is invisible to it — so its renderings always say
+// estimated. Hit rate has no estimate on purpose: the pool is already the
+// top-k cut, so a cited passage is inside k by construction and the reading
+// would be a tautology wearing a metric's clothes. It lights up only on a
+// gold match instead.
+const ESTIMATED_RANK_FIELDS = {
+  mrr: "mrr_est",
+  ndcg_at_k: "ndcg_est",
+};
+
 // A judge answers yes/no for one answer while the benchmark reports a RATE
 // across the golden set. The labels say “this answer” and “benchmark” so the
 // shared bar does not claim they are the same statistic.
@@ -2741,16 +2755,53 @@ function renderScorecard(metrics, runMode) {
     const field = Object.keys(LIVE_TO_BENCHMARK).find(
       (f) => LIVE_TO_BENCHMARK[f] === key,
     );
-    const v = field ? liveValue(live, field) : null;
+    // Three kinds of live reading, in strict precedence — MEASURED beats
+    // estimated beats nothing:
+    //
+    // gold — the asked question matched the golden bank (eval/golden.py), so
+    // this row carries a reading measured against that question's KNOWN
+    // passages. Its field names are the benchmark keys, so the lookup is
+    // direct. Known-unanswerable matches instead carry a refusal verdict,
+    // which only means something on the not-found row.
+    // judge — the per-answer verdicts fetched by the follow-up request.
+    // estimate — the citation-rank reading computed at answer time.
+    const gold = live?.gold;
+    const goldV =
+      gold && !gold.unanswerable && gold[key] != null ? gold[key] : null;
+    const goldRefused =
+      gold && gold.unanswerable && key === "not_found_rate_unanswerables"
+        ? gold.refused
+        : null;
+    const judgeV = field ? liveValue(live, field) : null;
     // A scored judge also emits a 0-1 reading (f"{field}_score"). The bar draws
     // THAT when present — 65% fills to 65 against the benchmark tick, instead
     // of a binary pass rendering as a flat 100%. No score (older graded
     // messages, or a judge that omitted the line) falls back to 100/0.
-    const score = field && live ? live[`${field}_score`] : null;
+    const judgeScore = field && live ? live[`${field}_score`] : null;
+    const estField = ESTIMATED_RANK_FIELDS[key];
+    const estV = estField && live ? live[estField] : null;
+
+    let v = null;
+    let score = null;
+    let isEst = false;
+    let refused = null;
+    if (goldV != null) {
+      v = goldV;
+    } else if (goldRefused != null) {
+      refused = goldRefused;
+      v = refused ? 1 : 0;
+    } else if (judgeV != null) {
+      v = judgeV;
+      score = judgeScore;
+    } else if (estV != null) {
+      v = estV;
+      isEst = true;
+    }
     const hasLive = v != null;
     if (hasLive) anyLive = true;
-    // Only the two live judges share benchmark bars, and they are the readings
-    // fetched by the follow-up request. Retrieval similarity stays separate.
+    // Only judge-graded rows wait on the follow-up request. Gold and estimate
+    // readings were computed when the answer was, so they render immediately
+    // even while the judges are still running.
     const waiting = !hasLive && !!(live && live.pending) && !!field;
 
     const benchPct = Math.round(bench * 100);
@@ -2759,12 +2810,18 @@ function renderScorecard(metrics, runMode) {
     // 53 is a comparison, not a verdict — so the bar is the accent when there
     // is a live reading and muted when it is only showing the benchmark.
     const below = hasLive && (score != null ? score : v) < bench;
-    // The verdict chip says passed/failed; with a score the chip carries the
-    // number instead — "65%" reads truer next to a 65%-full bar than "passed".
+    // The verdict chip says passed/failed; with a score — a gold reading or a
+    // judge's 0-1 — the chip carries the number instead: "65%" reads truer
+    // next to a 65%-full bar than "passed". A refusal verdict gets its own
+    // words, because "passed" says nothing about what was actually right.
     const chip = hasLive
-      ? score != null
+      ? score != null || isEst || goldV != null
         ? `${livePct}%`
-        : escapeHtml(liveLabel(live, field))
+        : refused != null
+          ? refused
+            ? "refused"
+            : "missed"
+          : escapeHtml(liveLabel(live, field))
       : waiting
         ? "grading…"
         : `${benchPct}%`;
@@ -2787,29 +2844,43 @@ function renderScorecard(metrics, runMode) {
       </div>
       <div class="score-foot">${
         hasLive
-          ? LIVE_ESTIMATED_FIELDS.has(field)
-            ? // Estimated: name what was actually judged. These borrow a row whose
-              // benchmark is a ground-truth statistic; without this the reading
-              // would claim the same evidence the benchmark had.
-              `${
-                field === "correct"
-                  ? "vs an answer drafted from your passages (estimated)"
-                  : field === "context_sufficiency"
-                    ? "passages look sufficient — no gold set to compare (estimated)"
-                    : "passages look on-topic — no gold set to compare (estimated)"
-              } · benchmark ${benchPct}%`
-            : `this answer ${livePct}% · benchmark ${benchPct}%`
+          ? goldV != null
+            ? // Measured: the question matched the golden bank, so these are
+              // readings against known passages — the same ground truth the
+              // benchmark had. Saying which question keeps it auditable.
+              `golden #${gold.idx} — measured against this question's known passages · benchmark ${benchPct}%`
+            : refused != null
+              ? `this question has no document answer — ${
+                  refused
+                    ? "refusing is correct"
+                    : "this answer should have refused"
+                } · benchmark ${benchPct}%`
+              : isEst
+                ? // Estimated ordering: says exactly what was measured, because
+                  // a rank of the passage the answer USED is not the benchmark's
+                  // statistic — it cannot see passages that never came back.
+                  `passage cited ranked #${live.cited_rank} of ${live.pool_n} (estimated) · benchmark ${benchPct}%`
+                : LIVE_ESTIMATED_FIELDS.has(field)
+                  ? // Estimated: name what was actually judged. These borrow a row whose
+                    // benchmark is a ground-truth statistic; without this the reading
+                    // would claim the same evidence the benchmark had.
+                    `${
+                      field === "correct"
+                        ? "vs an answer drafted from your passages (estimated)"
+                        : field === "context_sufficiency"
+                          ? "passages look sufficient — no gold set to compare (estimated)"
+                          : "passages look on-topic — no gold set to compare (estimated)"
+                    } · benchmark ${benchPct}%`
+                  : `this answer ${livePct}% · benchmark ${benchPct}%`
           : waiting
             ? `benchmark ${benchPct}% · waiting on the judge`
             : field
               ? `benchmark ${benchPct}%`
-              // Seven of the nine can never carry a live reading, and saying so
-              // where the question arises beats leaving a row that looks
-              // broken. MRR, NDCG and hit rate all ask "was the right passage
-              // RETURNED", which nobody can judge for a question the corpus has
-              // no golden answer for. The not-found rate needs a set of
-              // deliberately unanswerable questions. Correctness now carries an
-              // estimated live reading above.
+              // Only two rows can still arrive here — hit rate (no estimate by
+              // construction: the pool is already the top-k cut) and the
+              // not-found rate (a rate over a set, so one answer cannot carry
+              // it). Both light up when the question matches the golden bank.
+              // Saying why beats leaving a row that looks broken.
               : `benchmark ${benchPct}% · needs a known answer`
       }</div>`;
     el.appendChild(row);

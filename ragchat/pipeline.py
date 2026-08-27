@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import re
 import time
 
@@ -895,6 +896,139 @@ def _refusal_text(used: list[str]) -> str:
     return NOT_FOUND_ANSWER + " I also " + " and ".join(did) + "."
 
 
+# ---------------------------------------------------------------------------
+# Known-answer readings — what un-greys the ranking rows.
+#
+# The benchmark measures MRR/NDCG/hit rate against golden_set.jsonl, where each
+# question ships with the passages that answer it. A chat answer has no such
+# labels, so those rows say "needs a known answer". Two things change that:
+#
+# 1. A GOLD MATCH. eval/golden.py matches the asked question against the golden
+#    bank (the 56 benchmark questions plus demo pairs over the demo corpus).
+#    A match hands us the passages that are KNOWN to answer it, and the exact
+#    containment twins in eval/metrics.py score the pool against them with no
+#    model call at all — the same functions the CI gate trusts.
+# 2. A RANK ESTIMATE. Every answer cites pool positions (citation marker [3]
+#    IS pool index 3), so "the passage this answer was built from ranked #k of
+#    n" is always computable. It measures ordering only — passages that never
+#    came back are invisible to it — so it is labelled estimated everywhere it
+#    renders, exactly like the judge-drafted correctness estimate.
+#
+# Neither ever blocks or delays an answer: matching is a string comparison, the
+# exact metrics are substring checks, and the one embedding call (graded NDCG,
+# below) happens only on a gold match and fails open.
+# ---------------------------------------------------------------------------
+
+# Golden-passage vectors, keyed by (provider, model, passage) — keyed by model
+# per the CLAUDE.md rule on singletons, never one global. ~150 passages at
+# 768 dims is negligible memory.
+_GOLD_EMB_CACHE: dict[tuple, list[float]] = {}
+
+
+def _gold_identity(gold: dict) -> dict:
+    """The fields every gold reading carries so the UI can say WHAT was
+    measured: which bank question matched, and from which bank."""
+    return {
+        "idx": gold.get("_idx"),
+        "src": gold.get("_src"),
+        "question": gold.get("question", ""),
+        "unanswerable": bool(gold.get("unanswerable")),
+    }
+
+
+def _golden_ndcg(pool_texts: list[str], passages: list[str], k: int,
+                 cfg: PipelineConfig) -> float:
+    """Graded NDCG@k against the matched question's passages.
+
+    The exact containment twins need no embeddings, but NDCG grades each chunk
+    by its cosine to the passages — the SAME computation run_eval publishes for
+    the benchmark bar, so this reading and the bar are one statistic. Any
+    embedding failure degrades to None upstack and the row falls back to the
+    rank estimate; it must never break an answer that was already written.
+    """
+    from eval.metrics import ndcg_at_k
+
+    from .embeddings import ProxyEmbeddings
+    emb = ProxyEmbeddings(cfg.embedding_model, provider=cfg.embedding_provider)
+    key = (cfg.embedding_provider, cfg.embedding_model)
+    missing = [p for p in passages if (key, p) not in _GOLD_EMB_CACHE]
+    if missing:
+        for p, e in zip(missing, emb.embed_documents(missing)):
+            _GOLD_EMB_CACHE[(key, p)] = e
+    golden_embs = [_GOLD_EMB_CACHE[(key, p)] for p in passages]
+    chunk_embs = emb.embed_documents(pool_texts) if pool_texts else []
+    return round(ndcg_at_k(chunk_embs, golden_embs, k), 4)
+
+
+def _gold_scores(gold: dict, pool_texts: list[str],
+                 cfg: PipelineConfig) -> dict:
+    """Measured retrieval readings for one gold-matched question.
+
+    The exact metrics (verbatim containment) are free, deterministic and the
+    ones the CI gate compares — the cosine twins carry a fifth error in both
+    directions and drift with corpus size (eval/metrics.py), so a reading that
+    claims to be MEASURED uses the twin that cannot lie about containment.
+    """
+    from eval.metrics import (
+        exact_context_recall,
+        exact_hit_rate_at_k,
+        exact_mrr_at_k,
+        exact_precision_at_k,
+    )
+    passages = gold.get("golden_passages") or []
+    k = cfg.top_k
+    out = {
+        "mrr": round(exact_mrr_at_k(pool_texts, passages, k), 4),
+        "hit_rate_at_k": exact_hit_rate_at_k(pool_texts, passages, k),
+        "context_recall": round(exact_context_recall(pool_texts, passages), 4),
+        "precision_at_k": round(exact_precision_at_k(pool_texts, passages, k), 4),
+        "ndcg_at_k": None,
+    }
+    try:
+        out["ndcg_at_k"] = _golden_ndcg(pool_texts, passages, k, cfg)
+    except Exception:
+        log.exception("golden ndcg scoring failed; row falls back to estimate")
+    return out
+
+
+def _gold_attach(result: dict, gold: dict | None, eval_show: bool) -> dict:
+    """Attach the known-answer verdict to results `_ask` could not score.
+
+    `_ask` scores the matched question's retrieval when a pool exists. These
+    are the paths left over: refusals (nothing was retrieved — for an
+    unanswerable question that refusal IS the verdict being measured) and a
+    normal answer to a known-unanswerable question (answering it is the miss
+    the not-found rate counts). Infrastructure failures attach nothing: a
+    broken retrieval is not a correct refusal, and saying so would flatter the
+    system precisely when it is broken.
+    """
+    if not gold or not eval_show:
+        return result
+    if result.get("errored"):
+        return result
+    eval_d = result.get("eval")
+    if isinstance(eval_d, dict) and eval_d.get("gold"):
+        return result
+    refused = bool(result.get("not_found"))
+    if gold.get("unanswerable"):
+        entry = {**_gold_identity(gold), "refused": refused}
+    elif not refused:
+        # Answered normally, so the retrieval scores were attached in `_ask`.
+        return result
+    else:
+        # Refused on a question with known passages: nothing cleared the pool,
+        # which is a measured zero, not an absence of measurement.
+        entry = {
+            **_gold_identity(gold),
+            "mrr": 0.0, "ndcg_at_k": 0.0, "hit_rate_at_k": 0,
+            "context_recall": 0.0, "precision_at_k": 0.0,
+        }
+    base = eval_d if isinstance(eval_d, dict) else {"pending": False}
+    base["gold"] = entry
+    result["eval"] = base
+    return result
+
+
 def ask(
     user_id: str,
     query: str,
@@ -903,8 +1037,45 @@ def ask(
     deep_search=None,
     web_search=None,
     grade: bool = True,
+    use_gold: bool = True,
+) -> dict:
+    """Answer a question — the public entry, with known-answer matching wrapped
+    around `_ask` so every exit path (including refusals) gets the verdict.
+
+    `use_gold=False` is for the benchmark harness: it IS the golden run, and
+    re-matching each question against the bank would only spend embeddings on
+    answers the harness scores itself.
+
+    See `_ask` for the pipeline itself."""
+    gold = None
+    if use_gold and cfg.eval_show:
+        try:
+            from eval.golden import match_question
+            gold = match_question(query)
+        except Exception:
+            log.exception("golden match failed; rows stay benchmark-only")
+    result = _ask(
+        user_id, query, history, cfg,
+        deep_search=deep_search, web_search=web_search, grade=grade, gold=gold,
+    )
+    return _gold_attach(result, gold, cfg.eval_show)
+
+
+def _ask(
+    user_id: str,
+    query: str,
+    history: list[dict],
+    cfg: PipelineConfig,
+    deep_search=None,
+    web_search=None,
+    grade: bool = True,
+    gold: dict | None = None,
 ) -> dict:
     """Answer a question. Returns {answer, not_found, citations, eval_line, eval}.
+
+    `gold` is a matched eval/golden.py bank entry (None = no known answer for
+    this question, the overwhelmingly common case). When set, the answerable
+    questions' pool is scored against the bank's known passages below.
 
     `grade=False` returns the answer WITHOUT running the judges. They are two
     more sequential model calls and, measured on the live provider, they cost
@@ -932,10 +1103,14 @@ def ask(
     except Exception as exc:
         # Embedding/retrieval failure (e.g. transient 429 after retries) must
         # not crash the request with a 500 — return a clean, user-facing answer.
+        # `errored` marks this as an infrastructure failure, NOT a refusal: a
+        # gold-matched unanswerable question must not score a broken search as
+        # a correct refusal (`_gold_attach` skips errored results).
         return {
             "answer": f"I couldn't search your documents right now ({exc}). Please try again in a moment.",
             "not_found": True,
             "citations": [],
+            "errored": True,
         }
 
     # Deep search runs ALWAYS when asked for, not as a fallback. Web
@@ -1067,10 +1242,13 @@ def ask(
         answer, context = _write_answer(effective_query, pool, history, cfg)
     except Exception as exc:
         # Generation failure (quota, model error) must not crash with a 500.
+        # `errored`: a broken model call is not a refusal, and a gold-matched
+        # unanswerable question must not score it as one.
         return {
             "answer": f"I couldn't generate an answer right now ({exc}). Your documents are still indexed — please try again shortly.",
             "not_found": True,
             "citations": [],
+            "errored": True,
         }
 
     # ESCALATION 2 — the model read the passages and still said the answer is
@@ -1176,6 +1354,38 @@ def ask(
         # The grader needs the count of deep hits to rebuild this line later,
         # and it will not have the pool by then.
         eval_d["deep_n"] = sum(1 for c in pool if c.get("deep"))
+        # RANK ESTIMATE — the reading that gives the ranking rows something to
+        # draw on every answer. Citation marker [3] IS pool index 3, so the
+        # first marker names the position of the passage the answer was built
+        # on in the reranker's final order. MRR's per-question statistic is the
+        # reciprocal of exactly that rank; NDCG with one relevant item is
+        # 1/log2(rank+1). There is deliberately NO hit@k estimate: the pool is
+        # ALREADY the top-k cut, so anything cited is inside k by construction
+        # and a "1" would be a tautology wearing a metric's clothes.
+        #
+        # Only real markers count. The UI courtesy that cites pool[:2] when the
+        # model named nothing is not evidence the reranker ordered well.
+        if cited_numbers:
+            _r = cited_numbers[0]
+            eval_d["cited_rank"] = _r
+            eval_d["pool_n"] = len(pool)
+            eval_d["mrr_est"] = round(1.0 / _r, 4)
+            eval_d["ndcg_est"] = round(1.0 / math.log2(_r + 1), 4)
+        # KNOWN ANSWER — the matched bank question's pool scored against its
+        # passages (eval/golden.py). Refusals and known-unanswerables are
+        # attached by `_gold_attach` back in `ask()`, which sees every exit
+        # path; this is the one branch that needs the pool itself.
+        if gold is not None:
+            if gold.get("unanswerable"):
+                # The model ANSWERED a question with no document answer: the
+                # not-found row's verdict is a miss, whoever wrote the prose.
+                eval_d["gold"] = {**_gold_identity(gold), "refused": False}
+            else:
+                eval_d["gold"] = {
+                    **_gold_identity(gold),
+                    "refused": False,
+                    **_gold_scores(gold, [c["text"] for c in pool], cfg),
+                }
     return {
         "answer": answer,
         "not_found": False,
