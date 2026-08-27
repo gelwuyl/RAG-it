@@ -931,6 +931,55 @@ html[data-kind="guest"] .identity-hint .hint-badge { display: inline-block; }
 .msg.assistant.not-found { background: var(--not-found-bg); border-color: var(--not-found-border); font-style: italic; }
 .msg.pending { color: var(--muted); font-style: italic; }
 
+/* Answers arrive as markdown — the models write headings, lists, tables — and
+   the renderer in app.js turns them into real elements. Scoped to assistant
+   bubbles: user messages and plain-text states ("Thinking…", not-found) keep
+   the pre-wrap paragraph above. All colors via tokens, so both themes hold. */
+.msg.assistant h3, .msg.assistant h4, .msg.assistant h5, .msg.assistant h6 {
+  font-size: 1em;
+  font-weight: 600;
+  line-height: var(--lh-content);
+  margin: 14px 0 4px;
+}
+.msg.assistant > :first-child { margin-top: 0; }
+.msg.assistant p { margin: 0 0 8px; }
+.msg.assistant p:last-child,
+.msg.assistant ul:last-child,
+.msg.assistant ol:last-child { margin-bottom: 0; }
+.msg.assistant ul, .msg.assistant ol { margin: 0 0 8px; padding-left: 22px; }
+.msg.assistant li { margin: 3px 0; }
+.msg.assistant li > ul, .msg.assistant li > ol { margin: 3px 0; }
+.msg.assistant li::marker { color: var(--faint); }
+.msg.assistant a { color: var(--primary-ink); text-decoration: underline; text-underline-offset: 2px; }
+.msg.assistant code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  background: var(--panel-sunken);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+.msg.assistant pre {
+  background: var(--panel-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 10px 12px;
+  margin: 8px 0;
+  overflow-x: auto;
+}
+.msg.assistant pre code { background: none; border: 0; padding: 0; }
+.msg.assistant blockquote {
+  margin: 8px 0;
+  padding: 2px 14px;
+  border-left: 2px solid var(--border-strong);
+  color: var(--muted);
+}
+.msg.assistant blockquote p { margin: 4px 0; }
+.msg.assistant hr { border: 0; border-top: 1px solid var(--border); margin: 14px 0; }
+.msg.assistant table { border-collapse: collapse; margin: 8px 0; font-size: 0.9em; }
+.msg.assistant th, .msg.assistant td { border: 1px solid var(--border); padding: 4px 10px; text-align: left; }
+.msg.assistant th { background: var(--panel-sunken); font-weight: 600; }
+
 /* Per-answer quality readout (IDEA.md §6).
    One ~20px line by default; the four detail rows are one click away. */
 /* The app went and looked again on its own, and says so.
