@@ -31,7 +31,7 @@ later brings your work with you.
 | **Web search** | Tavily | **Off unless you turn it on.** The last rung of the escalation ladder: reached only after your documents have been searched by ranking *and* word for word. Web passages are labelled in the answer and badged in the citation. Signed-in accounts only. |
 | **Tool router** | `models/gemini-3.5-flash-lite` (Google AI Studio) | Picks *which* tool to reach for when the app is about to refuse. A separate model on purpose: the answering model accepts a `tools` parameter and then never emits a call, verified live. ~0.7s, and nothing it produces is ever shown. |
 | **Generation** | `models/gemma-4-26b-a4b-it` (Google AI Studio) | Writes the answer from the retrieved passages, with inline citations. Kept over `gemini-3.5-flash-lite`, which scored 6.5 points lower on the golden set for no speed gain. |
-| **Judges** | Same model, LLM-as-judge | Scores each answer for faithfulness and relevancy, in a **second request** — grading costs more than answering, and you should not wait for it. A judge that fails reports `ungraded`, never `failed`. |
+| **Judges** | `models/gemini-3.5-flash-lite`, LLM-as-judge | A separate model on purpose: grading wants a terse verdict, and the writer is a thinking model whose trace bills against the token budget. Scores each answer for faithfulness and relevancy in a **second request** — grading costs more than answering, and you should not wait for it. A judge that fails reports `ungraded`, never `failed`. |
 | **Evaluation** | 56 golden questions over 27 documents | The scored result **ships with the app** — nobody runs a benchmark to see it. |
 | **CI gate** | GitHub Actions on push to main | Fails the build if retrieval regresses against a committed baseline. Passes loudly when a provider is down. |
 | **Auth** | Google OAuth + password fallback | Signed HTTP-only session cookie, plus a non-secret cookie so the page can paint identity before the server replies. |
@@ -130,7 +130,10 @@ disagreement.
 **Evaluation ships, it does not run.** 56 questions with known answers over 27
 documents, including questions the corpus deliberately cannot answer. The
 result is committed to the repo and rendered on first paint. Each answer you
-get is then drawn on the same bars, so "is this one normal?" is a glance.
+get is then drawn on the same bars, so "is this one normal?" is a glance. And a
+question the bank knows — the golden set, or the eight pairs over the sample
+documents a first visit starts on — is measured, not described: its rows show
+where the passage that actually answers it ranked.
 
 **Grading fails open.** A judge that times out is a broken grader, not a bad
 answer, so it reports `ungraded`. Rendering that as a failure would be a
@@ -159,7 +162,7 @@ In dev the pages are at `/`, `/app.html` and `/built.html` — the clean `/app`
 and `/built` paths are Vercel rewrites and do not exist on the Vite server.
 
 ```bash
-# Tests — no network, ~17s
+# Tests — no network, ~21s
 .venv/Scripts/python -m pytest tests/ -q
 
 # Screenshots: 3 pages x 5 breakpoints x 2 themes. Fails on overflow,
@@ -234,6 +237,9 @@ eval/
   corpus/            27 synthetic documents
   golden_set.jsonl   56 questions with known answers
   build_golden_set.py generates it, and proves every passage is verbatim
+  demo_golden.jsonl  8 more, over the two demo documents a first visit starts on
+  golden.py          matches a live chat question against both banks, so the
+                     scorecard's ranking rows measure instead of describe
   run_eval.py        the harness
   judges.py          LLM-as-judge
   metrics.py         retrieval metrics, cosine and exact
@@ -249,11 +255,11 @@ frontend/
   app.html           workspace      →  /app
   built.html         build write-up →  /built
   app.js, styles.css, landing.css, tokens.css
-tests/               317 tests, no network, ~17s
+tests/               361 tests, no network, ~21s
 shot.mjs             screenshots: 3 pages x 5 breakpoints x 2 themes
 layout_check.mjs     workspace layout behaviour a screenshot cannot see
 package.json         playwright, for those two checks only — not the app
-.github/workflows/   retrieval gate (push) · guest sweeper (every 15 min)
+.github/workflows/   retrieval gate (push) · guest sweeper (every 5 min)
 config.yaml          pipeline knobs
 ```
 

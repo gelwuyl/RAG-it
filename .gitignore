@@ -17,3 +17,7 @@ shot_*.png
 
 # Scratch files from agent sessions
 .claude_task*
+
+# Session-to-session handoff notes — machine-specific and operational
+# (credential state, deploy settings). Not repo documentation.
+HANDOFF.md
