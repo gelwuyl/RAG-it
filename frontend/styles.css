@@ -1263,6 +1263,7 @@ html[data-kind="guest"] .identity-hint .hint-badge { display: inline-block; }
      accent instead of sweeping it. */
   .score-row.is-waiting .score-bar::after { animation: none; width: 100%; opacity: 0.3; }
   .score-aside-wait,
+  .score-est-wait,
   .eval-dot[data-state="pending"] { animation: none; }
 }
 /* Muted while it is only showing the benchmark: nothing has been asked yet, so
@@ -1275,6 +1276,20 @@ html[data-kind="guest"] .identity-hint .hint-badge { display: inline-block; }
 .score-val.over  { color: var(--primary-ink); }
 .score-val.under { color: var(--muted); }
 .score-val.quiet { color: var(--faint); font-weight: 500; }
+/* Provenance tag inside the chip — where the number came from, in one word.
+   Three exist and every chip carries exactly one: gold (measured against the
+   matched golden question), judged (graded for this answer), bench (the
+   published benchmark alone). Deliberately the quietest thing on the row: the
+   value carries state (accent or muted), the tag carries provenance, and a
+   tag louder than its number would invert that. All three share ONE muted
+   treatment, and the word itself is the identity — provenance is never
+   encoded in a hue the reader has to learn. */
+.score-tag {
+  margin-left: 5px;
+  font-size: var(--text-nano); font-weight: 500;
+  letter-spacing: var(--tracking-telemetry); text-transform: uppercase;
+  color: var(--faint);
+}
 
 /* Latency has no counterpart in the benchmark: it is a speed, not a quality.
    Given its own line rather than drawn against a bar it does not belong on. */
@@ -1318,6 +1333,29 @@ html[data-kind="guest"] .identity-hint .hint-badge { display: inline-block; }
 .score-aside strong {
   color: var(--text); font-variant-numeric: tabular-nums; font-weight: 700;
 }
+
+/* The estimates strip — the four per-answer readings that are measured against
+   a proxy (a drafted reference, a rank of the passage that was used) rather
+   than against ground truth. Same register as the aside below it — mono, nano,
+   uppercase, faint — because the two lines are the same KIND of metadata:
+   readings with no benchmark counterpart. One step quieter than the aside on
+   purpose: its values take --muted instead of --text, so an estimate can never
+   out-shout a measured number on this pane. */
+.score-est {
+  display: flex; flex-wrap: wrap; align-items: baseline;
+  column-gap: 8px; row-gap: 3px;
+  padding-top: 9px; margin-top: 2px;
+  border-top: 1px dashed var(--border);
+  font-family: var(--font-mono); font-size: var(--text-nano);
+  letter-spacing: var(--tracking-telemetry); text-transform: uppercase;
+  color: var(--faint);
+}
+.score-est-pair { display: inline-flex; align-items: baseline; gap: 5px; }
+.score-est-pair strong {
+  color: var(--muted); font-weight: 700; font-variant-numeric: tabular-nums;
+}
+.score-est-sep { color: var(--border-strong); }
+.score-est-wait { animation: dot-pulse 1.2s ease-in-out infinite; }
 
 /* "compare" on the chip under an answer: the way back to an older answer's
    readings once a newer one has taken the bars. */

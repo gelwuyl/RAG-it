@@ -2689,8 +2689,10 @@ const LIVE_TO_BENCHMARK = {
 
 // Fields whose live reading is an ESTIMATE against a model-drafted or
 // reference-free proxy, not the golden-set statistic the benchmark row normally
-// reports. They borrow the row's bar; their foot line says what was actually
-// judged so an estimate never reads as a measured ground-truth score.
+// reports. An estimate never takes the row's bar or its chip: a bar this answer
+// fills is read against the benchmark tick, and a proxy judgement cannot
+// honour that comparison. These readings render in the estimates strip under
+// the bars instead (renderScorecard).
 const LIVE_ESTIMATED_FIELDS = new Set([
   "correct",
   "context_relevance",
@@ -2701,11 +2703,11 @@ const LIVE_ESTIMATED_FIELDS = new Set([
 // citation marker names the pool position of the passage the answer was built
 // from, which is MRR's per-question statistic (1/rank) and NDCG's (1/log2 of
 // rank, one relevant item). It measures ordering only — a relevant passage
-// that never came back is invisible to it — so its renderings always say
-// estimated. Hit rate has no estimate on purpose: the pool is already the
-// top-k cut, so a cited passage is inside k by construction and the reading
-// would be a tautology wearing a metric's clothes. It lights up only on a
-// gold match instead.
+// that never came back is invisible to it — so it renders in the estimates
+// strip, labelled estimated there. Hit rate has no estimate on purpose: the
+// pool is already the top-k cut, so a cited passage is inside k by
+// construction and the reading would be a tautology wearing a metric's
+// clothes. It lights up only on a gold match instead.
 const ESTIMATED_RANK_FIELDS = {
   mrr: "mrr_est",
   ndcg_at_k: "ndcg_est",
@@ -2732,6 +2734,10 @@ function renderScorecard(metrics, runMode) {
   const live = state.answerEval;
   let shown = 0;
   let anyLive = false;
+  // Did the estimates strip render? The legend may only mention the line when
+  // it is there — a judge that failed open leaves no readings and no line, and
+  // pointing at it anyway would be the quiet lie this pane exists to refuse.
+  let anyEst = false;
 
   // Emitted as the group CHANGES rather than looped per group, so a metric the
   // published run does not carry cannot leave an empty heading behind it.
@@ -2755,16 +2761,23 @@ function renderScorecard(metrics, runMode) {
     const field = Object.keys(LIVE_TO_BENCHMARK).find(
       (f) => LIVE_TO_BENCHMARK[f] === key,
     );
-    // Three kinds of live reading, in strict precedence — MEASURED beats
-    // estimated beats nothing:
+    // Two kinds of live reading reach a row, in strict precedence — MEASURED
+    // beats judged beats nothing. Estimates reach NO row: the strip under the
+    // bars carries them (below), because a bar this answer fills is read
+    // against the benchmark tick, and a proxy judgement cannot honour that
+    // comparison.
     //
     // gold — the asked question matched the golden bank (eval/golden.py), so
     // this row carries a reading measured against that question's KNOWN
     // passages. Its field names are the benchmark keys, so the lookup is
     // direct. Known-unanswerable matches instead carry a refusal verdict,
     // which only means something on the not-found row.
-    // judge — the per-answer verdicts fetched by the follow-up request.
-    // estimate — the citation-rank reading computed at answer time.
+    // judge — the per-answer verdicts fetched by the follow-up request. Only
+    // the two scored-judge fields qualify: the estimated fields are judged
+    // too, but what their judges grade is a proxy, so they are excluded.
+    const isEstRow =
+      (field != null && LIVE_ESTIMATED_FIELDS.has(field)) ||
+      ESTIMATED_RANK_FIELDS[key] != null;
     const gold = live?.gold;
     const goldV =
       gold && !gold.unanswerable && gold[key] != null ? gold[key] : null;
@@ -2772,18 +2785,16 @@ function renderScorecard(metrics, runMode) {
       gold && gold.unanswerable && key === "not_found_rate_unanswerables"
         ? gold.refused
         : null;
-    const judgeV = field ? liveValue(live, field) : null;
+    const judgeV = field && !isEstRow ? liveValue(live, field) : null;
     // A scored judge also emits a 0-1 reading (f"{field}_score"). The bar draws
     // THAT when present — 65% fills to 65 against the benchmark tick, instead
     // of a binary pass rendering as a flat 100%. No score (older graded
     // messages, or a judge that omitted the line) falls back to 100/0.
-    const judgeScore = field && live ? live[`${field}_score`] : null;
-    const estField = ESTIMATED_RANK_FIELDS[key];
-    const estV = estField && live ? live[estField] : null;
+    const judgeScore =
+      field && !isEstRow && live ? live[`${field}_score`] : null;
 
     let v = null;
     let score = null;
-    let isEst = false;
     let refused = null;
     if (goldV != null) {
       v = goldV;
@@ -2793,16 +2804,15 @@ function renderScorecard(metrics, runMode) {
     } else if (judgeV != null) {
       v = judgeV;
       score = judgeScore;
-    } else if (estV != null) {
-      v = estV;
-      isEst = true;
     }
     const hasLive = v != null;
     if (hasLive) anyLive = true;
-    // Only judge-graded rows wait on the follow-up request. Gold and estimate
-    // readings were computed when the answer was, so they render immediately
-    // even while the judges are still running.
-    const waiting = !hasLive && !!(live && live.pending) && !!field;
+    // Only judge-graded rows wait on the follow-up request. Gold readings were
+    // computed when the answer was, and the estimated rows never hold a
+    // reading here at all — theirs land in the strip, which has its own
+    // grading indicator — so neither may borrow the judge rows' waiting state.
+    const waiting =
+      !hasLive && !!(live && live.pending) && !!field && !isEstRow;
 
     const benchPct = Math.round(bench * 100);
     const livePct = hasLive ? Math.round((score != null ? score : v) * 100) : 0;
@@ -2815,7 +2825,7 @@ function renderScorecard(metrics, runMode) {
     // next to a 65%-full bar than "passed". A refusal verdict gets its own
     // words, because "passed" says nothing about what was actually right.
     const chip = hasLive
-      ? score != null || isEst || goldV != null
+      ? score != null || goldV != null
         ? `${livePct}%`
         : refused != null
           ? refused
@@ -2825,6 +2835,17 @@ function renderScorecard(metrics, runMode) {
       : waiting
         ? "grading…"
         : `${benchPct}%`;
+    // WHERE the number came from, on every chip without exception. The
+    // benchmark-only chip is the easy one to misread as this answer's grade —
+    // the quiet "bench" tag exists to stop exactly that reading. A pending
+    // judge row is tagged for the reading it is waiting for; gold wins over
+    // judged because measured beats judged in the precedence above.
+    const tag =
+      goldV != null || goldRefused != null
+        ? "gold"
+        : hasLive || waiting
+          ? "judged"
+          : "bench";
 
     const row = document.createElement("div");
     row.className =
@@ -2834,7 +2855,7 @@ function renderScorecard(metrics, runMode) {
         <span class="score-name">${t.label}<span class="score-sub">${t.sub}${
           t.from ? `<span class="score-from">${t.from}</span>` : ""
         }</span></span>
-        <span class="score-val ${hasLive ? (below ? "under" : "over") : "quiet"}">${chip}</span>
+        <span class="score-val ${hasLive ? (below ? "under" : "over") : "quiet"}">${chip}<span class="score-tag">${tag}</span></span>
       </div>
       <div class="score-bar-wrap">
         <div class="score-bar">
@@ -2857,32 +2878,17 @@ function renderScorecard(metrics, runMode) {
                     ? "refusing is correct"
                     : "this answer should have refused"
                 } · benchmark ${benchPct}%`
-              : isEst
-                ? // Estimated ordering: says exactly what was measured, because
-                  // a rank of the passage the answer USED is not the benchmark's
-                  // statistic — it cannot see passages that never came back.
-                  `passage cited ranked #${live.cited_rank} of ${live.pool_n} (estimated) · benchmark ${benchPct}%`
-                : LIVE_ESTIMATED_FIELDS.has(field)
-                  ? // Estimated: name what was actually judged. These borrow a row whose
-                    // benchmark is a ground-truth statistic; without this the reading
-                    // would claim the same evidence the benchmark had.
-                    `${
-                      field === "correct"
-                        ? "vs an answer drafted from your passages (estimated)"
-                        : field === "context_sufficiency"
-                          ? "passages look sufficient — no gold set to compare (estimated)"
-                          : "passages look on-topic — no gold set to compare (estimated)"
-                    } · benchmark ${benchPct}%`
-                  : `this answer ${livePct}% · benchmark ${benchPct}%`
+              : `this answer ${livePct}% · benchmark ${benchPct}%`
           : waiting
             ? `benchmark ${benchPct}% · waiting on the judge`
             : field
               ? `benchmark ${benchPct}%`
-              // Only two rows can still arrive here — hit rate (no estimate by
-              // construction: the pool is already the top-k cut) and the
-              // not-found rate (a rate over a set, so one answer cannot carry
-              // it). Both light up when the question matches the golden bank.
-              // Saying why beats leaving a row that looks broken.
+              // Every row without a live reading arrives here: hit rate and
+              // the not-found rate (no per-answer reading exists for either —
+              // the pool is already the top-k cut; a rate over a set), and the
+              // five estimate rows, whose readings moved to the strip below.
+              // All of them light up when the question matches the golden
+              // bank. Saying why beats leaving a row that looks broken.
               : `benchmark ${benchPct}% · needs a known answer`
       }</div>`;
     el.appendChild(row);
@@ -2891,6 +2897,58 @@ function renderScorecard(metrics, runMode) {
   if (!shown) {
     el.innerHTML = emptyState("◔", "", "No benchmark metrics available.");
     return;
+  }
+
+  // The four estimate readings, gathered onto ONE quiet line instead of
+  // borrowing benchmark rows. They are real readings — three judges and a
+  // citation rank, all paid for at answer time — but each is measured against
+  // a proxy (a drafted reference, a rank of the passage that was used), so
+  // none may fill a bar the reader reads against the benchmark tick. Landed
+  // readings only; the line exists while something has landed or is on its
+  // way, and is absent entirely once nothing is either.
+  if (live) {
+    // Prefer the judge's 0-1 score; a bare verdict (older graded messages)
+    // falls back to 100/0, same as the bars used to.
+    const estOf = (f) =>
+      live[`${f}_score`] != null ? live[`${f}_score`] : liveValue(live, f);
+    const estPairs = [];
+    if (estOf("context_sufficiency") != null)
+      estPairs.push(["sufficiency", fmtPct(estOf("context_sufficiency"))]);
+    if (estOf("context_relevance") != null)
+      estPairs.push(["on-topic", fmtPct(estOf("context_relevance"))]);
+    if (estOf("correct") != null)
+      estPairs.push(["vs drafted ref", fmtPct(estOf("correct"))]);
+    if (live.cited_rank != null)
+      estPairs.push([
+        "cited",
+        `#${live.cited_rank}${live.pool_n != null ? ` of ${live.pool_n}` : ""}`,
+      ]);
+    // The rank reading is computed when the answer is; the three judge
+    // estimates arrive with the follow-up request, so the line waits on those.
+    const estPending =
+      !!live.pending &&
+      ["context_sufficiency", "context_relevance", "correct"].some(
+        (f) => estOf(f) == null,
+      );
+    if (estPairs.length || estPending) {
+      // Remembered for the legend below: it may only point at this line when
+      // the line exists — a broken estimate judge leaves nothing to point at.
+      anyEst = true;
+      const strip = document.createElement("div");
+      strip.className = "score-est";
+      strip.innerHTML =
+        `<span class="score-est-lead">estimated for this answer</span>` +
+        estPairs
+          .map(
+            ([k, v]) =>
+              `<span class="score-est-pair"><span>${k}</span><strong>${v}</strong></span>`,
+          )
+          .join(`<span class="score-est-sep">·</span>`) +
+        (estPending
+          ? `<span class="score-est-sep">·</span><span class="score-est-pair"><span>grading</span><strong class="score-est-wait">…</strong></span>`
+          : "");
+      el.appendChild(strip);
+    }
   }
 
   // Similarity and latency have no benchmark counterpart. Similarity says how
@@ -2922,10 +2980,18 @@ function renderScorecard(metrics, runMode) {
 
   const legend = document.createElement("p");
   legend.className = "score-legend";
+  // The tags carry provenance on each chip; the legend is where a reader who
+  // doubts a number is sent, so it names all three and says where the
+  // estimates went.
   legend.textContent = anyLive
-    ? "Faithfulness and relevancy are judged directly for this answer; correctness and the retrieval rows marked estimated are judged without a gold reference (correctness scores against an answer drafted from your passages). Retrieval similarity is reported separately. The tick is that benchmark — a reference, not a pass mark."
+    ? "Each chip names its source: gold — measured against this question's known passages; judged — graded for this answer; bench — the published benchmark only." +
+      (anyEst
+        ? " Estimates for this answer never take a bar; they sit on the line below."
+        : "") +
+      " The tick is that benchmark — a reference, not a pass mark."
     : live?.top_sim != null
-      ? "Top retrieval similarity is reported separately. The live judges fill in when grading completes; correctness is estimated against a drafted reference rather than a gold answer."
+      ? "Top retrieval similarity is reported separately. The live judges fill the bars once grading completes." +
+        (anyEst ? " The line below gathers this answer's estimated readings." : "")
       : "Benchmark across the sample corpus. Ask a question and the live judges will show that answer against it once grading completes.";
   el.appendChild(legend);
 }
