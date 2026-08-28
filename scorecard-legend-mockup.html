@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scorecard — two bars + legend, response footer (mockup)</title>
+<style>
+  /* tokens.css values, inlined (light default, dark via [data-theme]) */
+  :root {
+    --font-sans: "Segoe UI", system-ui, -apple-system, "Inter", Roboto, Arial, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "JetBrains Mono", monospace;
+    --text-content: 19px; --text-prose: 16px; --text-body: 15px;
+    --text-sm: 14px; --text-xs: 13px; --text-micro: 12px; --text-nano: 11px;
+    --tracking: 0.12em;
+    --bg: #f4f5f7; --panel: #ffffff; --panel-sunken: #fafbfc;
+    --border: #e4e7ec; --border-strong: #d3d8e0;
+    --text: #1b1f24; --muted: #6b7280; --faint: #9aa1ac;
+    --primary: #a8e01f; --primary-ink: #4a6b00; --on-primary: #101a00;
+    --track: #eceef2; --bench: #98a2b3;
+    --pass: #344054; --pass-bg: #f2f4f7; --pass-border: #d3d8e0;
+    --fail: #d92d20; --fail-bg: #fef3f2; --fail-border: #fecdca;
+    --r-sm: 6px; --r-md: 10px; --r-lg: 14px; --r-pill: 999px;
+    --shadow-md: 0 2px 8px rgba(16,24,40,.06);
+  }
+  [data-theme="dark"] {
+    --bg: #06080b; --panel: #0d1219; --panel-sunken: #121821;
+    --border: #1d2530; --border-strong: #2b3644;
+    --text: #e7eef5; --muted: #8a97a7; --faint: #5d6875;
+    --primary: #c2f53f; --primary-ink: #c2f53f; --on-primary: #080d05;
+    --track: #1a222c; --bench: #46536a;
+    --pass: #e7eef5; --pass-bg: #151c25; --pass-border: #2b3644;
+    --fail: #ff6f61; --fail-bg: #27130f; --fail-border: #5a2a24;
+    --shadow-md: none;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 28px 20px 60px; background: var(--bg); color: var(--text);
+    font-family: var(--font-sans); font-size: var(--text-body);
+    transition: background .25s, color .25s;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; }
+  header { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; flex-wrap: wrap; margin-bottom: 8px; }
+  h1 { font-size: var(--text-content); margin: 0; letter-spacing: -.01em; }
+  .theme-btn {
+    font-family: var(--font-mono); font-size: var(--text-micro); letter-spacing: var(--tracking);
+    text-transform: uppercase; color: var(--text); background: var(--panel);
+    border: 1px solid var(--border-strong); border-radius: var(--r-pill); padding: 6px 14px; cursor: pointer;
+  }
+  .intro { max-width: 72ch; color: var(--muted); font-size: var(--text-prose); line-height: 1.6; margin: 6px 0 26px; }
+  .intro strong { color: var(--text); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 22px; align-items: start; }
+  .col h2 {
+    font-family: var(--font-mono); font-size: var(--text-micro); letter-spacing: var(--tracking);
+    text-transform: uppercase; color: var(--text); margin: 0 0 4px;
+  }
+  .col .why { font-size: var(--text-xs); color: var(--muted); line-height: 1.55; margin: 0 0 10px; min-height: 34px; }
+  .col.proposed h2 { color: var(--primary-ink); }
+  .col.proposed h2::after {
+    content: "proposed"; margin-left: 8px; padding: 1px 7px;
+    border: 1px solid var(--pass-border); border-radius: var(--r-pill);
+    color: var(--muted); font-size: var(--text-nano);
+  }
+
+  /* ---------- the scorecard, faithful to .score-* ---------- */
+  .card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: var(--r-lg);
+    box-shadow: var(--shadow-md); padding: 14px 16px 12px;
+  }
+  .score-group { margin-top: 6px; padding-top: 10px; border-top: 1px solid var(--border); }
+  .score-group:first-child { margin-top: 0; padding-top: 0; border-top: none; }
+  .score-group-head { display: flex; flex-direction: column; gap: 1px; margin-bottom: 8px; }
+  .score-group-name { font-family: var(--font-mono); font-size: var(--text-micro); letter-spacing: var(--tracking); text-transform: uppercase; }
+  .score-group-sub { font-size: var(--text-nano); color: var(--faint); }
+  .score-row { display: flex; flex-direction: column; gap: 3px; padding: 5px 0 7px; }
+  .score-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .score-name { font-family: var(--font-mono); font-size: var(--text-micro); font-weight: 500; letter-spacing: var(--tracking); text-transform: uppercase; color: var(--muted); }
+  .score-sub { color: var(--faint); text-transform: none; letter-spacing: 0; margin-left: 6px; font-size: var(--text-nano); }
+  .score-val { font-family: var(--font-mono); font-size: var(--text-sm); font-weight: 700; font-variant-numeric: tabular-nums; }
+  .score-val.over { color: var(--primary-ink); }
+  .score-val.quiet { color: var(--faint); font-weight: 500; }
+  .score-tag { margin-left: 5px; font-size: var(--text-nano); font-weight: 500; letter-spacing: var(--tracking); text-transform: uppercase; color: var(--faint); }
+  .score-bar-wrap { position: relative; height: 7px; margin: 3px 0 2px; }
+  .score-bar { position: relative; height: 7px; border-radius: var(--r-pill); background: var(--track); overflow: hidden; }
+  .score-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: var(--r-pill); background: var(--primary); }
+  .score-target { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--border-strong); }
+  [data-theme="dark"] .score-target { background: #46536a; }
+  .score-target::after {
+    content: attr(data-tip); position: absolute; top: -16px; left: 50%; transform: translateX(-50%);
+    font-family: var(--font-mono); font-size: 9px; color: var(--faint); white-space: nowrap;
+  }
+  .score-foot { font-family: var(--font-mono); font-size: var(--text-nano); letter-spacing: .04em; color: var(--faint); margin-top: 2px; }
+
+  /* ---------- today: pill rides the tick track ---------- */
+  .track-with-pill { position: relative; height: 20px; display: flex; align-items: center; margin: 2px 0 0; }
+  .track-with-pill .score-bar { position: absolute; left: 0; right: 0; }
+  .track-with-pill .score-target { top: 3px; bottom: 3px; }
+  .track-with-pill .pill { position: relative; z-index: 1; margin-left: 10px; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-family: var(--font-mono); font-size: var(--text-xs); font-weight: 700;
+    letter-spacing: .06em; text-transform: uppercase;
+    padding: 2px 10px; border-radius: var(--r-pill); border: 1px solid var(--pass-border);
+    background: var(--pass-bg); color: var(--pass);
+  }
+  .pill .glyph { font-size: var(--text-sm); line-height: 1; }
+  .pill.is-fail { background: var(--fail-bg); border-color: var(--fail-border); color: var(--fail); }
+  .pill .tag { font-size: var(--text-nano); font-weight: 500; letter-spacing: var(--tracking); color: var(--faint); }
+
+  /* ---------- PROPOSED: two stacked bars + legend ---------- */
+  .duo { display: flex; flex-direction: column; gap: 3px; margin: 4px 0 2px; }
+  .duo .score-bar { height: 6px; }
+  .duo .bench-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: var(--r-pill); background: var(--bench); }
+  .duo .score-bar.no-live { opacity: .55; }
+  .legend {
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    margin-top: 10px; padding: 7px 10px; border: 1px solid var(--border);
+    border-radius: var(--r-sm); background: var(--panel-sunken);
+  }
+  .legend .key { display: inline-flex; align-items: center; gap: 7px; font-family: var(--font-mono); font-size: var(--text-nano); letter-spacing: var(--tracking); text-transform: uppercase; color: var(--muted); }
+  .legend .swatch { width: 14px; height: 8px; border-radius: 4px; }
+  .legend .swatch.bench { background: var(--bench); }
+  .legend .swatch.live { background: var(--primary); }
+
+  /* ---------- PROPOSED: per-response footer strip ---------- */
+  .chat-demo { margin-top: 26px; display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 22px; align-items: start; }
+  .bubble {
+    background: var(--panel); border: 1px solid var(--border); border-radius: var(--r-lg);
+    box-shadow: var(--shadow-md); padding: 14px 16px; max-width: 560px;
+  }
+  .bubble .answer { font-size: var(--text-prose); line-height: 1.55; margin: 0 0 12px; }
+  .bubble .sources { font-family: var(--font-mono); font-size: var(--text-nano); letter-spacing: var(--tracking); text-transform: uppercase; color: var(--faint); display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .bubble .src-chip { border: 1px solid var(--border); border-radius: var(--r-pill); padding: 2px 9px; color: var(--muted); }
+  .msg-meta { display: flex; gap: 14px; flex-wrap: wrap; font-family: var(--font-mono); font-size: var(--text-nano); letter-spacing: var(--tracking); text-transform: uppercase; color: var(--faint); }
+  .msg-meta b { color: var(--muted); font-weight: 600; }
+</style>
+</head>
+<body data-theme="dark">
+<div class="wrap">
+  <header>
+    <h1>Scorecard: two bars + one legend, and the response footer</h1>
+    <button class="theme-btn" onclick="document.body.dataset.theme = document.body.dataset.theme === 'dark' ? 'light' : 'dark'">Toggle theme</button>
+  </header>
+  <p class="intro">
+    Two changes, both aimed at fewer words and less confusion. <strong>1)</strong> The slider-like benchmark
+    tick becomes a <strong>second, gray bar</strong> filled to the benchmark % — stacked above the lime bar —
+    and one <strong>legend</strong> at the panel bottom replaces all the repeated
+    “this answer 100% · benchmark 100%” wording. <strong>2)</strong> The timing strip at the bottom of the
+    evaluation panel (“top retrieval similarity · answered in · then graded in”) moves to under
+    <strong>every chat response</strong>, replacing the lone “grounded sim” line.
+  </p>
+
+  <div class="grid">
+    <!-- ============ TODAY ============ -->
+    <div class="col">
+      <h2>Today — ticks + repeated words</h2>
+      <p class="why">The thin tick reads like a draggable slider. Every row re-explains itself in the foot line.</p>
+      <div class="card">
+        <div class="score-group">
+          <div class="score-group-head"><span class="score-group-name">Retrieval</span><span class="score-group-sub">did the right passage come back?</span></div>
+          <div class="score-row">
+            <div class="score-head"><span class="score-name">Found the right passages<span class="score-sub">Context recall</span></span><span class="score-val over">100%<span class="score-tag">known</span></span></div>
+            <div class="score-bar-wrap"><div class="score-bar"><div class="score-fill" style="width:100%"></div></div><div class="score-target" style="left:84%"></div></div>
+            <div class="score-foot">golden #70 — measured against this question's known passages · benchmark 84%</div>
+          </div>
+          <div class="score-row">
+            <div class="score-head"><span class="score-name">Sent mostly relevant text<span class="score-sub">Precision@k</span></span><span class="score-val over">25%<span class="score-tag">known</span></span></div>
+            <div class="score-bar-wrap"><div class="score-bar"><div class="score-fill" style="width:25%"></div></div><div class="score-target" style="left:65%"></div></div>
+            <div class="score-foot">golden #70 — measured against this question's known passages · benchmark 65%</div>
+          </div>
+        </div>
+        <div class="score-group">
+          <div class="score-group-head"><span class="score-group-name">Generation</span><span class="score-group-sub">was the answer any good?</span></div>
+          <div class="score-row">
+            <div class="score-head"><span class="score-name">Stuck to the sources<span class="score-sub">Faithfulness</span></span><span class="score-val over">100%<span class="score-tag">judged</span></span></div>
+            <div class="score-bar-wrap"><div class="score-bar"><div class="score-fill" style="width:100%"></div></div><div class="score-target" style="left:100%"></div></div>
+            <div class="score-foot">this answer 100% · benchmark 100%</div>
+          </div>
+          <div class="score-row">
+            <div class="score-head"><span class="score-name">Admitted when it could not answer<span class="score-sub">Not-found rate</span></span><span class="score-val quiet">—<span class="score-tag">bench</span></span></div>
+            <div class="score-bar-wrap"><div class="score-bar"></div><div class="score-target" style="left:100%"></div></div>
+            <div class="score-foot">benchmark 100% · needs a known answer</div>
+          </div>
+        </div>
+        <div class="score-group">
+          <div class="score-group-head"><span class="score-group-name">Ranking</span><span class="score-group-sub">did it come back near the top?</span></div>
+          <div class="score-row">
+            <div class="score-head"><span class="score-name">Right passage made the cut<span class="score-sub">Hit rate@k</span></span></div>
+            <div class="track-with-pill">
+              <div class="score-bar"></div>
+              <div class="score-target" style="left:96%"></div>
+              <span class="pill"><span class="glyph">✓</span>made the cut<span class="tag">known</span></span>
+            </div>
+            <div class="score-foot">golden #70 — measured against this question's known passages · benchmark 96%</div>
+          </div>
+        </div>
+        <div class="msg-meta" style="margin-top:10px">Top retrieval similarity 0.45&nbsp;&nbsp;Answered in 4.8s&nbsp;&nbsp;Then graded in 5.4s</div>
+      </div>
+    </div>
+
+    <!-- ============ PROPOSED ============ -->
+    <div class="col proposed">
+      <h2>Proposed — two bars, one legend</h2>
+      <p class="why">Gray bar = the benchmark, filled to its %. Lime bar = this answer. The legend says it once;
+      the rows stop repeating it. Boolean rows keep their pill, riding the gray bar. Bench-only rows show only
+      the gray bar, dimmed.</p>
+      <div class="card">
+        <div class="score-group">
+          <div class="score-group-head"><span class="score-group-name">Retrieval</span><span class="score-group-sub">did the right passage come back?</span></div>
+          <div class="score-row">
+            <div class="score-head"><span class="score-name">Found the right passages<span class="score-sub">Context recall</span></span><span class="score-val over">100%<span class="score-tag">known</span></span></div>
+            <div class="duo">
+              <div class="score-bar"><div class="bench-fill" style="width:84%"></div></div>
+              <div class="score-bar"><div class="score-fill" style="width:100%"></div></div>
+            </div>
+            <div class="score-foot">golden #70 · known passages</div>
+          </div>
+          <div class="score-row">
+            <div class="score-head"><span class="score-name">Sent mostly relevant text<span class="score-sub">Precision@k</span></span><span class="score-val over">25%<span class="score-tag">known</span></span></div>
+            <div class="duo">
+              <div class="score-bar"><div class="bench-fill" style="width:65%"></div></div>
+              <div class="score-bar"><div class="score-fill" style="width:25%"></div></div>
+            </div>
+            <div class="score-foot">golden #70 · known passages</div>
+          </div>
+        </div>
+        <div class="score-group">
+          <div class="score-group-head"><span class="score-group-name">Generation</span><span class="score-group-sub">was the answer any good?</span></div>
+          <div class="score-row">
+            <div class="score-head"><span class="score-name">Stuck to the sources<span class="score-sub">Faithfulness</span></span><span class="score-val over">100%<span class="score-tag">judged</span></span></div>
+            <div class="duo">
+              <div class="score-bar"><div class="bench-fill" style="width:100%"></div></div>
+              <div class="score-bar"><div class="score-fill" style="width:100%"></div></div>
+            </div>
+            <div class="score-foot">graded against the benchmark</div>
+          </div>
+          <div class="score-row">
+            <div class="score-head"><span class="score-name">Admitted when it could not answer<span class="score-sub">Not-found rate</span></span><span class="score-val quiet">—<span class="score-tag">bench</span></span></div>
+            <div class="duo">
+              <div class="score-bar no-live"><div class="bench-fill" style="width:100%"></div></div>
+            </div>
+            <div class="score-foot">needs a known answer</div>
+          </div>
+        </div>
+        <div class="score-group">
+          <div class="score-group-head"><span class="score-group-name">Ranking</span><span class="score-group-sub">did it come back near the top?</span></div>
+          <div class="score-row">
+            <div class="score-head"><span class="score-name">Right passage made the cut<span class="score-sub">Hit rate@k</span></span></div>
+            <div class="track-with-pill">
+              <div class="score-bar"><div class="bench-fill" style="width:96%"></div></div>
+              <span class="pill"><span class="glyph">✓</span>made the cut<span class="tag">known</span></span>
+            </div>
+            <div class="score-foot">golden #70 · known passages</div>
+          </div>
+        </div>
+        <div class="legend">
+          <span class="key"><span class="swatch bench"></span>benchmark</span>
+          <span class="key"><span class="swatch live"></span>this answer</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ response footer ============ -->
+  <div class="chat-demo">
+    <div class="col">
+      <h2>Today — under one response</h2>
+      <p class="why">Only a similarity number, labelled in jargon.</p>
+      <div class="bubble">
+        <p class="answer">The Meridian opening checklist starts with the espresso machine: flush the group heads, check that the boiler pressure reads between 1.0 and 1.2 bar, and calibrate the grinder to a 27-second extraction. <sup>[1]</sup></p>
+        <div class="sources"><span class="src-chip">1 · meridian_coffee_ops.md</span></div>
+        <div class="msg-meta">Grounded sim 0.45</div>
+      </div>
+    </div>
+    <div class="col proposed">
+      <h2>Proposed — under every response</h2>
+      <p class="why">The evaluation panel's footer strip moves here: what the best passage scored, how long the
+      answer took, how long grading took. Shortened; appears on every response, graded or not.</p>
+      <div class="bubble">
+        <p class="answer">The Meridian opening checklist starts with the espresso machine: flush the group heads, check that the boiler pressure reads between 1.0 and 1.2 bar, and calibrate the grinder to a 27-second extraction. <sup>[1]</sup></p>
+        <div class="sources"><span class="src-chip">1 · meridian_coffee_ops.md</span></div>
+        <div class="msg-meta"><span>sim <b>0.45</b></span><span>answered <b>4.8s</b></span><span>graded <b>5.4s</b></span></div>
+      </div>
+    </div>
+  </div>
+
+  <p class="intro" style="margin-top:24px; font-size:var(--text-xs);">
+    Open questions the implementation must settle: what the strip shows while grading is still pending
+    (e.g. “graded —” or just omitting it); whether the comparison/compare affordance stays next to the strip.
+  </p>
+</div>
+</body>
+</html>

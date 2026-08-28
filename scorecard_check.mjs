@@ -25,11 +25,13 @@
  *      and keep their bars.
  *
  * Boolean live readings (refused/missed, made-the-cut/cut, and the binary
- * judge fallback) render as a pill riding the benchmark track: their rows
- * carry NO .score-fill and DO keep the .score-target tick. A ratio that
- * lands on 0 or 100 (context recall at 100%, MRR at 0%) is a real magnitude
- * and keeps its bar — the fixtures pin that distinction. Chips read the
- * VERDICT WORD and tag provenance "known" where they used to read "gold".
+ * judge fallback) render as a pill riding the GRAY benchmark bar: their rows
+ * carry a .bench-fill (the benchmark rate) but NO .score-fill (no live
+ * magnitude). Ratio rows carry BOTH bars — gray benchmark above lime live. A
+ * ratio that lands on 0 or 100 (context recall at 100%, MRR at 0%) is a real
+ * magnitude and keeps its live bar — the fixtures pin that distinction.
+ * Chips read the VERDICT WORD and tag provenance "known" where they used to
+ * read "gold". The legend at the panel bottom names the two bar colours once.
  *
  * Usage:  node scorecard_check.mjs [baseUrl]   (default http://localhost:5173)
  * Exits non-zero on the first failed assertion or on any page error.
@@ -45,7 +47,7 @@ function check(label, ok, detail = "") {
 }
 
 // The published-run metrics every bar needs. Values chosen so live readings
-// land both above and below the tick.
+// land both above and below their benchmark.
 const METRICS = {
   context_recall: 0.49, precision_at_k: 0.71,
   faithfulness: 0.86, answer_relevancy: 0.83, answer_correctness: 0.80,
@@ -202,7 +204,8 @@ async function fillPct(label) {
   return rowText(label).locator(".score-fill").evaluate((el) => el.style.width);
 }
 // The state pill a boolean live reading renders as, plus the two things that
-// must hold on its row: NO live fill, and the benchmark tick still present.
+// must hold on its row: NO live fill (the pill is the state mark, not a
+// magnitude), and the gray benchmark bar still present for it to ride.
 async function pillInfo(label) {
   const row = rowText(label);
   if ((await row.locator(".score-pill").count()) === 0) return null;
@@ -211,7 +214,7 @@ async function pillInfo(label) {
     text: lower(await pill.innerText()),
     fail: await pill.evaluate((el) => el.classList.contains("is-fail")),
     fills: await row.locator(".score-fill").count(),
-    targets: await row.locator(".score-target").count(),
+    benchFills: await row.locator(".bench-fill").count(),
   };
 }
 
@@ -234,15 +237,16 @@ check("A: tag is known", (await tagOf("Matched the expected answer")) === "known
   await tagOf("Matched the expected answer"));
 const footA = await footOf("Matched the expected answer");
 check("A: footer names the known answer and the golden entry",
-  footA.includes("judged vs this question's known answer") && footA.includes("golden #64"), footA);
+  footA.includes("known answer") && footA.includes("golden #64"), footA);
 check("A: footer does not claim passage measurement",
-  !footA.includes("measured against this question's known passages"), footA);
+  !footA.includes("known passages"), footA);
 const estA = lower(await page.locator(".score-est").innerText().catch(() => ""));
 check("A: strip has no 'vs drafted ref'", !estA.includes("vs drafted ref"), estA);
 check("A: strip still carries the cited-rank estimate", estA.includes("cited"), estA);
 // Gold retrieval rows still measured, from the same answer's gold entry.
 check("A: retrieval recall row stays gold-measured",
-  (await footOf("Found the right passages")).includes("measured against this question's known passages"),
+  (await footOf("Found the right passages")).includes("golden #64") &&
+    (await footOf("Found the right passages")).includes("known passages"),
   await footOf("Found the right passages"));
 check("A: faithfulness row is judged",
   (await tagOf("Stuck to the sources")) === "judged", await tagOf("Stuck to the sources"));
@@ -252,9 +256,9 @@ const hit = await pillInfo("Right passage made the cut");
 check("A: hit-rate gold reading renders as a neutral pass pill",
   !!hit && !hit.fail && hit.text.includes("made the cut") && hit.text.includes("✓"),
   hit && hit.text);
-check("A: hit-rate row has NO live fill and keeps the benchmark tick",
-  !!hit && hit.fills === 0 && hit.targets === 1,
-  hit && `fills=${hit.fills} targets=${hit.targets}`);
+check("A: hit-rate row has NO live fill and rides the gray benchmark bar",
+  !!hit && hit.fills === 0 && hit.benchFills === 1,
+  hit && `fills=${hit.fills} benchFills=${hit.benchFills}`);
 check("A: hit-rate chip says the verdict, not 100%",
   !(await chipOf("Right passage made the cut")).includes("100%") &&
     (await chipOf("Right passage made the cut")).includes("made the cut"),
@@ -263,11 +267,12 @@ check("A: hit-rate foot keeps the golden pointer (unchanged by design)",
   (await footOf("Right passage made the cut")).includes("golden #64"),
   await footOf("Right passage made the cut"));
 const recallRow = rowText("Found the right passages");
-check("A: recall at a true 100% keeps its bar (a ratio, not a state)",
+check("A: recall at a true 100% keeps its live bar (a ratio, not a state)",
   (await recallRow.locator(".score-fill").count()) === 1 &&
     (await recallRow.locator(".score-pill").count()) === 0 &&
+    (await recallRow.locator(".bench-fill").count()) === 1 &&
     (await fillPct("Found the right passages")) === "100%",
-  `fills=${await recallRow.locator(".score-fill").count()} pills=${await recallRow.locator(".score-pill").count()}`);
+  `fills=${await recallRow.locator(".score-fill").count()} pills=${await recallRow.locator(".score-pill").count()} benchFills=${await recallRow.locator(".bench-fill").count()}`);
 
 // ---------- B. drafted-reference: the strip keeps it, the bar stays benchmark ----------
 await clickChip("m2");
@@ -277,6 +282,12 @@ check("B: correctness tag is bench", (await tagOf("Matched the expected answer")
   await tagOf("Matched the expected answer"));
 check("B: correctness chip is the benchmark", (await chipOf("Matched the expected answer")).includes("80%"),
   await chipOf("Matched the expected answer"));
+// No live reading: the row shows the gray benchmark bar alone, dimmed.
+check("B: bench-only row dims its single gray bar",
+  (await rowA.locator(".bench-fill").count()) === 1 &&
+    (await rowA.locator(".score-fill").count()) === 0 &&
+    (await rowA.locator(".score-bar.no-live").count()) === 1,
+  `benchFills=${await rowA.locator(".bench-fill").count()} fills=${await rowA.locator(".score-fill").count()} noLive=${await rowA.locator(".score-bar.no-live").count()}`);
 const estB = lower(await page.locator(".score-est").innerText());
 check("B: strip carries 'vs drafted ref'", estB.includes("vs drafted ref"), estB);
 check("B: drafted binary verdict renders as 100%", estB.includes("100%"), estB);
@@ -314,9 +325,9 @@ check("E: refusal renders as a NEUTRAL pass pill on the track",
   !!refusedPill && !refusedPill.fail && refusedPill.text.includes("refused") &&
     refusedPill.text.includes("✓"),
   refusedPill && refusedPill.text);
-check("E: refusal row has NO live fill and keeps the benchmark tick",
-  !!refusedPill && refusedPill.fills === 0 && refusedPill.targets === 1,
-  refusedPill && `fills=${refusedPill.fills} targets=${refusedPill.targets}`);
+check("E: refusal row has NO live fill and rides the gray benchmark bar",
+  !!refusedPill && refusedPill.fills === 0 && refusedPill.benchFills === 1,
+  refusedPill && `fills=${refusedPill.fills} benchFills=${refusedPill.benchFills}`);
 
 // ---------- F. judge graded binary without a score: pills, not 100/0 fills ----------
 await clickChip("m6");
@@ -325,20 +336,20 @@ check("F: faithfulness binary verdict renders as a pass pill",
   !!faithPill && !faithPill.fail && faithPill.text.includes("passed") &&
     faithPill.text.includes("✓"),
   faithPill && faithPill.text);
-check("F: faithfulness row has NO live fill and keeps the benchmark tick",
-  !!faithPill && faithPill.fills === 0 && faithPill.targets === 1,
-  faithPill && `fills=${faithPill.fills} targets=${faithPill.targets}`);
+check("F: faithfulness row has NO live fill and rides the gray benchmark bar",
+  !!faithPill && faithPill.fills === 0 && faithPill.benchFills === 1,
+  faithPill && `fills=${faithPill.fills} benchFills=${faithPill.benchFills}`);
 check("F: faithfulness tag is judged",
   (await tagOf("Stuck to the sources")) === "judged", await tagOf("Stuck to the sources"));
 const relPill = await pillInfo("Answered what was asked");
 check("F: relevancy binary verdict renders as a FAIL pill",
   !!relPill && relPill.fail && relPill.text.includes("failed") && relPill.text.includes("✗"),
   relPill && relPill.text);
-check("F: relevancy row has NO live fill and keeps the benchmark tick",
-  !!relPill && relPill.fills === 0 && relPill.targets === 1,
-  relPill && `fills=${relPill.fills} targets=${relPill.targets}`);
-check("F: foot states the verdict, not a phantom percent",
-  (await footOf("Answered what was asked")).includes("this answer failed"),
+check("F: relevancy row has NO live fill and rides the gray benchmark bar",
+  !!relPill && relPill.fills === 0 && relPill.benchFills === 1,
+  relPill && `fills=${relPill.fills} benchFills=${relPill.benchFills}`);
+check("F: foot names the benchmark, not a phantom verdict",
+  (await footOf("Answered what was asked")).includes("graded against the benchmark"),
   await footOf("Answered what was asked"));
 
 // ---------- G. known-unanswerable, missed: the ✗ polarity ----------
@@ -348,9 +359,9 @@ check("G: a missed refusal renders as a FAIL pill",
   !!missedPill && missedPill.fail && missedPill.text.includes("missed") &&
     missedPill.text.includes("✗"),
   missedPill && missedPill.text);
-check("G: missed row has NO live fill and keeps the benchmark tick",
-  !!missedPill && missedPill.fills === 0 && missedPill.targets === 1,
-  missedPill && `fills=${missedPill.fills} targets=${missedPill.targets}`);
+check("G: missed row has NO live fill and rides the gray benchmark bar",
+  !!missedPill && missedPill.fills === 0 && missedPill.benchFills === 1,
+  missedPill && `fills=${missedPill.fills} benchFills=${missedPill.benchFills}`);
 check("G: tag is known",
   (await tagOf("Admitted when it could not answer")) === "known",
   await tagOf("Admitted when it could not answer"));
@@ -365,16 +376,16 @@ check("H: a cut hit rate renders as a FAIL pill",
   !!cutPill && cutPill.fail && cutPill.text.includes("cut") &&
     !cutPill.text.includes("made") && cutPill.text.includes("✗"),
   cutPill && cutPill.text);
-check("H: cut row has NO live fill and keeps the benchmark tick",
-  !!cutPill && cutPill.fills === 0 && cutPill.targets === 1,
-  cutPill && `fills=${cutPill.fills} targets=${cutPill.targets}`);
+check("H: cut row has NO live fill and rides the gray benchmark bar",
+  !!cutPill && cutPill.fills === 0 && cutPill.benchFills === 1,
+  cutPill && `fills=${cutPill.fills} benchFills=${cutPill.benchFills}`);
 check("H: cut chip says the verdict, not 0%",
   !(await chipOf("Right passage made the cut")).includes("0%") &&
     (await chipOf("Right passage made the cut")).includes("cut"),
   await chipOf("Right passage made the cut"));
 check("H: foot keeps the provenance — the pill owns the verdict, not the foot",
   (await footOf("Right passage made the cut")).includes("golden #72") &&
-    (await footOf("Right passage made the cut")).includes("measured against this question's known passages") &&
+    (await footOf("Right passage made the cut")).includes("known passages") &&
     !/\bthis answer\b/.test(await footOf("Right passage made the cut")),
   await footOf("Right passage made the cut"));
 check("H: tag is known", (await tagOf("Right passage made the cut")) === "known",
@@ -385,12 +396,41 @@ check("H: MRR at a true 0% keeps its bar (a ratio, not a state)",
     (await mrrRow.locator(".score-pill").count()) === 0,
   `fills=${await mrrRow.locator(".score-fill").count()} pills=${await mrrRow.locator(".score-pill").count()}`);
 
-// ---------- provenance legend ----------
-const legend = await page.locator(".score-legend").innerText();
-check("legend names both known readings",
-  legend.includes("known passages or known answer"), legend);
-check("legend leads with the known tag (renamed from gold)",
-  legend.includes("known — measured against"), legend);
+// ---------- colour legend ----------
+// Two swatches, named once: gray = benchmark, lime = this answer. They
+// replaced both the per-row "· benchmark N%" foot suffixes and the old prose
+// provenance paragraph — the feet and the tags still carry provenance words.
+const legend = page.locator(".score-legend");
+check("legend names the benchmark and this answer",
+  lower(await legend.innerText()).includes("benchmark") &&
+    lower(await legend.innerText()).includes("this answer"),
+  await legend.innerText());
+check("legend carries exactly two swatches with the two bar colours",
+  (await legend.locator(".score-legend-swatch.bench").count()) === 1 &&
+    (await legend.locator(".score-legend-swatch.live").count()) === 1,
+  `bench=${await legend.locator(".score-legend-swatch.bench").count()} live=${await legend.locator(".score-legend-swatch.live").count()}`);
+// The two colours, in BOTH themes — the legend is the only place the two bar
+// colours are named, so it has to carry the right token in each theme.
+// Light: --bench #98a2b3 / --primary #a8e01f. Dark: --bench #46536a /
+// --primary #c2f53f.
+for (const [theme, benchRGB, liveRGB] of [
+  ["dark", "rgb(70, 83, 106)", "rgb(194, 245, 63)"],
+  ["light", "rgb(152, 162, 179)", "rgb(168, 224, 31)"],
+]) {
+  const benchColor = await legend.locator(".score-legend-swatch.bench")
+    .evaluate(async (el, t) => {
+      document.documentElement.setAttribute("data-theme", t);
+      await new Promise((r) => requestAnimationFrame(r));
+      return getComputedStyle(el).backgroundColor;
+    }, theme);
+  const liveColor = await legend.locator(".score-legend-swatch.live")
+    .evaluate((el) => getComputedStyle(el).backgroundColor);
+  check(`legend swatches carry the right tokens in ${theme} theme`,
+    benchColor === benchRGB && liveColor === liveRGB,
+    `bench=${benchColor} live=${liveColor}`);
+}
+await page.evaluate(() =>
+  document.documentElement.setAttribute("data-theme", "dark"));
 
 // ---------- layout: no horizontal overflow at desktop and 375px ----------
 for (const [w, h, name] of [[1600, 900, "desktop"], [375, 812, "375px"]]) {

@@ -126,7 +126,8 @@
   --hover-soft: #eef0f3;    /* icon buttons, switches, chips */
   --hover-strong: #eceef2;  /* list rows */
   --track: #eceef2;         /* score-bar groove */
-  --inverse-bg: #101828;    /* toast surface, score target marker */
+  --bench: #98a2b3;         /* scorecard benchmark bar — the gray the legend names */
+  --inverse-bg: #101828;    /* toast surface */
   --overlay: rgba(16, 24, 40, 0.4);
 
   /* ---------- semantic status ---------- */
@@ -263,6 +264,7 @@
   --hover-soft: #151c25;
   --hover-strong: #1a222c;
   --track: #1a222c;
+  --bench: #46536a;
   /* Inverted in dark: the toast becomes a light surface on a dark app. */
   --inverse-bg: #e7eef5;
   --overlay: rgba(2, 4, 7, 0.72);

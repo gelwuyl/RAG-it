@@ -16,7 +16,9 @@ export default {
     },
   },
   server: {
-    port: 5173,
+    // Honour the PORT the host environment assigns (preview tooling sets it);
+    // 5173 stays the default for a bare `npm run dev`.
+    port: Number(process.env.PORT) || 5173,
     allowedHosts: [".mrchloep.com"],
     // This workspace can exhaust its inotify watcher limit; poll instead so
     // the dev server doesn't crash with ENOSPC. Hot reload still works.

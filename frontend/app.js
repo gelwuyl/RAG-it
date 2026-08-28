@@ -2256,12 +2256,8 @@ function buildEvalBlock(evalData, evalLine) {
     const nudge = currentBeat() === 4
       ? `<span class="eval-nudge">what is this?</span>`
       : "";
-    const sim = evalData.top_sim;
-    const simText = sim != null
-      ? `<span class="eval-meter-val" title="Top retrieval similarity">sim ${sim.toFixed(2)}</span>`
-      : "";
     chip.innerHTML = `<span class="eval-dot" data-state="${verdict}" aria-hidden="true"></span>
-      <span class="eval-state">${escapeHtml(word)}</span>${simText}${nudge}
+      <span class="eval-state">${escapeHtml(word)}</span>${nudge}
       <span class="eval-chip-cta">compare</span>`;
 
     chip.onclick = () => {
@@ -2270,6 +2266,30 @@ function buildEvalBlock(evalData, evalLine) {
       chip.querySelector(".eval-nudge")?.remove();
     };
     wrap.appendChild(chip);
+
+    // The timing strip — what the best passage scored, how long the answer
+    // took, how long grading took — moved here from the evaluation panel's
+    // footer, so every response carries its own readings instead of only the
+    // most recent one having them on the bars. Pending grading is a dash, not
+    // a fake number and not a failure: the deferred grade fills the slot in
+    // when it lands (fetchGrade rebuilds this whole block).
+    const meta = document.createElement("div");
+    meta.className = "msg-meta";
+    const pairs = [];
+    if (evalData.top_sim != null)
+      pairs.push(["sim", evalData.top_sim.toFixed(2)]);
+    if (evalData.latency_ms != null)
+      pairs.push(["answered", `${(evalData.latency_ms / 1000).toFixed(1)}s`]);
+    pairs.push([
+      "graded",
+      !evalData.pending && evalData.grade_ms != null && evalData.grade_ms > 0
+        ? `${(evalData.grade_ms / 1000).toFixed(1)}s`
+        : "—",
+    ]);
+    meta.innerHTML = pairs
+      .map(([k, v]) => `<span>${k} <b>${v}</b></span>`)
+      .join("");
+    wrap.appendChild(meta);
     // A missing verdict is not a failed answer. Once the bounded retry budget is
     // exhausted, name the unavailable judge and its actual provider error so the
     // reader can distinguish a grading outage from a quality finding.
@@ -2602,7 +2622,8 @@ function fmtPct(v) {
 //
 // Context recall asks whether known answer passages were retrieved. A normal
 // chat has no gold passages, so its top query-to-passage similarity must never
-// impersonate Context Recall. Similarity is reported separately below instead.
+// impersonate Context Recall. Similarity is reported under each response
+// instead, on the timing strip.
 const LIVE_TO_BENCHMARK = {
   faithful: "faithfulness",
   relevant: "answer_relevancy",
@@ -2614,7 +2635,7 @@ const LIVE_TO_BENCHMARK = {
 // Fields whose live reading is an ESTIMATE against a model-drafted or
 // reference-free proxy, not the golden-set statistic the benchmark row normally
 // reports. An estimate never takes the row's bar or its chip: a bar this answer
-// fills is read against the benchmark tick, and a proxy judgement cannot
+// fills is read against the benchmark bar, and a proxy judgement cannot
 // honour that comparison. These readings render in the estimates strip under
 // the bars instead (renderScorecard).
 //
@@ -2662,11 +2683,6 @@ function renderScorecard(metrics, runMode) {
   el.innerHTML = "";
   const live = state.answerEval;
   let shown = 0;
-  let anyLive = false;
-  // Did the estimates strip render? The legend may only mention the line when
-  // it is there — a judge that failed open leaves no readings and no line, and
-  // pointing at it anyway would be the quiet lie this pane exists to refuse.
-  let anyEst = false;
   // A matched demo-bank question grades correctness against the question's
   // HUMAN known answer (the eval payload carries the reference plus
   // expected_source: "bank"), not against a drafted one — so that reading is
@@ -2698,7 +2714,7 @@ function renderScorecard(metrics, runMode) {
     // Two kinds of live reading reach a row, in strict precedence — MEASURED
     // beats judged beats nothing. Estimates reach NO row: the strip under the
     // bars carries them (below), because a bar this answer fills is read
-    // against the benchmark tick, and a proxy judgement cannot honour that
+    // against the benchmark bar, and a proxy judgement cannot honour that
     // comparison.
     //
     // gold — the asked question matched the golden bank (eval/golden.py), so
@@ -2724,7 +2740,7 @@ function renderScorecard(metrics, runMode) {
         : null;
     const judgeV = field && !isEstRow ? liveValue(live, field) : null;
     // A scored judge also emits a 0-1 reading (f"{field}_score"). The bar draws
-    // THAT when present — 65% fills to 65 against the benchmark tick, instead
+    // THAT when present — 65% fills to 65 against the benchmark bar, instead
     // of a binary pass rendering as a flat 100%. No score (older graded
     // messages, or a judge that omitted the line) falls back to 100/0.
     const judgeScore =
@@ -2744,8 +2760,8 @@ function renderScorecard(metrics, runMode) {
     }
     // Three live readings are structurally YES/NO, and a full or empty bar
     // would claim a magnitude none of them has — a 0-or-100 verdict is a
-    // state, not a ratio. They render as a pill riding the benchmark track:
-    // the track and its tick keep encoding the BENCHMARK rate alone. This is
+    // state, not a ratio. They render as a pill riding the benchmark bar:
+    // the gray fill keeps encoding the BENCHMARK rate alone. This is
     // deliberately not "any reading that lands on 0 or 100" — context recall
     // at 100% is a real ratio and keeps its bar.
     const pill =
@@ -2757,7 +2773,6 @@ function renderScorecard(metrics, runMode) {
             ? { ok: judgeV === 1, word: judgeV === 1 ? "passed" : "failed" }
             : null;
     const hasLive = v != null;
-    if (hasLive) anyLive = true;
     // Only judge-graded rows wait on the follow-up request. Gold readings were
     // computed when the answer was, and the estimated rows never hold a
     // reading here at all — theirs land in the strip, which has its own
@@ -2818,48 +2833,51 @@ function renderScorecard(metrics, runMode) {
       </div>
       ${
         pill
-          ? // A boolean reading takes no fill: the track and tick encode the
-            // benchmark rate alone, and the pill is the state mark where the
-            // fill used to be.
+          ? // A boolean reading takes no lime fill: the gray bar encodes the
+            // benchmark rate alone, and the pill is the state mark riding it.
             `<div class="score-bar-wrap has-pill">
-              <div class="score-bar"></div>
-              <div class="score-target" style="left:${Math.min(100, benchPct)}%"
-                   title="benchmark ${benchPct}%"></div>
+              <div class="score-bar">
+                <div class="bench-fill" style="width:${Math.min(100, benchPct)}%"
+                     title="benchmark ${benchPct}%"></div>
+              </div>
               <span class="score-pill${pill.ok ? "" : " is-fail"}"><span class="score-pill-glyph">${pill.ok ? "✓" : "✗"}</span>${pill.word}</span>
             </div>`
-          : `<div class="score-bar-wrap">
-              <div class="score-bar">
-                <div class="score-fill ${hasLive ? "live" : "bench"}"
-                     style="width:${Math.min(100, hasLive ? livePct : benchPct)}%"></div>
-              </div>
-              <div class="score-target" style="left:${Math.min(100, benchPct)}%"
-                   title="benchmark ${benchPct}%"></div>
+          : // Two stacked bars, one legend at the panel bottom: gray filled to
+            // the benchmark, lime to this answer. A row with no live reading
+            // shows the gray bar alone, dimmed — the legend says what gray is,
+            // so the rows stopped repeating "benchmark N%" in their feet.
+            `<div class="duo">
+              <div class="score-bar${hasLive ? "" : " no-live"}">
+                <div class="bench-fill" style="width:${Math.min(100, benchPct)}%"
+                     title="benchmark ${benchPct}%"></div>
+              </div>${
+                hasLive
+                  ? `<div class="score-bar">
+                      <div class="score-fill live" style="width:${Math.min(100, livePct)}%"></div>
+                    </div>`
+                  : ""
+              }
             </div>`
       }
       <div class="score-foot">${
         hasLive
           ? goldV != null
-            ? // Measured: the question matched the golden bank, so these are
-              // readings against known passages — the same ground truth the
-              // benchmark had. Saying which question keeps it auditable.
-              `golden #${gold.idx} — measured against this question's known passages · benchmark ${benchPct}%`
+            ? // Measured against the golden bank's known passages. The #idx
+              // keeps it auditable; the legend carries what the bars mean.
+              `golden #${gold.idx} · known passages`
             : bankCorrect
-              ? // A judge score against the bank's HUMAN reference — truth,
-                // but a judgement, not a retrieval measurement, so the words
-                // say exactly that.
-                `golden #${gold?.idx ?? "?"} — judged vs this question's known answer · benchmark ${benchPct}%`
+              ? // A judge score against the bank's HUMAN reference — the
+                // golden id still says where the truth came from.
+                `golden #${gold?.idx ?? "?"} · known answer`
               : refused != null
               ? `this question has no document answer — ${
                   refused
                     ? "refusing is correct"
                     : "this answer should have refused"
-                } · benchmark ${benchPct}%`
-              : pill
-                ? // A binary judge verdict: the word, not a phantom 100/0.
-                  `this answer ${pill.word} · benchmark ${benchPct}%`
-                : `this answer ${livePct}% · benchmark ${benchPct}%`
+                }`
+              : `graded against the benchmark`
           : waiting
-            ? `benchmark ${benchPct}% · waiting on the judge`
+            ? `waiting on the judge`
             : field
               ? `benchmark ${benchPct}%`
               // Every row without a live reading arrives here: hit rate and
@@ -2868,7 +2886,7 @@ function renderScorecard(metrics, runMode) {
               // five estimate rows, whose readings moved to the strip below.
               // All of them light up when the question matches the golden
               // bank. Saying why beats leaving a row that looks broken.
-              : `benchmark ${benchPct}% · needs a known answer`
+              : `needs a known answer`
       }</div>`;
     el.appendChild(row);
   }
@@ -2882,7 +2900,7 @@ function renderScorecard(metrics, runMode) {
   // borrowing benchmark rows. They are real readings — three judges and a
   // citation rank, all paid for at answer time — but each is measured against
   // a proxy (a drafted reference, a rank of the passage that was used), so
-  // none may fill a bar the reader reads against the benchmark tick. Landed
+  // none may fill a bar the reader reads against the benchmark bar. Landed
   // readings only; the line exists while something has landed or is on its
   // way, and is absent entirely once nothing is either.
   if (live) {
@@ -2916,9 +2934,6 @@ function renderScorecard(metrics, runMode) {
         : ["context_sufficiency", "context_relevance", "correct"]
       ).some((f) => estOf(f) == null);
     if (estPairs.length || estPending) {
-      // Remembered for the legend below: it may only point at this line when
-      // the line exists — a broken estimate judge leaves nothing to point at.
-      anyEst = true;
       const strip = document.createElement("div");
       strip.className = "score-est";
       strip.innerHTML =
@@ -2936,48 +2951,16 @@ function renderScorecard(metrics, runMode) {
     }
   }
 
-  // Similarity and latency have no benchmark counterpart. Similarity says how
-  // close the best retrieved passage was to the query; it cannot say whether
-  // every required answer passage was found, which is what Context Recall does.
-  if (live && (live.latency_ms != null || live.top_sim != null)) {
-    const t = document.createElement("div");
-    t.className = "score-aside";
-    const secs = (ms) => `${(ms / 1000).toFixed(1)}s`;
-    const readings = [];
-    if (live.top_sim != null) {
-      readings.push(`<span class="score-aside-pair"><span>Top retrieval similarity</span>` +
-        `<strong>${live.top_sim.toFixed(2)}</strong></span>`);
-    }
-    if (live.latency_ms != null) {
-      readings.push(`<span class="score-aside-pair"><span>Answered in</span>` +
-        `<strong>${secs(live.latency_ms)}</strong></span>`);
-    }
-    if (live.pending) {
-      readings.push(`<span class="score-aside-pair"><span>grading</span>` +
-        `<strong class="score-aside-wait">…</strong></span>`);
-    } else if (live.grade_ms != null && live.grade_ms > 0) {
-      readings.push(`<span class="score-aside-pair"><span>then graded in</span>` +
-        `<strong>${secs(live.grade_ms)}</strong></span>`);
-    }
-    t.innerHTML = readings.join("");
-    el.appendChild(t);
-  }
-
-  const legend = document.createElement("p");
+  // One legend, once, at the bottom of the panel: the gray bar is the
+  // benchmark, the lime bar is this answer. It replaced both the per-row
+  // "· benchmark N%" foot suffixes and the prose paragraph that used to
+  // gloss the tick — the rows' feet and the provenance tags still say where
+  // each number came from, so the colours are all this box needs to name.
+  const legend = document.createElement("div");
   legend.className = "score-legend";
-  // The tags carry provenance on each chip; the legend is where a reader who
-  // doubts a number is sent, so it names all three and says where the
-  // estimates went.
-  legend.textContent = anyLive
-    ? "Each chip names its source: known — measured against this question's known passages or known answer; judged — graded for this answer; bench — the published benchmark only." +
-      (anyEst
-        ? " Estimates for this answer never take a bar; they sit on the line below."
-        : "") +
-      " The tick is that benchmark — a reference, not a pass mark."
-    : live?.top_sim != null
-      ? "Top retrieval similarity is reported separately. The live judges fill the bars once grading completes." +
-        (anyEst ? " The line below gathers this answer's estimated readings." : "")
-      : "Benchmark across the sample corpus. Ask a question and the live judges will show that answer against it once grading completes.";
+  legend.innerHTML =
+    `<span class="score-legend-key"><span class="score-legend-swatch bench"></span>benchmark</span>` +
+    `<span class="score-legend-key"><span class="score-legend-swatch live"></span>this answer</span>`;
   el.appendChild(legend);
 }
 

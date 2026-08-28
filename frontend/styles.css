@@ -1035,22 +1035,7 @@ html[data-kind="guest"] .identity-hint .hint-badge { display: inline-block; }
   background: none; border: 1px solid var(--faint);
 }
 .eval-state { flex-shrink: 0; }
-.eval-meter {
-  position: relative;
-  flex: 1; min-width: 40px; max-width: 160px;
-  height: 3px; border-radius: var(--r-pill);
-  background: var(--track);
-  overflow: hidden;
-}
-.eval-meter-fill {
-  position: absolute; left: 0; top: 0; bottom: 0;
-  background: var(--muted); border-radius: var(--r-pill);
-}
-.eval-meter-tick {
-  position: absolute; top: -2px; bottom: -2px; width: 1px;
-  background: var(--text); opacity: 0.5;
-}
-.eval-meter-val { flex-shrink: 0; font-variant-numeric: tabular-nums; }
+
 /* Beat 4 of the loop (§5). The readout is the last beat and the only one with no
    empty state left to explain it, so the nudge rides on the chip itself — once,
    until the detail is opened for the first time. */
@@ -1248,26 +1233,27 @@ html[data-kind="guest"] .identity-hint .hint-badge { display: inline-block; }
 .score-fill.fail { background: var(--fail); }
 
 /* ---------- one axis, two readings ----------
-   The bar is the ANSWER just given; the tick is the benchmark across the
-   sample corpus. They used to live in different places — averages in this
-   pane, per-answer scores under each message — so a reader held two sets of
-   numbers and no relationship between them.
+   The lime bar is the ANSWER just given; the gray bar above it is the
+   benchmark across the sample corpus. They used to live in different places —
+   averages in this pane, per-answer scores under each message — so a reader
+   held two sets of numbers and no relationship between them.
 
-   The bar animates because the movement IS the information: watching it jump
-   as each answer lands is what makes "is this one normal?" a glance. */
+   The bars animate because the movement IS the information: watching the lime
+   jump as each answer lands is what makes "is this one normal?" a glance. */
 .score-fill { transition: width 420ms cubic-bezier(0.22, 0.61, 0.36, 1); }
+.bench-fill {
+  position: absolute; left: 0; top: 0; bottom: 0; border-radius: var(--r-pill);
+  background: var(--bench);
+  transition: width 420ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
 @media (prefers-reduced-motion: reduce) {
-  .score-fill { transition: none; }
+  .score-fill, .bench-fill { transition: none; }
   /* The wait still has to be legible without motion, so the bar holds the
      accent instead of sweeping it. */
   .score-row.is-waiting .score-bar::after { animation: none; width: 100%; opacity: 0.3; }
-  .score-aside-wait,
   .score-est-wait,
   .eval-dot[data-state="pending"] { animation: none; }
 }
-/* Muted while it is only showing the benchmark: nothing has been asked yet, so
-   there is no reading to emphasise. */
-.score-fill.bench { background: var(--border-strong); }
 .score-fill.live  { background: var(--primary); }
 /* Below the benchmark is NOT a failure — one answer against an average of 53
    questions is a comparison, not a verdict — so neither state uses the failure
@@ -1290,15 +1276,21 @@ html[data-kind="guest"] .identity-hint .hint-badge { display: inline-block; }
   color: var(--faint);
 }
 
-/* Latency has no counterpart in the benchmark: it is a speed, not a quality.
-   Given its own line rather than drawn against a bar it does not belong on. */
-.score-aside {
-  display: flex; align-items: baseline; justify-content: space-between;
-  gap: 10px; padding-top: 9px; margin-top: 2px;
-  border-top: 1px dashed var(--border);
-  font-family: var(--font-mono); font-size: var(--text-micro);
+/* The per-response timing strip — top passage similarity, answer latency,
+   grading time — moved here from the evaluation panel's footer, so every
+   response carries its own readings instead of only the newest one having
+   them in the pane. Same mono/uppercase register that line used: latency has
+   no benchmark counterpart, it is a speed, not a quality, so the strip stays
+   faint with the numbers one step brighter. */
+.msg-meta {
+  display: flex; gap: 14px; flex-wrap: wrap;
+  padding-top: 2px;
+  font-family: var(--font-mono); font-size: var(--text-nano);
   letter-spacing: var(--tracking-telemetry); text-transform: uppercase;
   color: var(--faint);
+}
+.msg-meta b {
+  color: var(--muted); font-weight: 600; font-variant-numeric: tabular-nums;
 }
 /* Waiting on the judges.
    The answer is delivered before grading now, so these two rows sit empty for
@@ -1311,7 +1303,8 @@ html[data-kind="guest"] .identity-hint .hint-badge { display: inline-block; }
   0%   { transform: translateX(-100%); }
   100% { transform: translateX(320%); }
 }
-.score-row.is-waiting .score-fill { opacity: 0.28; }
+/* Waiting rows carry only the gray bar (no live reading yet), so the dimmed
+   no-live state plus this sweep carries "a reading is coming" over it. */
 .score-row.is-waiting .score-bar::after {
   content: ""; position: absolute; inset: 0 auto 0 0;
   width: 30%; border-radius: var(--r-pill);
@@ -1319,7 +1312,6 @@ html[data-kind="guest"] .identity-hint .hint-badge { display: inline-block; }
   animation: score-wait 1.35s ease-in-out infinite;
 }
 .score-row.is-waiting .score-val { color: var(--primary-ink); }
-.score-aside-wait { animation: dot-pulse 1.2s ease-in-out infinite; }
 /* Lime is the app's ACTIVE colour, and grading in progress is exactly that —
    unlike "ungraded", which is hollow because no reading was taken at all. */
 .eval-dot[data-state="pending"] {
@@ -1327,19 +1319,13 @@ html[data-kind="guest"] .identity-hint .hint-badge { display: inline-block; }
   animation: dot-pulse 1.2s ease-in-out infinite;
 }
 
-.score-aside { flex-wrap: wrap; }
-.score-aside-pair { display: inline-flex; align-items: baseline; gap: 7px; }
-.score-aside strong {
-  color: var(--text); font-variant-numeric: tabular-nums; font-weight: 700;
-}
-
 /* The estimates strip — the four per-answer readings that are measured against
    a proxy (a drafted reference, a rank of the passage that was used) rather
-   than against ground truth. Same register as the aside below it — mono, nano,
-   uppercase, faint — because the two lines are the same KIND of metadata:
-   readings with no benchmark counterpart. One step quieter than the aside on
-   purpose: its values take --muted instead of --text, so an estimate can never
-   out-shout a measured number on this pane. */
+   than against ground truth. Mono, nano, uppercase, faint — the same register
+   as the timing strip that now lives under each response, because both are
+   metadata with no benchmark counterpart. One step quieter than the bars on
+   purpose: its values take --muted, so an estimate can never out-shout a
+   measured number on this pane. */
 .score-est {
   display: flex; flex-wrap: wrap; align-items: baseline;
   column-gap: 8px; row-gap: 3px;
@@ -1364,27 +1350,23 @@ html[data-kind="guest"] .identity-hint .hint-badge { display: inline-block; }
 }
 .eval-chip:hover .eval-chip-cta { color: var(--primary-ink); }
 .eval-chip.is-shown .eval-chip-cta { color: var(--primary-ink); border-bottom-style: solid; }
-/* The benchmark tick lives in a WRAPPER, not inside the bar: the bar needs
-   overflow:hidden (rounded fill corners, the waiting sweep), and a marker
-   inside it was a 2px half-transparent sliver on the same groove it marked —
-   invisible in exactly the cases that matter (over the empty track, at the
-   edges). Outside the clip it can cross the groove like a slider handle at
-   the benchmark value, which is the relationship the row is about: THIS
-   answer vs the sample corpus. */
+/* Two stacked bars per row, one legend for the panel: gray filled to the
+   benchmark, lime to this answer. The old 2px tick read like a draggable
+   slider handle; a bar filled to its own % says "reference" without offering
+   anything to grab. */
 .score-bar-wrap { position: relative; }
-.score-target {
-  position: absolute; top: -3px; bottom: -3px; width: 3px;
-  transform: translateX(-1.5px);     /* centre the 3px line ON the % position */
-  background: var(--inverse-bg);     /* near-white in dark, near-black in light */
-  border-radius: 1.5px;
-  /* A ring in the panel colour separates the marker from BOTH surfaces it
-     crosses — the accent fill and the empty track — so it reads as a handle
-     sitting on the bar rather than a scratch on it. */
-  box-shadow: 0 0 0 1px var(--panel);
+.duo {
+  display: flex; flex-direction: column; gap: 3px;
+  margin: 4px 0 2px;
 }
+.duo .score-bar { height: 6px; }
+/* A row with no live reading shows the gray bar alone, dimmed: the benchmark
+   is a reference, and at full strength it would read as the answer's own
+   result. */
+.score-bar.no-live { opacity: 0.55; }
 /* Boolean live readings — refused/missed, made-the-cut/cut, and a judge
    verdict with no score — are states, not magnitudes, so their row takes no
-   fill at all: the track and the tick encode the BENCHMARK rate alone, and
+   lime fill at all: the gray bar encodes the BENCHMARK rate alone, and
    the pill rides it as the state mark. Pass is deliberately NEUTRAL — lime
    means live, red means failed, and the ✓/✗ glyph carries the verdict — so
    a passing state cannot read as "scored maximum". */
@@ -1394,7 +1376,6 @@ html[data-kind="guest"] .identity-hint .hint-badge { display: inline-block; }
   align-items: center;
 }
 .score-bar-wrap.has-pill .score-bar { position: absolute; left: 0; right: 0; }
-.score-bar-wrap.has-pill .score-target { top: 3px; bottom: 3px; }
 .score-pill {
   position: relative; z-index: 1; margin-left: 10px;
   display: inline-flex; align-items: center; gap: 6px;
@@ -1416,14 +1397,23 @@ html[data-kind="guest"] .identity-hint .hint-badge { display: inline-block; }
   font-family: var(--font-mono);
   font-size: var(--text-nano); color: var(--faint); letter-spacing: 0.04em;
 }
-/* States once, under the bars, what a red bar means in THIS run — the marker
-   is a baseline for some runs and a target for others, and the difference is
-   the difference between "we got worse" and "we never got there". */
+/* One legend for the whole panel: the two bar colours, named once. It replaced
+   both the per-row "· benchmark N%" foot suffixes and a prose paragraph that
+   glossed the old tick — the feet still carry provenance ("golden #7 · known
+   passages"), so all this box has to say is what the colours are. */
 .score-legend {
-  margin: 4px 0 0; padding-top: 8px;
-  border-top: 1px solid var(--border);
-  font-size: var(--text-nano); line-height: 1.5; color: var(--faint);
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  margin-top: 10px; padding: 7px 10px;
+  border: 1px solid var(--border); border-radius: var(--r-sm);
+  background: var(--panel-sunken);
+  font-family: var(--font-mono); font-size: var(--text-nano);
+  letter-spacing: var(--tracking-telemetry); text-transform: uppercase;
+  color: var(--muted);
 }
+.score-legend-key { display: inline-flex; align-items: center; gap: 7px; }
+.score-legend-swatch { width: 14px; height: 8px; border-radius: 4px; }
+.score-legend-swatch.bench { background: var(--bench); }
+.score-legend-swatch.live { background: var(--primary); }
 
 .eval-questions { display: flex; flex-direction: column; gap: 8px; }
 .eval-questions:empty { display: none; }
