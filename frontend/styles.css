@@ -1382,6 +1382,36 @@ html[data-kind="guest"] .identity-hint .hint-badge { display: inline-block; }
      sitting on the bar rather than a scratch on it. */
   box-shadow: 0 0 0 1px var(--panel);
 }
+/* Boolean live readings — refused/missed, made-the-cut/cut, and a judge
+   verdict with no score — are states, not magnitudes, so their row takes no
+   fill at all: the track and the tick encode the BENCHMARK rate alone, and
+   the pill rides it as the state mark. Pass is deliberately NEUTRAL — lime
+   means live, red means failed, and the ✓/✗ glyph carries the verdict — so
+   a passing state cannot read as "scored maximum". */
+.score-bar-wrap.has-pill {
+  height: 20px;
+  display: flex;
+  align-items: center;
+}
+.score-bar-wrap.has-pill .score-bar { position: absolute; left: 0; right: 0; }
+.score-bar-wrap.has-pill .score-target { top: 3px; bottom: 3px; }
+.score-pill {
+  position: relative; z-index: 1; margin-left: 10px;
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--font-mono); font-size: var(--text-xs); font-weight: 700;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  padding: 2px 10px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--pass-border);
+  background: var(--pass-bg);
+  color: var(--pass);
+}
+.score-pill-glyph { font-size: var(--text-sm); line-height: 1; }
+.score-pill.is-fail {
+  border-color: var(--fail-border);
+  background: var(--fail-bg);
+  color: var(--fail);
+}
 .score-foot {
   font-family: var(--font-mono);
   font-size: var(--text-nano); color: var(--faint); letter-spacing: 0.04em;

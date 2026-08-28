@@ -2741,6 +2741,20 @@ function renderScorecard(metrics, runMode) {
       v = judgeV;
       score = judgeScore;
     }
+    // Three live readings are structurally YES/NO, and a full or empty bar
+    // would claim a magnitude none of them has — a 0-or-100 verdict is a
+    // state, not a ratio. They render as a pill riding the benchmark track:
+    // the track and its tick keep encoding the BENCHMARK rate alone. This is
+    // deliberately not "any reading that lands on 0 or 100" — context recall
+    // at 100% is a real ratio and keeps its bar.
+    const pill =
+      goldRefused != null
+        ? { ok: !!refused, word: refused ? "refused" : "missed" }
+        : goldV != null && key === "hit_rate_at_k"
+          ? { ok: goldV === 1, word: goldV === 1 ? "made the cut" : "cut" }
+          : judgeV != null && judgeScore == null
+            ? { ok: judgeV === 1, word: judgeV === 1 ? "passed" : "failed" }
+            : null;
     const hasLive = v != null;
     if (hasLive) anyLive = true;
     // Only judge-graded rows wait on the follow-up request. Gold readings were
@@ -2760,14 +2774,19 @@ function renderScorecard(metrics, runMode) {
     // judge's 0-1 — the chip carries the number instead: "65%" reads truer
     // next to a 65%-full bar than "passed". A refusal verdict gets its own
     // words, because "passed" says nothing about what was actually right.
+    // The chip and the pill say the same verdict. On pill rows the chip
+    // carries the WORD — a "100%" next to a state pill would claim the same
+    // phantom magnitude the fill just stopped claiming.
     const chip = hasLive
-      ? score != null || goldV != null || bankCorrect
-        ? `${livePct}%`
-        : refused != null
-          ? refused
-            ? "refused"
-            : "missed"
-          : escapeHtml(liveLabel(live, field))
+      ? pill
+        ? pill.word
+        : score != null || goldV != null || bankCorrect
+          ? `${livePct}%`
+          : refused != null
+            ? refused
+              ? "refused"
+              : "missed"
+            : escapeHtml(liveLabel(live, field))
       : waiting
         ? "grading…"
         : `${benchPct}%`;
@@ -2781,7 +2800,7 @@ function renderScorecard(metrics, runMode) {
     const tag =
       goldV != null || goldRefused != null ||
       (bankCorrect && (hasLive || waiting))
-        ? "gold"
+        ? "known"
         : hasLive || waiting
           ? "judged"
           : "bench";
@@ -2796,14 +2815,26 @@ function renderScorecard(metrics, runMode) {
         }</span></span>
         <span class="score-val ${hasLive ? (below ? "under" : "over") : "quiet"}">${chip}<span class="score-tag">${tag}</span></span>
       </div>
-      <div class="score-bar-wrap">
-        <div class="score-bar">
-          <div class="score-fill ${hasLive ? "live" : "bench"}"
-               style="width:${Math.min(100, hasLive ? livePct : benchPct)}%"></div>
-        </div>
-        <div class="score-target" style="left:${Math.min(100, benchPct)}%"
-             title="benchmark ${benchPct}%"></div>
-      </div>
+      ${
+        pill
+          ? // A boolean reading takes no fill: the track and tick encode the
+            // benchmark rate alone, and the pill is the state mark where the
+            // fill used to be.
+            `<div class="score-bar-wrap has-pill">
+              <div class="score-bar"></div>
+              <div class="score-target" style="left:${Math.min(100, benchPct)}%"
+                   title="benchmark ${benchPct}%"></div>
+              <span class="score-pill${pill.ok ? "" : " is-fail"}"><span class="score-pill-glyph">${pill.ok ? "✓" : "✗"}</span>${pill.word}</span>
+            </div>`
+          : `<div class="score-bar-wrap">
+              <div class="score-bar">
+                <div class="score-fill ${hasLive ? "live" : "bench"}"
+                     style="width:${Math.min(100, hasLive ? livePct : benchPct)}%"></div>
+              </div>
+              <div class="score-target" style="left:${Math.min(100, benchPct)}%"
+                   title="benchmark ${benchPct}%"></div>
+            </div>`
+      }
       <div class="score-foot">${
         hasLive
           ? goldV != null
@@ -2822,7 +2853,10 @@ function renderScorecard(metrics, runMode) {
                     ? "refusing is correct"
                     : "this answer should have refused"
                 } · benchmark ${benchPct}%`
-              : `this answer ${livePct}% · benchmark ${benchPct}%`
+              : pill
+                ? // A binary judge verdict: the word, not a phantom 100/0.
+                  `this answer ${pill.word} · benchmark ${benchPct}%`
+                : `this answer ${livePct}% · benchmark ${benchPct}%`
           : waiting
             ? `benchmark ${benchPct}% · waiting on the judge`
             : field
@@ -2934,7 +2968,7 @@ function renderScorecard(metrics, runMode) {
   // doubts a number is sent, so it names all three and says where the
   // estimates went.
   legend.textContent = anyLive
-    ? "Each chip names its source: gold — measured against this question's known passages or known answer; judged — graded for this answer; bench — the published benchmark only." +
+    ? "Each chip names its source: known — measured against this question's known passages or known answer; judged — graded for this answer; bench — the published benchmark only." +
       (anyEst
         ? " Estimates for this answer never take a bar; they sit on the line below."
         : "") +

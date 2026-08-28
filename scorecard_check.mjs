@@ -1,6 +1,6 @@
 /**
  * Scorecard provenance check — the part of the Evaluation pane a screenshot
- * cannot prove. Five answers with different grading provenance are served
+ * cannot prove. Eight answers with different grading provenance are served
  * through a mocked API (no backend, no model calls), and the check drives the
  * REAL path a reader does: open the app, click each answer's eval chip, and
  * assert where its correctness reading landed.
@@ -17,6 +17,19 @@
  *   D. pending + drafted — the strip's grading indicator covers correctness,
  *      as before.
  *   E. known-unanswerable refusal — the not-found row reads "refused".
+ *   F. judge graded binary WITHOUT a score — the old 100/0 fill is now a
+ *      state pill: faithfulness ✓ passed, relevancy ✗ failed.
+ *   G. known-unanswerable, NOT refused — the ✗ polarity: "missed".
+ *   H. answerable, hit rate 0 — the ✗ polarity of the made-the-cut pill;
+ *      the other retrieval readings are real ratios that merely LAND on 0
+ *      and keep their bars.
+ *
+ * Boolean live readings (refused/missed, made-the-cut/cut, and the binary
+ * judge fallback) render as a pill riding the benchmark track: their rows
+ * carry NO .score-fill and DO keep the .score-target tick. A ratio that
+ * lands on 0 or 100 (context recall at 100%, MRR at 0%) is a real magnitude
+ * and keeps its bar — the fixtures pin that distinction. Chips read the
+ * VERDICT WORD and tag provenance "known" where they used to read "gold".
  *
  * Usage:  node scorecard_check.mjs [baseUrl]   (default http://localhost:5173)
  * Exits non-zero on the first failed assertion or on any page error.
@@ -95,6 +108,32 @@ const MESSAGES = [
       gold: { idx: 70, src: "demo",
         question: "Does Meridian sell gift cards?",
         unanswerable: true, refused: true } } },
+  // F. judge graded binary WITHOUT a score — the fallback that used to draw
+  // a 100/0 fill. Faithfulness passed; relevancy failed.
+  { id: "m6", role: "assistant", content: "Espresso is 3.20 … [1]", citations: [],
+    eval_line: "top sim 0.60 - 1000 ms",
+    eval_data: { pending: false, faithful: true, relevant: false,
+      correct: null, context_relevance: null, context_sufficiency: null,
+      cited_rank: 1, pool_n: 4, latency_ms: 1000, top_sim: 0.60, deep_n: 0 } },
+  // G. known-unanswerable, answered anyway — the ✗ polarity of the refusal
+  // pill.
+  { id: "m7", role: "assistant", content: "Meridian offers…", citations: [],
+    eval_line: "top sim 0.35 - 800 ms",
+    eval_data: { pending: false, latency_ms: 800, top_sim: 0.35, deep_n: 0,
+      gold: { idx: 71, src: "demo",
+        question: "Does Meridian sell gift cards?",
+        unanswerable: true, refused: false } } },
+  // H. answerable, hit rate 0 — the ✗ polarity of the made-the-cut pill.
+  // MRR and NDCG are real ratios that merely LAND on 0, so they keep bars.
+  { id: "m8", role: "assistant", content: "Meridian roasts… [1]", citations: [],
+    eval_line: "top sim 0.52 - 950 ms",
+    eval_data: { ...GRADED, expected_answer: "Meridian offers light, medium…",
+      expected_source: "bank",
+      gold: { idx: 72, src: "demo",
+        question: "What roast levels does Meridian offer?",
+        unanswerable: false, refused: false,
+        mrr: 0.0, ndcg_at_k: 0.0, hit_rate_at_k: 0,
+        context_recall: 0.25, precision_at_k: 0.1 } } },
 ].map((m) => ({ ...m, eval_data: Object.fromEntries(Object.entries(m.eval_data || {}).filter(([, v]) => v !== undefined)) }));
 
 const EVAL_DONE = {
@@ -162,6 +201,19 @@ async function footOf(label) {
 async function fillPct(label) {
   return rowText(label).locator(".score-fill").evaluate((el) => el.style.width);
 }
+// The state pill a boolean live reading renders as, plus the two things that
+// must hold on its row: NO live fill, and the benchmark tick still present.
+async function pillInfo(label) {
+  const row = rowText(label);
+  if ((await row.locator(".score-pill").count()) === 0) return null;
+  const pill = row.locator(".score-pill");
+  return {
+    text: lower(await pill.innerText()),
+    fail: await pill.evaluate((el) => el.classList.contains("is-fail")),
+    fills: await row.locator(".score-fill").count(),
+    targets: await row.locator(".score-target").count(),
+  };
+}
 
 async function clickChip(messageId) {
   await page.locator(`.msg[data-message-id="${messageId}"] .eval-chip`).click();
@@ -178,7 +230,7 @@ check("A: correctness bar fills with the judge score",
 check("A: correctness row is live", await rowA.evaluate((el) => el.classList.contains("has-live")));
 check("A: chip reads the percentage", (await chipOf("Matched the expected answer")).includes("81%"),
   await chipOf("Matched the expected answer"));
-check("A: tag is gold", (await tagOf("Matched the expected answer")) === "gold",
+check("A: tag is known", (await tagOf("Matched the expected answer")) === "known",
   await tagOf("Matched the expected answer"));
 const footA = await footOf("Matched the expected answer");
 check("A: footer names the known answer and the golden entry",
@@ -194,6 +246,28 @@ check("A: retrieval recall row stays gold-measured",
   await footOf("Found the right passages"));
 check("A: faithfulness row is judged",
   (await tagOf("Stuck to the sources")) === "judged", await tagOf("Stuck to the sources"));
+// Boolean gold readings are states: hit rate (gold 1) renders as a pill on
+// the benchmark track; a ratio that merely LANDS on 100% keeps its bar.
+const hit = await pillInfo("Right passage made the cut");
+check("A: hit-rate gold reading renders as a neutral pass pill",
+  !!hit && !hit.fail && hit.text.includes("made the cut") && hit.text.includes("✓"),
+  hit && hit.text);
+check("A: hit-rate row has NO live fill and keeps the benchmark tick",
+  !!hit && hit.fills === 0 && hit.targets === 1,
+  hit && `fills=${hit.fills} targets=${hit.targets}`);
+check("A: hit-rate chip says the verdict, not 100%",
+  !(await chipOf("Right passage made the cut")).includes("100%") &&
+    (await chipOf("Right passage made the cut")).includes("made the cut"),
+  await chipOf("Right passage made the cut"));
+check("A: hit-rate foot keeps the golden pointer (unchanged by design)",
+  (await footOf("Right passage made the cut")).includes("golden #64"),
+  await footOf("Right passage made the cut"));
+const recallRow = rowText("Found the right passages");
+check("A: recall at a true 100% keeps its bar (a ratio, not a state)",
+  (await recallRow.locator(".score-fill").count()) === 1 &&
+    (await recallRow.locator(".score-pill").count()) === 0 &&
+    (await fillPct("Found the right passages")) === "100%",
+  `fills=${await recallRow.locator(".score-fill").count()} pills=${await recallRow.locator(".score-pill").count()}`);
 
 // ---------- B. drafted-reference: the strip keeps it, the bar stays benchmark ----------
 await clickChip("m2");
@@ -212,8 +286,8 @@ await clickChip("m3");
 check("C: correctness waits on the judge",
   (await chipOf("Matched the expected answer")).includes("grading"),
   await chipOf("Matched the expected answer"));
-check("C: waiting row is tagged gold (that is the reading it waits for)",
-  (await tagOf("Matched the expected answer")) === "gold",
+check("C: waiting row is tagged known (that is the reading it waits for)",
+  (await tagOf("Matched the expected answer")) === "known",
   await tagOf("Matched the expected answer"));
 const estC = lower(await page.locator(".score-est").innerText());
 check("C: strip has no 'vs drafted ref' while waiting", !estC.includes("vs drafted ref"), estC);
@@ -232,14 +306,91 @@ await clickChip("m5");
 check("E: not-found row reads the refusal verdict",
   (await chipOf("Admitted when it could not answer")).includes("refused"),
   await chipOf("Admitted when it could not answer"));
-check("E: refusal row is gold",
-  (await tagOf("Admitted when it could not answer")) === "gold",
+check("E: refusal row is known",
+  (await tagOf("Admitted when it could not answer")) === "known",
   await tagOf("Admitted when it could not answer"));
+const refusedPill = await pillInfo("Admitted when it could not answer");
+check("E: refusal renders as a NEUTRAL pass pill on the track",
+  !!refusedPill && !refusedPill.fail && refusedPill.text.includes("refused") &&
+    refusedPill.text.includes("✓"),
+  refusedPill && refusedPill.text);
+check("E: refusal row has NO live fill and keeps the benchmark tick",
+  !!refusedPill && refusedPill.fills === 0 && refusedPill.targets === 1,
+  refusedPill && `fills=${refusedPill.fills} targets=${refusedPill.targets}`);
+
+// ---------- F. judge graded binary without a score: pills, not 100/0 fills ----------
+await clickChip("m6");
+const faithPill = await pillInfo("Stuck to the sources");
+check("F: faithfulness binary verdict renders as a pass pill",
+  !!faithPill && !faithPill.fail && faithPill.text.includes("passed") &&
+    faithPill.text.includes("✓"),
+  faithPill && faithPill.text);
+check("F: faithfulness row has NO live fill and keeps the benchmark tick",
+  !!faithPill && faithPill.fills === 0 && faithPill.targets === 1,
+  faithPill && `fills=${faithPill.fills} targets=${faithPill.targets}`);
+check("F: faithfulness tag is judged",
+  (await tagOf("Stuck to the sources")) === "judged", await tagOf("Stuck to the sources"));
+const relPill = await pillInfo("Answered what was asked");
+check("F: relevancy binary verdict renders as a FAIL pill",
+  !!relPill && relPill.fail && relPill.text.includes("failed") && relPill.text.includes("✗"),
+  relPill && relPill.text);
+check("F: relevancy row has NO live fill and keeps the benchmark tick",
+  !!relPill && relPill.fills === 0 && relPill.targets === 1,
+  relPill && `fills=${relPill.fills} targets=${relPill.targets}`);
+check("F: foot states the verdict, not a phantom percent",
+  (await footOf("Answered what was asked")).includes("this answer failed"),
+  await footOf("Answered what was asked"));
+
+// ---------- G. known-unanswerable, missed: the ✗ polarity ----------
+await clickChip("m7");
+const missedPill = await pillInfo("Admitted when it could not answer");
+check("G: a missed refusal renders as a FAIL pill",
+  !!missedPill && missedPill.fail && missedPill.text.includes("missed") &&
+    missedPill.text.includes("✗"),
+  missedPill && missedPill.text);
+check("G: missed row has NO live fill and keeps the benchmark tick",
+  !!missedPill && missedPill.fills === 0 && missedPill.targets === 1,
+  missedPill && `fills=${missedPill.fills} targets=${missedPill.targets}`);
+check("G: tag is known",
+  (await tagOf("Admitted when it could not answer")) === "known",
+  await tagOf("Admitted when it could not answer"));
+check("G: foot says the answer should have refused",
+  (await footOf("Admitted when it could not answer")).includes("should have refused"),
+  await footOf("Admitted when it could not answer"));
+
+// ---------- H. hit-rate 0: the ✗ polarity, and a ratio that lands on 0 ----------
+await clickChip("m8");
+const cutPill = await pillInfo("Right passage made the cut");
+check("H: a cut hit rate renders as a FAIL pill",
+  !!cutPill && cutPill.fail && cutPill.text.includes("cut") &&
+    !cutPill.text.includes("made") && cutPill.text.includes("✗"),
+  cutPill && cutPill.text);
+check("H: cut row has NO live fill and keeps the benchmark tick",
+  !!cutPill && cutPill.fills === 0 && cutPill.targets === 1,
+  cutPill && `fills=${cutPill.fills} targets=${cutPill.targets}`);
+check("H: cut chip says the verdict, not 0%",
+  !(await chipOf("Right passage made the cut")).includes("0%") &&
+    (await chipOf("Right passage made the cut")).includes("cut"),
+  await chipOf("Right passage made the cut"));
+check("H: foot keeps the provenance — the pill owns the verdict, not the foot",
+  (await footOf("Right passage made the cut")).includes("golden #72") &&
+    (await footOf("Right passage made the cut")).includes("measured against this question's known passages") &&
+    !/\bthis answer\b/.test(await footOf("Right passage made the cut")),
+  await footOf("Right passage made the cut"));
+check("H: tag is known", (await tagOf("Right passage made the cut")) === "known",
+  await tagOf("Right passage made the cut"));
+const mrrRow = rowText("Best passage ranked high");
+check("H: MRR at a true 0% keeps its bar (a ratio, not a state)",
+  (await mrrRow.locator(".score-fill").count()) === 1 &&
+    (await mrrRow.locator(".score-pill").count()) === 0,
+  `fills=${await mrrRow.locator(".score-fill").count()} pills=${await mrrRow.locator(".score-pill").count()}`);
 
 // ---------- provenance legend ----------
 const legend = await page.locator(".score-legend").innerText();
-check("legend names both gold readings",
+check("legend names both known readings",
   legend.includes("known passages or known answer"), legend);
+check("legend leads with the known tag (renamed from gold)",
+  legend.includes("known — measured against"), legend);
 
 // ---------- layout: no horizontal overflow at desktop and 375px ----------
 for (const [w, h, name] of [[1600, 900, "desktop"], [375, 812, "375px"]]) {

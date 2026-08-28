@@ -21,3 +21,4 @@ shot_*.png
 # Session-to-session handoff notes — machine-specific and operational
 # (credential state, deploy settings). Not repo documentation.
 HANDOFF.md
+HANDOFF.md.backup-*
