@@ -15,7 +15,7 @@ const state = {
   evalBaseline: null, // eval/baseline.json — what a bar is measured against
   simThreshold: 0,    // live retrieval threshold, marked on the per-answer meter
   seeding: null,      // in-flight sample-document copy, so the sources pane can say so
-  answerEval: null,   // the answer currently drawn on the benchmark bars
+  answerEval: null,   // the answer currently drawn on the scorecards
   bootUsageSkipped: false, // consumes the one duplicate status fetch at boot
   // Which tools the app is ALLOWED to reach for on the next question. They say
   // what exists for it to decide between, not what it must use. Per-question,
@@ -2251,7 +2251,7 @@ function buildEvalBlock(evalData, evalLine) {
     const chip = document.createElement("button");
     chip.type = "button";
     chip.className = "eval-chip";
-    chip.title = "Show this answer's scores against the benchmark";
+    chip.title = "Grade this answer on the four RAGAS readings";
 
     const nudge = currentBeat() === 4
       ? `<span class="eval-nudge">what is this?</span>`
@@ -2313,7 +2313,7 @@ function buildEvalBlock(evalData, evalLine) {
   return wrap;
 }
 
-// Put one answer's readings on the benchmark bars and mark which chip they came
+// Put one answer's readings on the scorecards and mark which chip they came
 // from, so the pane is never ambiguous about whose numbers are on screen.
 function showAnswerOnScorecard(evalData, chip, messageId = null) {
   state.answerEval = evalData;
@@ -2333,6 +2333,9 @@ function showAnswerOnScorecard(evalData, chip, messageId = null) {
   }
   chip?.classList.add("is-shown");
   const data = state.evalData;
+  // Both panels redraw: the four RAGAS rows are per-answer by definition, and
+  // the benchmark detail carries this answer's gold readings when it has any.
+  renderRagasScorecard();
   if (data) renderScorecard(data.metrics || {}, data.mode);
   // On a phone the panes are tabs, so the bars this just updated are on a
   // screen the reader cannot see. Bring them to it.
@@ -2613,76 +2616,147 @@ const EVAL_TARGETS = {
   hit_rate_at_k: { group: "ranking", label: "Right passage made the cut", sub: "Hit rate@k", target: 0.80, higher: true },
 };
 
-// Which per-answer reading belongs on which benchmark bar.
+// ---------- the primary scorecard: four canonical RAGAS readings ----------
 //
-// Context recall asks whether known answer passages were retrieved. A normal
-// chat has no gold passages, so its top query-to-passage similarity must never
-// impersonate Context Recall. Similarity is reported under each response
-// instead, on the timing strip.
-const LIVE_TO_BENCHMARK = {
-  faithful: "faithfulness",
-  relevant: "answer_relevancy",
-  correct: "answer_correctness",
-  context_relevance: "precision_at_k",
-  context_sufficiency: "context_recall",
-};
-
-// Fields whose live reading is an ESTIMATE against a model-drafted or
-// reference-free proxy, not the golden-set statistic the benchmark row normally
-// reports. An estimate never takes the row's bar or its chip: a bar this answer
-// fills is read against the benchmark bar, and a proxy judgement cannot
-// honour that comparison. These readings render in the estimates strip under
-// the bars instead (renderScorecard).
+// Every response is graded on the four canonical RAGAS metrics — retrieval
+// (context precision, context recall) and generation (faithfulness, answer
+// relevancy) — and THIS panel is where those readings live. It is a per-answer
+// view, not a benchmark view: nothing here is compared against the published
+// run, so there are no benchmark bars, ticks or legend here. That rendering
+// moved behind the "See the benchmark in detail" expander with everything else
+// that describes the golden set.
 //
-// One exception, driven by DATA not config: when the eval payload carries
-// expected_source: "bank", the correctness judge graded against the matched
-// demo question's HUMAN known answer — a gold reference, not a drafted one —
-// and renderScorecard promotes that reading onto the Answer correctness bar.
-const LIVE_ESTIMATED_FIELDS = new Set([
-  "correct",
-  "context_relevance",
-  "context_sufficiency",
-]);
+// Provenance belongs to the retrieval pair as a pair, because both of its
+// readings grade against the same reference. A question that matched the demo
+// bank has a HUMAN reference (expected_source: "bank" — rendered "known");
+// every other question's reference is drafted from the retrieved passages
+// (expected_source: "draft" — rendered "estimated"), drafted without ever
+// seeing the system's answer. The generation rows need no reference and carry
+// no provenance.
+const RAGAS_ROWS = [
+  { group: "retrieval", field: "context_precision", label: "Sent the right passages first", sub: "Context precision", retrieval: true },
+  { group: "retrieval", field: "context_recall", label: "Found everything needed to answer", sub: "Context recall", retrieval: true },
+  { group: "generation", field: "faithful", label: "Stuck to the sources", sub: "Faithfulness" },
+  { group: "generation", field: "relevant", label: "Answered what was asked", sub: "Answer relevancy" },
+];
 
-// Ranking rows whose live reading comes from the RANK ESTIMATE: the first
-// citation marker names the pool position of the passage the answer was built
-// from, which is MRR's per-question statistic (1/rank) and NDCG's (1/log2 of
-// rank, one relevant item). It measures ordering only — a relevant passage
-// that never came back is invisible to it — so it renders in the estimates
-// strip, labelled estimated there. Hit rate has no estimate on purpose: the
-// pool is already the top-k cut, so a cited passage is inside k by
-// construction and the reading would be a tautology wearing a metric's
-// clothes. It lights up only on a gold match instead.
-const ESTIMATED_RANK_FIELDS = {
-  mrr: "mrr_est",
-  ndcg_at_k: "ndcg_est",
-};
+// Which per-answer reading belongs on which benchmark bar. It used to hold the
+// whole mapping that let a live verdict fill a benchmark bar — the mapping the
+// four-RAGAS pivot retired. The benchmark detail keeps only MEASURED per-answer
+// data: a bank-matched question's gold readings (renderScorecard). A judged
+// reading of THIS answer next to an average over 53 golden questions was the
+// comparison the pivot stopped making.
 
-// A judge answers yes/no for one answer while the benchmark reports a RATE
-// across the golden set. The labels say “this answer” and “benchmark” so the
-// shared bar does not claim they are the same statistic.
-function liveValue(evalData, field) {
-  const raw = evalData?.[field];
-  if (raw == null) return null;
-  return raw ? 1 : 0;
-}
-
-function liveLabel(evalData, field) {
-  const raw = evalData?.[field];
-  if (raw == null) return null;
-  return raw ? "passed" : "failed";
-}
-
-function renderScorecard(metrics, runMode) {
+// The PRIMARY panel. Four rows, two groups, one answer's readings — drawn
+// from the deferred-grading payload that fetchGrade keeps fresh. A dash means
+// nothing has graded yet, "grading…" means the follow-up request is running,
+// and a percent means a judge (or its binary fallback) landed.
+function renderRagasScorecard() {
   const el = $("eval-scorecard");
   el.innerHTML = "";
   const live = state.answerEval;
+  if (!live) {
+    el.innerHTML = emptyState(
+      "◔", "",
+      "Ask a question, then click “compare” on the answer to put its four " +
+      "RAGAS readings here.",
+    );
+    return;
+  }
+
+  // Group headings are emitted as the group CHANGES, exactly like the
+  // benchmark detail does.
+  let openGroup = null;
+  for (const r of RAGAS_ROWS) {
+    if (r.group !== openGroup) {
+      openGroup = r.group;
+      const g = EVAL_GROUPS[r.group];
+      const head = document.createElement("div");
+      head.className = "score-group";
+      head.innerHTML =
+        `<span class="score-group-name">${g.label}</span>` +
+        `<span class="score-group-sub">${g.sub}</span>`;
+      el.appendChild(head);
+    }
+
+    const verdict = live[r.field];
+    // A scored judge emits a 0-1 reading (f"{field}_score"); the bar draws
+    // THAT, and the chip carries the number. No score (a judge that omitted
+    // the line, or an older graded message) falls back to the binary
+    // 100/0 rendering and the passed/failed word.
+    const score = live[`${r.field}_score`];
+    const hasLive = verdict != null;
+    const waiting = !hasLive && !!live.pending;
+
+    // The provenance tag rides the retrieval pair: "known" grades against the
+    // demo bank's HUMAN reference, "estimated" against a model-drafted one.
+    // No reference has run yet → no tag; a reading without a marker (answers
+    // stored before the marker existed) can only be a draft.
+    const tag = r.retrieval
+      ? live.expected_source === "bank"
+        ? "known"
+        : hasLive || live.expected_source === "draft"
+          ? "estimated"
+          : null
+      : null;
+
+    const pct = hasLive
+      ? Math.round((score != null ? score : verdict ? 1 : 0) * 100)
+      : 0;
+    const chip = hasLive
+      ? score != null
+        ? `${pct}%`
+        : verdict ? "passed" : "failed"
+      : waiting
+        ? "grading…"
+        : "—";
+    // A missing reading with a reason (a broken judge, a paused pass) gets the
+    // reason on hover — the chat block names it in full; the row stays quiet.
+    // A GRADED context-recall verdict that carries a system reason gets one
+    // too: "no reference derivable" 0% is definitional about the pool, not a
+    // measured retrieval failure, and a bare 0% would misstate it.
+    // expected_reason is message-level and describes only the recall
+    // verdict, so it is scoped to that row; judge chatter on healthy rows
+    // ("covers the reference") stays off the tooltip.
+    const reason = !hasLive
+      ? live[`${r.field}_reason`] || ""
+      : r.field === "context_recall"
+        ? live.expected_reason || ""
+        : "";
+
+    const row = document.createElement("div");
+    row.className =
+      "score-row" + (hasLive ? " has-live" : "") + (waiting ? " is-waiting" : "");
+    row.innerHTML = `
+      <div class="score-head">
+        <span class="score-name">${r.label}<span class="score-sub">${r.sub}</span></span>
+        <span class="score-val ${hasLive ? "over" : "quiet"}"${
+          reason ? ` title="${escapeHtml(reason)}"` : ""
+        }>${chip}${tag ? `<span class="score-tag">${tag}</span>` : ""}</span>
+      </div>
+      <div class="duo">
+        <div class="score-bar${hasLive ? "" : " no-live"}">
+          <div class="score-fill live" style="width:${Math.min(100, pct)}%"></div>
+        </div>
+      </div>`;
+    el.appendChild(row);
+  }
+}
+
+
+// The benchmark detail, behind the expander. It renders the PUBLISHED run —
+// pass rates over the golden set — plus one measured per-answer dimension:
+// when the selected question matched the golden bank, its gold readings
+// (measured against that question's KNOWN passages) land on the rows. Judged
+// readings of the selected answer no longer appear here: a verdict about one
+// answer beside an average over 53 questions was the comparison the four-
+// RAGAS pivot stopped making, and those readings live on the primary panel
+// now.
+function renderScorecard(metrics, runMode) {
+  const el = $("eval-benchmark");
+  el.innerHTML = "";
+  const live = state.answerEval;
   let shown = 0;
-  // A matched demo-bank question grades correctness against the question's
-  // HUMAN known answer (the eval payload carries the reference plus
-  // expected_source: "bank"), not against a drafted one — so that reading is
-  // gold, not an estimate, and belongs on the bar.
-  const bankRef = live?.expected_source === "bank";
 
   // Emitted as the group CHANGES rather than looped per group, so a metric the
   // published run does not carry cannot leave an empty heading behind it.
@@ -2703,29 +2777,11 @@ function renderScorecard(metrics, runMode) {
       el.appendChild(head);
     }
 
-    const field = Object.keys(LIVE_TO_BENCHMARK).find(
-      (f) => LIVE_TO_BENCHMARK[f] === key,
-    );
-    // Two kinds of live reading reach a row, in strict precedence — MEASURED
-    // beats judged beats nothing. Estimates reach NO row: the strip under the
-    // bars carries them (below), because a bar this answer fills is read
-    // against the benchmark bar, and a proxy judgement cannot honour that
-    // comparison.
-    //
     // gold — the asked question matched the golden bank (eval/golden.py), so
     // this row carries a reading measured against that question's KNOWN
     // passages. Its field names are the benchmark keys, so the lookup is
     // direct. Known-unanswerable matches instead carry a refusal verdict,
     // which only means something on the not-found row.
-    // judge — the per-answer verdicts fetched by the follow-up request. Only
-    // the two scored-judge fields qualify: the estimated fields are judged
-    // too, but what their judges grade is a proxy, so they are excluded.
-    const isEstRow =
-      (field != null && LIVE_ESTIMATED_FIELDS.has(field) &&
-        !(field === "correct" && bankRef)) ||
-      ESTIMATED_RANK_FIELDS[key] != null;
-    // The bank-referenced correctness reading, once the judge lands.
-    const bankCorrect = field === "correct" && bankRef;
     const gold = live?.gold;
     const goldV =
       gold && !gold.unanswerable && gold[key] != null ? gold[key] : null;
@@ -2733,92 +2789,53 @@ function renderScorecard(metrics, runMode) {
       gold && gold.unanswerable && key === "not_found_rate_unanswerables"
         ? gold.refused
         : null;
-    const judgeV = field && !isEstRow ? liveValue(live, field) : null;
-    // A scored judge also emits a 0-1 reading (f"{field}_score"). The bar draws
-    // THAT when present — 65% fills to 65 against the benchmark bar, instead
-    // of a binary pass rendering as a flat 100%. No score (older graded
-    // messages, or a judge that omitted the line) falls back to 100/0.
-    const judgeScore =
-      field && !isEstRow && live ? live[`${field}_score`] : null;
 
     let v = null;
-    let score = null;
     let refused = null;
     if (goldV != null) {
       v = goldV;
     } else if (goldRefused != null) {
       refused = goldRefused;
       v = refused ? 1 : 0;
-    } else if (judgeV != null) {
-      v = judgeV;
-      score = judgeScore;
     }
-    // Three live readings are structurally YES/NO, and a full or empty bar
-    // would claim a magnitude none of them has — a 0-or-100 verdict is a
-    // state, not a ratio. They render as a pill riding the benchmark bar:
-    // the gray fill keeps encoding the BENCHMARK rate alone. This is
-    // deliberately not "any reading that lands on 0 or 100" — context recall
-    // at 100% is a real ratio and keeps its bar.
+    // Two readings are structurally YES/NO, and a full or empty bar would
+    // claim a magnitude none of them has — a 0-or-100 verdict is a state, not
+    // a ratio. They render as a pill riding the benchmark bar: the gray fill
+    // keeps encoding the BENCHMARK rate alone. This is deliberately not "any
+    // reading that lands on 0 or 100" — context recall at 100% is a real
+    // ratio and keeps its bar.
     const pill =
       goldRefused != null
         ? { ok: !!refused, word: refused ? "refused" : "missed" }
         : goldV != null && key === "hit_rate_at_k"
           ? { ok: goldV === 1, word: goldV === 1 ? "made the cut" : "cut" }
-          : judgeV != null && judgeScore == null
-            ? { ok: judgeV === 1, word: judgeV === 1 ? "passed" : "failed" }
-            : null;
+          : null;
     const hasLive = v != null;
-    // Only judge-graded rows wait on the follow-up request. Gold readings were
-    // computed when the answer was, and the estimated rows never hold a
-    // reading here at all — theirs land in the strip, which has its own
-    // grading indicator — so neither may borrow the judge rows' waiting state.
-    const waiting =
-      !hasLive && !!(live && live.pending) && !!field && !isEstRow;
 
     const benchPct = Math.round(bench * 100);
-    const livePct = hasLive ? Math.round((score != null ? score : v) * 100) : 0;
+    const livePct = hasLive ? Math.round(v * 100) : 0;
     // Below the benchmark is not a failure — one answer against an average of
     // 53 is a comparison, not a verdict — so the bar is the accent when there
-    // is a live reading and muted when it is only showing the benchmark.
-    const below = hasLive && (score != null ? score : v) < bench;
-    // The verdict chip says passed/failed; with a score — a gold reading or a
-    // judge's 0-1 — the chip carries the number instead: "65%" reads truer
-    // next to a 65%-full bar than "passed". A refusal verdict gets its own
-    // words, because "passed" says nothing about what was actually right.
-    // The chip and the pill say the same verdict. On pill rows the chip
-    // carries the WORD — a "100%" next to a state pill would claim the same
-    // phantom magnitude the fill just stopped claiming.
+    // is a gold reading and muted when it is only showing the benchmark.
+    const below = hasLive && v < bench;
+    // The chip carries the gold percentage — "65%" reads truer next to a
+    // 65%-full bar than "passed". A refusal verdict gets its own words,
+    // because "passed" says nothing about what was actually right. On pill
+    // rows the chip carries the WORD — a "100%" next to a state pill would
+    // claim the same phantom magnitude the fill just stopped claiming.
     const chip = hasLive
       ? pill
         ? pill.word
-        : score != null || goldV != null || bankCorrect
-          ? `${livePct}%`
-          : refused != null
-            ? refused
-              ? "refused"
-              : "missed"
-            : escapeHtml(liveLabel(live, field))
-      : waiting
-        ? "grading…"
-        : `${benchPct}%`;
+        : `${livePct}%`
+      : `${benchPct}%`;
     // WHERE the number came from, on every chip without exception. The
     // benchmark-only chip is the easy one to misread as this answer's grade —
-    // the quiet "bench" tag exists to stop exactly that reading. A pending
-    // judge row is tagged for the reading it is waiting for; gold wins over
-    // judged because measured beats judged in the precedence above. A
-    // bank-referenced correctness verdict is gold too — it is graded against
-    // the question's known answer.
-    const tag =
-      goldV != null || goldRefused != null ||
-      (bankCorrect && (hasLive || waiting))
-        ? "known"
-        : hasLive || waiting
-          ? "judged"
-          : "bench";
+    // the quiet "bench" tag exists to stop exactly that reading. Gold wins
+    // its "known" tag because measured beats reported.
+    const tag = goldV != null || goldRefused != null ? "known" : "bench";
 
     const row = document.createElement("div");
-    row.className =
-      "score-row" + (hasLive ? " has-live" : "") + (waiting ? " is-waiting" : "");
+    row.className = "score-row" + (hasLive ? " has-live" : "");
     row.innerHTML = `
       <div class="score-head">
         <span class="score-name">${t.label}<span class="score-sub">${t.sub}${
@@ -2838,7 +2855,7 @@ function renderScorecard(metrics, runMode) {
               <span class="score-pill${pill.ok ? "" : " is-fail"}"><span class="score-pill-glyph">${pill.ok ? "✓" : "✗"}</span>${pill.word}</span>
             </div>`
           : // Two stacked bars, one legend at the panel bottom: gray filled to
-            // the benchmark, lime to this answer. A row with no live reading
+            // the benchmark, lime to this answer. A row with no gold reading
             // shows the gray bar alone, dimmed — the legend says what gray is,
             // so the rows stopped repeating "benchmark N%" in their feet.
             `<div class="duo">
@@ -2860,28 +2877,14 @@ function renderScorecard(metrics, runMode) {
             ? // Measured against the golden bank's known passages. The #idx
               // keeps it auditable; the legend carries what the bars mean.
               `golden #${gold.idx} · known passages`
-            : bankCorrect
-              ? // A judge score against the bank's HUMAN reference — the
-                // golden id still says where the truth came from.
-                `golden #${gold?.idx ?? "?"} · known answer`
-              : refused != null
-              ? `this question has no document answer — ${
-                  refused
-                    ? "refusing is correct"
-                    : "this answer should have refused"
-                }`
-              : `graded against the benchmark`
-          : waiting
-            ? `waiting on the judge`
-            : field
-              ? `benchmark ${benchPct}%`
-              // Every row without a live reading arrives here: hit rate and
-              // the not-found rate (no per-answer reading exists for either —
-              // the pool is already the top-k cut; a rate over a set), and the
-              // five estimate rows, which have no bar at all.
-              // All of them light up when the question matches the golden
-              // bank. Saying why beats leaving a row that looks broken.
-              : `needs a known answer`
+            : `this question has no document answer — ${
+                refused
+                  ? "refusing is correct"
+                  : "this answer should have refused"
+              }`
+          // The published run alone. Saying so in the foot as well as the tag
+          // keeps a row that looks broken (no lime bar) from reading as one.
+          : `benchmark ${benchPct}%`
       }</div>`;
     el.appendChild(row);
   }
@@ -2969,6 +2972,10 @@ function renderEval(data) {
   // The Evaluation pane and the answer readout used to share no state at all,
   // which is why the two sets of numbers read as unrelated.
   state.evalData = data;
+  // The primary panel is independent of the run status: whatever answer is
+  // selected keeps its four readings, and with nothing selected it shows the
+  // ask-a-question state.
+  renderRagasScorecard();
   // Two different jobs, and they used to share one element. `status` is
   // transient — indexing, scoring, failed — and belongs at the top where it
   // interrupts. `provenance` is a standing fact about the published run and
@@ -2980,8 +2987,9 @@ function renderEval(data) {
     statusEl.textContent = "";
     // The pane used to say only "no run yet", which explained neither what a
     // benchmark is, how long it takes, nor that it spends real model calls —
-    // a button with unstated cost behind it (plan §5).
-    $("eval-scorecard").innerHTML = emptyState(
+    // a button with unstated cost behind it (plan §5). The note belongs to
+    // the BENCHMARK detail, not to the primary panel above it.
+    $("eval-benchmark").innerHTML = emptyState(
       "◎",
       "No benchmark run yet",
       "A benchmark replays the golden set through the live pipeline and scores it " +

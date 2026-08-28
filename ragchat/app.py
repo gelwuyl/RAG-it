@@ -1260,9 +1260,16 @@ def ask_chat(
         eval_line=result.get("eval_line") or None,
         eval_data=json.dumps(result["eval"]) if result.get("eval") else None,
         # Only answers that HAVE passages can be graded. A not-found reply has
-        # no context and no verdict to reach for.
+        # no context and no verdict to reach for. `passages` is the same pool
+        # IN ORDER — context precision is rank-aware, and the grade request
+        # below has no pool of its own, so the order is captured here, at the
+        # only moment it exists.
         eval_context=(
-            json.dumps({"q": result.get("effective_query") or body.question, "context": result["context"]})
+            json.dumps({
+                "q": result.get("effective_query") or body.question,
+                "context": result["context"],
+                "passages": result.get("passages") or [],
+            })
             if result.get("context")
             else None
         ),
@@ -1272,6 +1279,7 @@ def ask_chat(
     # The client needs this to ask for the grade; nothing else changes shape.
     result["message_id"] = msg.id
     result.pop("context", None)
+    result.pop("passages", None)
     result.pop("effective_query", None)
     # Internal marker for the gold-match logic (a broken call is not a refusal);
     # the client has no use for it.
@@ -1365,6 +1373,7 @@ def grade_message(
         ctx.get("context") or "",
         cfg,
         stored,
+        passages=ctx.get("passages"),
     )
     # A pass that ran out of its own wall clock made NO calls fail — it just did
     # not finish, so it does not spend the retry budget the way a judge failure
@@ -1375,7 +1384,11 @@ def grade_message(
     stored["grade_attempts"] = attempts
     stored["grade_max_attempts"] = GRADE_MAX_ATTEMPTS
     incomplete = any(
-        stored.get(field) is None for field in pipeline.LIVE_GRADE_FIELDS
+        stored.get(field) is None
+        for field in pipeline.LIVE_GRADE_FIELDS
+        # A legacy answer's un-stored passages are a terminal data gap, not
+        # work a retry can finish — it must not spend the retry budget.
+        if not (field == "context_precision" and graded.get("precision_data_gap"))
     )
     if graded.get("paused"):
         # Wait for the judges' own latency rather than hammering: the next

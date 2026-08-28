@@ -68,10 +68,10 @@ def answered(client, monkeypatch):
             "citations": [],
             "eval_line": "top sim 0.38 - 8255 ms",
             "eval": {"pending": True, "faithful": None, "relevant": None,
-                     "context_relevance": None, "context_sufficiency": None,
-                     "correct": None,
+                     "context_precision": None, "context_recall": None,
                      "top_sim": 0.38, "deep_n": 0, "latency_ms": 8255},
             "context": CONTEXT,
+            "passages": [CONTEXT],
             "effective_query": "milk fridge temperature",
         }
 
@@ -88,16 +88,16 @@ def _stub_judges(monkeypatch, verdict=(True, True)):
 
     calls = {"n": 0}
 
-    def _fake(question, answer, context_text, cfg, previous=None):
+    def _fake(question, answer, context_text, cfg, previous=None, passages=None):
         calls["n"] += 1
         _fake.seen = {"q": question, "answer": answer, "context": context_text,
-                      "previous": previous}
+                      "previous": previous, "passages": passages}
         return {"faithful": verdict[0], "faithful_reason": "r",
                 "relevant": verdict[1], "relevant_reason": "r",
-                "context_relevance": verdict[0], "context_relevance_reason": "r",
-                "context_sufficiency": verdict[1], "context_sufficiency_reason": "r",
-                "correct": verdict[0], "correct_reason": "r",
-                "expected_answer": "the fridge must read 1-4C"}
+                "context_precision": verdict[0], "context_precision_reason": "r",
+                "context_recall": verdict[1], "context_recall_reason": "r",
+                "expected_answer": "the fridge must read 1-4C",
+                "expected_source": "draft"}
 
     monkeypatch.setattr(pipeline, "_eval_answer", _fake)
     return calls, _fake
@@ -140,7 +140,7 @@ def test_partial_grade_stays_pending_until_the_missing_judge_recovers(answered, 
     client, cid, body = answered
     calls = []
 
-    def _partial_then_complete(question, answer, context_text, cfg, previous=None):
+    def _partial_then_complete(question, answer, context_text, cfg, previous=None, passages=None):
         calls.append(previous or {})
         if len(calls) == 1:
             return {
@@ -148,18 +148,17 @@ def test_partial_grade_stays_pending_until_the_missing_judge_recovers(answered, 
                 "faithful_reason": "supported",
                 "relevant": None,
                 "relevant_reason": "429 rate limited",
-                "context_relevance": True,
-                "context_relevance_reason": "on point",
-                "context_sufficiency": None,
-                "context_sufficiency_reason": "judge timeout",
-                "correct": None,
-                "correct_reason": "",
+                "context_precision": True,
+                "context_precision_reason": "on point",
+                "context_recall": None,
+                "context_recall_reason": "judge timeout",
                 "expected_answer": "the fridge must read 1-4C",
+                "expected_source": "draft",
                 "judge_error": "Answer relevancy unavailable: 429 rate limited"
-                " · Context sufficiency unavailable: judge timeout",
+                " · Context recall unavailable: judge timeout",
             }
         assert previous["faithful"] is True
-        assert previous["context_relevance"] is True
+        assert previous["context_precision"] is True
         assert previous["expected_answer"] == "the fridge must read 1-4C", \
             "the drafted reference must survive into the retry"
         return {
@@ -167,29 +166,26 @@ def test_partial_grade_stays_pending_until_the_missing_judge_recovers(answered, 
             "faithful_reason": previous["faithful_reason"],
             "relevant": True,
             "relevant_reason": "on-topic",
-            "context_relevance": previous["context_relevance"],
-            "context_relevance_reason": previous["context_relevance_reason"],
-            "context_sufficiency": True,
-            "context_sufficiency_reason": "enough",
-            "correct": True,
-            "correct_reason": "matches the drafted reference",
+            "context_precision": previous["context_precision"],
+            "context_precision_reason": previous["context_precision_reason"],
+            "context_recall": True,
+            "context_recall_reason": "enough",
             "expected_answer": previous["expected_answer"],
+            "expected_source": previous.get("expected_source"),
         }
 
     monkeypatch.setattr(pipeline, "_eval_answer", _partial_then_complete)
     url = f"/api/chats/{cid}/messages/{body['message_id']}/grade"
     first = client.post(url).json()["eval"]
     assert first["faithful"] is True and first["relevant"] is None
-    assert first["context_relevance"] is True and first["context_sufficiency"] is None
-    assert first["correct"] is None
+    assert first["context_precision"] is True and first["context_recall"] is None
     assert first["pending"] is True
     assert first["grade_attempts"] == 1
 
     second = client.post(url).json()["eval"]
     assert len(calls) == 2
     assert second["faithful"] is True and second["relevant"] is True
-    assert second["context_sufficiency"] is True
-    assert second["correct"] is True
+    assert second["context_recall"] is True
     assert second["pending"] is False
     assert second["grade_attempts"] == 2
     assert "judge_error" not in second
@@ -208,9 +204,8 @@ def test_legacy_partial_result_is_eligible_for_the_new_retry(answered, monkeypat
         "faithful_reason": "supported",
         "relevant": None,
         "relevant_reason": "judge timeout",
-        "context_relevance": None,
-        "context_sufficiency": None,
-        "correct": None,
+        "context_precision": None,
+        "context_recall": None,
     })
     session.commit()
     session.close()
@@ -231,21 +226,19 @@ def test_partial_grade_exhaustion_stops_after_the_bounded_budget(answered, monke
     client, cid, body = answered
     calls = {"n": 0}
 
-    def _always_missing(question, answer, context_text, cfg, previous=None):
+    def _always_missing(question, answer, context_text, cfg, previous=None, passages=None):
         calls["n"] += 1
         return {
             "faithful": True,
             "faithful_reason": "supported",
             "relevant": None,
             "relevant_reason": "judge timeout",
-            "context_relevance": True,
-            "context_relevance_reason": "on point",
-            "context_sufficiency": None,
-            "context_sufficiency_reason": "judge timeout",
-            "correct": None,
-            "correct_reason": "",
+            "context_precision": True,
+            "context_precision_reason": "on point",
+            "context_recall": None,
+            "context_recall_reason": "judge timeout",
             "judge_error": "Answer relevancy unavailable: judge timeout"
-            " · Context sufficiency unavailable: judge timeout",
+            " · Context recall unavailable: judge timeout",
         }
 
     monkeypatch.setattr(pipeline, "_eval_answer", _always_missing)
@@ -258,7 +251,7 @@ def test_partial_grade_exhaustion_stops_after_the_bounded_budget(answered, monke
     # The recovered check is named too — a partial outage does not hide behind
     # the one judge that stayed down.
     assert "Answer relevancy unavailable: judge timeout" in exhausted["judge_error"]
-    assert "Context sufficiency unavailable: judge timeout" in exhausted["judge_error"]
+    assert "Context recall unavailable: judge timeout" in exhausted["judge_error"]
 
     client.post(url)
     assert calls["n"] == rapp.GRADE_MAX_ATTEMPTS
@@ -275,17 +268,16 @@ def test_a_paused_pass_neither_spends_a_retry_nor_reports_an_outage(answered, mo
     client, cid, body = answered
     calls, _ = _stub_judges(monkeypatch)
 
-    def _time_starved(question, answer, context_text, cfg, previous=None):
+    def _time_starved(question, answer, context_text, cfg, previous=None, passages=None):
         return {
             "faithful": True, "faithful_reason": "r",
             "relevant": True, "relevant_reason": "r",
-            "context_relevance": None,
-            "context_relevance_reason": (
+            "context_precision": None,
+            "context_precision_reason": (
                 "paused at this request's time limit; grading continues next try"),
-            "context_sufficiency": None,
-            "context_sufficiency_reason": (
+            "context_recall": None,
+            "context_recall_reason": (
                 "paused at this request's time limit; grading continues next try"),
-            "correct": None, "correct_reason": "",
             "paused": True,
         }
 
@@ -409,6 +401,15 @@ def test_the_judge_sees_what_the_answer_was_built_from(answered, monkeypatch):
     assert fake.seen["context"] == CONTEXT
     assert fake.seen["answer"] == ANSWER
     assert fake.seen["q"] == "milk fridge temperature", "the REWRITTEN query is judged"
+    assert fake.seen["passages"] == [CONTEXT], \
+        "rank-aware precision needs the pool ORDER, persisted at answer time"
+
+
+def test_the_stored_passage_order_does_not_travel_to_the_browser(answered):
+    """It exists so the precision judge can grade the ranking; the reader has
+    citations, not the raw pool."""
+    _, _, body = answered
+    assert "passages" not in body
 
 
 def test_the_answer_latency_survives_grading(answered, monkeypatch):

@@ -89,26 +89,35 @@ GRADE_RETRY_AFTER_MS = 1_500
 # 44th second would sail past 60s and hand everything back to the 504 problem.
 GRADE_MAX_SECONDS = 36
 _SLICE_MIN_SECONDS = 12
-# Every normal chat answer gets these five live readings. Faithfulness and
-# relevancy are judged directly. Correctness is ESTIMATED: the judge drafts an
-# expected answer from the retrieved passages and scores the real answer against
-# it, because arbitrary questions have no gold answer. The two context checks
-# map onto the Precision@k and Context Recall bars the same way - close enough
-# to be useful, not the same statistic, so the UI tags all three "estimated".
-# Renaming these keys orphans verdicts persisted in Message.eval_data.
+# Every normal chat answer gets these FOUR live readings — the canonical RAGAS
+# set, generation and retrieval alike. Faithfulness and relevancy are judged
+# directly against the answer. Context precision is rank-aware: the judge marks
+# each retrieved passage in pool order and Python computes average precision,
+# so relevant material ranked low scores low. Context recall needs a REFERENCE,
+# and a reference is where the provenance story lives: a matched demo-bank
+# question grades against its HUMAN answer (provenance "bank", rendered
+# "known"); arbitrary questions grade against one synthesize_expected drafts
+# from the retrieved passages (provenance "draft", rendered "estimated"). The
+# draft never sees the system's answer, so scoring against it is not the model
+# agreeing with itself.
+#
+# Renaming these keys orphans verdicts persisted in Message.eval_data. The
+# 2026-08 pivot renamed them deliberately — the semantics genuinely changed —
+# so an answer graded before it re-grades from scratch: the /grade route finds
+# the new fields absent and runs their judges once. The retired keys
+# (context_relevance, context_sufficiency, correct) may still sit in old stored
+# dicts; nothing reads them.
 LIVE_GRADE_FIELDS = (
     "faithful",
     "relevant",
-    "context_relevance",
-    "context_sufficiency",
-    "correct",
+    "context_precision",
+    "context_recall",
 )
 _LIVE_GRADE_LABELS = {
     "faithful": "Faithfulness",
     "relevant": "Answer relevancy",
-    "context_relevance": "Context relevance",
-    "context_sufficiency": "Context sufficiency",
-    "correct": "Answer correctness",
+    "context_precision": "Context precision",
+    "context_recall": "Context recall",
 }
 # Live grading runs the SCORED judge variants, which return a 0-1 reading in
 # addition to the verdict; it lands in eval_data as f"{field}_score". The
@@ -495,6 +504,7 @@ def _eval_answer(
     previous: dict | None = None,
     expected: str | None = None,
     expected_source: str | None = None,
+    passages: list[str] | None = None,
 ) -> dict | None:
     """Judge unresolved live checks without replacing a completed verdict.
 
@@ -505,9 +515,14 @@ def _eval_answer(
     count is available.
 
     ``expected``/``expected_source`` carry a KNOWN reference for this question
-    (a matched demo-bank entry): correctness is then scored against the human
+    (a matched demo-bank entry): context recall is then graded against the human
     answer instead of a drafted one, and the provenance lands in the payload so
-    the UI can tell the two apart.
+    the UI can tell the two apart ("known" vs "estimated").
+
+    ``passages`` is the retrieved pool IN ORDER, as plain texts. Context
+    precision is rank-aware, so it needs the order, not the flattened context
+    string — and the deferred grade request has no pool of its own, which is
+    why ask() persists the list and this function receives it back.
     """
     if not cfg.eval_show:
         return None
@@ -530,19 +545,19 @@ def _eval_answer(
         field: previous.get(f"{field}_reason") if done[field] else ""
         for field in LIVE_GRADE_FIELDS
     }
-    # The synthesized reference is an INPUT to correctness, not a verdict. But
-    # "no answer derivable" IS a completed verdict for `correct`: the judge
-    # decided with certainty that the passages cannot answer, and FAIL is then
-    # the honest grade (there was nothing to be right about). It is persisted as
-    # expected_answer="" + expected_reason=NO_ANSWER_DERIVABLE, which also lets
-    # a retry skip re-purchasing the same draft call.
+    # The synthesized reference is an INPUT to context recall, not a verdict.
+    # But "no answer derivable" IS a completed verdict for it: the judge
+    # decided with certainty that the passages cannot answer, and FAIL at 0 is
+    # then the honest grade — nothing of a reference the passages cannot yield
+    # can be IN the passages. It is persisted as expected_answer="" +
+    # expected_reason=NO_ANSWER_DERIVABLE, which also lets a retry skip
+    # re-purchasing the same draft call.
     try:
         from eval.judges import (
             NO_ANSWER_DERIVABLE_SENTINEL,
-            answer_correctness_scored,
             answer_relevancy_scored,
-            context_relevance_scored,
-            context_sufficiency_scored,
+            context_precision_scored,
+            context_recall_scored,
             faithfulness_scored,
             synthesize_expected,
         )
@@ -575,16 +590,18 @@ def _eval_answer(
         bank_expected = (previous.get("expected_answer") or "").strip()
     expected_text = previous.get("expected_answer")
     expected_reason = previous.get("expected_reason") or ""
-    if values["correct"] is None and (
+    if values["context_recall"] is None and (
         previous.get("expected_answer") == ""
         and expected_reason == NO_ANSWER_DERIVABLE
     ):
-        # Resume a graded "nothing to be right about" verdict instead of
+        # Resume a graded "no reference derivable" verdict instead of
         # re-running synthesis for an answer it already ruled on.
-        values["correct"] = False
-        values[LIVE_SCORE_FIELDS["correct"]] = 0.0
-        reasons["correct"] = "no reference derivable: the passages do not answer this"
-    correct_done = values["correct"] is not None
+        values["context_recall"] = False
+        values[LIVE_SCORE_FIELDS["context_recall"]] = 0.0
+        reasons["context_recall"] = (
+            "no reference derivable: the passages do not answer this"
+        )
+    recall_done = values["context_recall"] is not None
     # A draft that failed once is retried (the outage may have healed); one that
     # already RANKED as no-answer-derivable was a completed verdict, handled above.
 
@@ -624,8 +641,24 @@ def _eval_answer(
 
     _stage("faithful", faithfulness_scored, question, context_text, answer)
     _stage("relevant", answer_relevancy_scored, question, answer)
-    _stage("context_relevance", context_relevance_scored, question, context_text)
-    _stage("context_sufficiency", context_sufficiency_scored, question, context_text)
+    precision_data_gap = False
+    if passages:
+        # Rank-aware precision grades the ORDERED pool, not the flattened
+        # context string. A nil pool means the caller had no order to give —
+        # answers stored before passages were persisted — and that is a data
+        # gap, not a broken grader: name it honestly and let a fresh ask grade
+        # cleanly.
+        _stage("context_precision", context_precision_scored, question, passages)
+    elif not done["context_precision"]:
+        # Nothing a retry brings back can fill this gap — the ordered pool
+        # existed only at answer time. Marking it terminal (precision_data_gap)
+        # tells the /grade route to stop spending its retry budget on it,
+        # which "grading continues next try" would promise falsely.
+        reasons["context_precision"] = (
+            "context precision cannot grade this answer: its ordered passages "
+            "were not stored; answers asked after this one grade it"
+        )
+        precision_data_gap = True
 
     def _run2(fn, *args):
         """_run for the two-tuple synthesis judge (text, reason)."""
@@ -635,17 +668,17 @@ def _eval_answer(
         except Exception as exc:  # noqa: BLE001
             return None, str(exc)
 
-    if not correct_done and _time_left() > _SLICE_MIN_SECONDS:
+    if not recall_done and _time_left() > _SLICE_MIN_SECONDS:
         if bank_expected:
-            # The known answer is DATA, not a model call, so correctness is
+            # The known answer is DATA, not a model call, so context recall is
             # ONE judge call on this path — there is no draft to buy and no
             # window to pause between reference and score. Both fields persist
             # even if the judge below fails: a retry must re-use this
             # reference, never replace it with a drafted one.
             values["expected_answer"] = bank_expected
             values["expected_source"] = "bank"
-            _put("correct", _run(
-                answer_correctness_scored, question, bank_expected, answer
+            _put("context_recall", _run(
+                context_recall_scored, question, bank_expected, context_text
             ))
         else:
             # Resume a draft-outage marker ("expected_answer": "" + a reason) by
@@ -656,33 +689,32 @@ def _eval_answer(
                     synthesize_expected, question, context_text
                 )
             if expected_text:
-                # A real reference exists: score against it and persist it so a
-                # retry never re-purchases the same draft call. Correctness is TWO
-                # sequential calls (draft + score), so the deadline is re-checked
-                # between them rather than only before the pair.
+                # A real reference exists: grade against it and persist it so a
+                # retry never re-purchases the same draft call. Recall is TWO
+                # sequential calls (draft + score), so the deadline is
+                # re-checked between them rather than only before the pair.
+                # "draft" is the provenance the UI renders "estimated" from —
+                # set as soon as the reference exists, pause or score.
+                values["expected_answer"] = expected_text
+                values["expected_source"] = "draft"
                 if _time_left() > _SLICE_MIN_SECONDS:
-                    values["expected_answer"] = expected_text
-                    _put("correct", _run(
-                        answer_correctness_scored, question, expected_text, answer
+                    _put("context_recall", _run(
+                        context_recall_scored, question, expected_text, context_text
                     ))
-                else:
-                    # Draft bought but not yet scored: persist just the text.
-                    # A resumed pass finds a non-empty expected_answer with
-                    # correct=None, skips synthesis above, and scores directly.
-                    values["expected_answer"] = expected_text
             else:
                 # No usable text. Two different meanings: the passages genuinely
-                # cannot answer (a graded verdict — correctness is FAIL by
-                # definition, since there was nothing to be right about), or the
-                # draft call itself failed (an outage the retry will heal, and the
-                # draft failure reason is stored as data, not an error string).
+                # cannot answer (a graded verdict — recall is 0 by definition,
+                # since the passages hold nothing a reference could be built
+                # from), or the draft call itself failed (an outage the retry
+                # will heal, and the draft failure reason is stored as data,
+                # not an error string).
                 values["expected_answer"] = ""
                 if expected_reason:
                     values["expected_reason"] = expected_reason
                 if expected_reason == NO_ANSWER_DERIVABLE:
-                    values["correct"] = False
-                    values[LIVE_SCORE_FIELDS["correct"]] = 0.0
-                    reasons["correct"] = (
+                    values["context_recall"] = False
+                    values[LIVE_SCORE_FIELDS["context_recall"]] = 0.0
+                    reasons["context_recall"] = (
                         "no reference derivable: the passages do not answer this"
                     )
 
@@ -690,16 +722,23 @@ def _eval_answer(
         **values,
         **{f"{field}_reason": reasons[field] for field in LIVE_GRADE_FIELDS},
     }
+    if precision_data_gap:
+        out["precision_data_gap"] = True
     missing = []
     paused = False
     for field in LIVE_GRADE_FIELDS:
         if values[field] is not None:
             continue
+        if field == "context_precision" and precision_data_gap:
+            # A terminal data gap, named in its own reason above — not a
+            # broken grader, so it stays out of judge_error and the route's
+            # retry scheduling.
+            continue
         # A graded "the passages do not answer this" carries its own reason in
         # expected_reason; it is a verdict, not a judge outage.
-        if field == "correct" and values.get("expected_reason") == NO_ANSWER_DERIVABLE:
+        if field == "context_recall" and values.get("expected_reason") == NO_ANSWER_DERIVABLE:
             continue
-        cause = values.get("expected_reason") if field == "correct" else ""
+        cause = values.get("expected_reason") if field == "context_recall" else ""
         cause = cause or (reasons[field] or "judge returned no verdict")
         if cause.endswith("grading continues next try"):
             # Out of wall clock, out of judge failure: the retry loop will
@@ -707,8 +746,8 @@ def _eval_answer(
             # grader and waste the reader's patience on a non-problem.
             paused = True
             continue
-        if field == "correct":
-            # The reference draft is upstream of the correctness judge; if
+        if field == "context_recall":
+            # The reference draft is upstream of the recall judge; if
             # IT failed, naming "no verdict" would send someone debugging
             # the wrong call.
             cause = values.get("expected_reason") or (
@@ -746,10 +785,18 @@ def grade_answer(
     context_text: str,
     cfg: PipelineConfig,
     previous: dict | None = None,
+    passages: list[str] | None = None,
 ) -> dict:
-    """Run only unresolved judges on an answer already delivered to the reader."""
+    """Run only unresolved judges on an answer already delivered to the reader.
+
+    ``passages`` is the persisted pool order from the answer's eval_context —
+    context precision grades against it because it is rank-aware.
+    """
     t0 = time.time()
-    out = _eval_answer(question, answer, context_text, cfg, previous) or {}
+    out = (
+        _eval_answer(question, answer, context_text, cfg, previous, passages=passages)
+        or {}
+    )
     out["grade_ms"] = round((time.time() - t0) * 1000)
     return out
 
@@ -818,16 +865,17 @@ def _line(eval_d: dict | None, top_sim: float | None, deep: int, latency_ms: flo
             parts.append("faith " + ("PASS" if eval_d["faithful"] else "FAIL"))
         if eval_d.get("relevant") is not None:
             parts.append("rel " + ("PASS" if eval_d["relevant"] else "FAIL"))
-        if eval_d.get("context_relevance") is not None:
-            parts.append("ctx rel " + ("PASS" if eval_d["context_relevance"] else "FAIL"))
-        if eval_d.get("context_sufficiency") is not None:
-            parts.append("ctx suff " + ("PASS" if eval_d["context_sufficiency"] else "FAIL"))
-        if eval_d.get("correct") is not None:
-            # Prefer the score: "correct 75" says what "correct PASS" hides.
-            cs = eval_d.get("correct_score")
+        # The context pair prefers its score, for the same reason `correct`
+        # did: "ctx prec 65" says what "ctx prec PASS" hides. The retired
+        # keys (ctx rel / ctx suff / correct) are not rebuilt: their verdicts
+        # died with the pivot, and a re-graded message carries the new pair.
+        for key, word in (("context_precision", "ctx prec"), ("context_recall", "ctx rec")):
+            if eval_d.get(key) is None:
+                continue
+            cs = eval_d.get(f"{key}_score")
             parts.append(
-                "correct " + (f"{round(cs * 100)}" if cs is not None
-                              else "PASS" if eval_d["correct"] else "FAIL")
+                word + (f" {round(cs * 100)}" if cs is not None
+                        else " PASS" if eval_d[key] else " FAIL")
             )
     if latency_ms is not None:
         parts.append(f"{latency_ms:.0f} ms")
@@ -1358,6 +1406,7 @@ def _ask(
     eval_d = (
         _eval_answer(
             effective_query, answer, context, cfg,
+            passages=[c["text"] for c in pool],
             expected=bank_expected or None,
             expected_source="bank" if bank_expected else None,
         )
@@ -1445,6 +1494,12 @@ def _ask(
         # the retrieval metrics. rewrite_query is a model call, so a second
         # retrieval is not guaranteed to return the same list.
         "context": context,
+        # The same pool, IN ORDER, as bare texts. Context precision is
+        # rank-aware, and the deferred grade request has no pool — ask() is
+        # the only moment the order exists, so it is persisted here and the
+        # route hands it back to grade_answer. The route strips this from the
+        # client payload; only eval_context keeps it.
+        "passages": [c["text"] for c in pool],
         # The query the answer was built from — the rewrite, not what the user
         # typed. A later grade call must judge the same one.
         "effective_query": effective_query,

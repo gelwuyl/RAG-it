@@ -3,35 +3,45 @@
  * cannot prove. Eight answers with different grading provenance are served
  * through a mocked API (no backend, no model calls), and the check drives the
  * REAL path a reader does: open the app, click each answer's eval chip, and
- * assert where its correctness reading landed.
+ * assert what the two panels show.
  *
- * The state under test:
- *   A. bank-referenced  — expected_source: "bank": the correctness judge
- *      graded against the question's HUMAN known answer, so the reading is
- *      GOLD: it fills the Answer correctness bar and names the golden entry.
- *      (The per-answer estimates strip that used to echo drafted readings was
- *      removed — proxy-measured numbers no longer appear on this pane at all.)
- *   B. drafted-reference — the bar stays benchmark-only: the drafted reading
- *      is measured against a proxy, so it appears nowhere on the bars.
- *   C. pending + bank    — the bar waits for its gold reading.
- *   D. pending + drafted — correctness pends without borrowing the bank
- *      rows' waiting state: the row keeps the benchmark.
- *   E. known-unanswerable refusal — the not-found row reads "refused".
- *   F. judge graded binary WITHOUT a score — the old 100/0 fill is now a
- *      state pill: faithfulness ✓ passed, relevancy ✗ failed.
- *   G. known-unanswerable, NOT refused — the ✗ polarity: "missed".
- *   H. answerable, hit rate 0 — the ✗ polarity of the made-the-cut pill;
- *      the other retrieval readings are real ratios that merely LAND on 0
- *      and keep their bars.
+ * The pane now has TWO panels with two different jobs:
  *
- * Boolean live readings (refused/missed, made-the-cut/cut, and the binary
- * judge fallback) render as a pill riding the GRAY benchmark bar: their rows
- * carry a .bench-fill (the benchmark rate) but NO .score-fill (no live
- * magnitude). Ratio rows carry BOTH bars — gray benchmark above lime live. A
- * ratio that lands on 0 or 100 (context recall at 100%, MRR at 0%) is a real
- * magnitude and keeps its live bar — the fixtures pin that distinction.
- * Chips read the VERDICT WORD and tag provenance "known" where they used to
- * read "gold". The legend at the panel bottom names the two bar colours once.
+ *   PRIMARY (#eval-scorecard, outside the expander) — exactly four rows in two
+ *   groups: Context precision / Context recall (Retrieval) and Faithfulness /
+ *   Answer relevancy (Generation). Per-answer, per-RAGAS: a dash before
+ *   grading, "grading…" while the deferred request runs, then a percent from
+ *   the judge's 0-1 score (or the binary passed/failed word when the judge
+ *   omitted its score line). Retrieval rows carry the provenance tag derived
+ *   from expected_source: "bank" → "known" (the demo bank's HUMAN reference),
+ *   "draft" → "estimated" (a model-drafted reference). Generation rows need no
+ *   reference and carry NO tag. There are no benchmark bars, ticks or legend
+ *   here — the published run is not this panel's subject.
+ *
+ *   DETAIL (#eval-benchmark, behind "See the benchmark in detail") — the
+ *   nine-metric published run, intact: stacked bars, one legend, pills, feet.
+ *   Its only per-answer dimension is MEASURED: a bank-matched question's gold
+ *   readings (against that question's KNOWN passages) land on the rows with a
+ *   "known" tag and a golden foot. Judged readings of the selected answer no
+ *   longer appear here at all — a verdict about one answer beside an average
+ *   over 53 questions is the comparison the four-RAGAS pivot stopped making.
+ *
+ * Fixture states (one per answer):
+ *   A. bank-referenced, graded  — primary: four scores, retrieval "known";
+ *      detail: gold rows measured against known passages.
+ *   B. drafted-reference, graded — primary: retrieval "estimated".
+ *   C. pending + bank           — primary: rows wait ("grading…").
+ *   D. pending + drafted, mixed — a sliced run: some readings landed while
+ *      others wait, and the panel shows both.
+ *   E. binary judge verdict WITHOUT a score — the 100/0 fallback renders as
+ *      the passed/failed word, and the bar fills 100/0.
+ *   I. graded DEFINITIONAL verdict — context recall 0% because the passages
+ *      cannot yield a reference; the system reason is reachable on hover
+ *      while healthy rows stay tooltip-quiet.
+ *   F. known-unanswerable refusal — detail: the not-found row reads "refused".
+ *   G. known-unanswerable, answered anyway — detail: "missed" (✗ polarity).
+ *   H. answerable, hit rate 0 — detail: the ✗ "cut" pill, while MRR — a ratio
+ *      that merely LANDS on 0 — keeps its bar.
  *
  * Usage:  node scorecard_check.mjs [baseUrl]   (default http://localhost:5173)
  * Exits non-zero on the first failed assertion or on any page error.
@@ -46,8 +56,7 @@ function check(label, ok, detail = "") {
   if (!ok) fails.push(label);
 }
 
-// The published-run metrics every bar needs. Values chosen so live readings
-// land both above and below their benchmark.
+// The published-run metrics every detail bar needs.
 const METRICS = {
   context_recall: 0.49, precision_at_k: 0.71,
   faithfulness: 0.86, answer_relevancy: 0.83, answer_correctness: 0.80,
@@ -65,9 +74,8 @@ const GRADED = {
   pending: false,
   faithful: true, faithful_score: 0.93,
   relevant: true, relevant_score: 0.90,
-  context_relevance: true, context_relevance_score: 0.72,
-  context_sufficiency: false, context_sufficiency_score: 0.55,
-  correct: true, correct_score: 0.81,
+  context_precision: true, context_precision_score: 0.72,
+  context_recall: false, context_recall_score: 0.55,
   latency_ms: 1200, top_sim: 0.62, deep_n: 0, cited_rank: 1, pool_n: 4,
   grade_ms: 3100,
 };
@@ -82,40 +90,40 @@ const MESSAGES = [
   // B. drafted-reference, graded
   { id: "m2", role: "assistant", content: "Espresso is 3.20 … [1]", citations: [],
     eval_line: "top sim 0.55 - 1100 ms",
-    eval_data: { ...GRADED, correct: true, correct_score: undefined,
-      gold: undefined, expected_answer: undefined, expected_source: undefined,
-      top_sim: 0.55, cited_rank: 2 } },
-  // C. pending, bank-referenced
+    eval_data: { ...GRADED, expected_answer: "Espresso is 3.20 …",
+      expected_source: "draft", gold: undefined, top_sim: 0.55, cited_rank: 2 } },
+  // C. pending, bank-referenced — nothing has graded yet
   { id: "m3", role: "assistant", content: "Espresso is 3.20 … [1]", citations: [],
     eval_line: "top sim 0.62 - 1300 ms",
     eval_data: { pending: true, faithful: null, relevant: null,
-      context_relevance: null, context_sufficiency: null, correct: null,
+      context_precision: null, context_recall: null,
       expected_answer: "Espresso is 3.20, cappuccino 4.50 …",
       expected_source: "bank", latency_ms: 1300, top_sim: 0.62, deep_n: 0,
       retry_after_ms: 60_000 } },
-  // D. pending, drafted — correctness landed (but against a drafted
-  // reference, so it fills no bar) while the judges are still out, which is
-  // the mixed state a sliced judge run actually produces.
+  // D. pending, drafted, MIXED — the state a sliced judge run actually
+  // produces: the generation pair landed, the retrieval pair is still out.
   { id: "m4", role: "assistant", content: "Espresso is 3.20 … [1]", citations: [],
     eval_line: "top sim 0.58 - 1400 ms",
-    eval_data: { pending: true, faithful: null, relevant: null,
-      context_relevance: null, context_sufficiency: null,
-      correct: true, correct_score: 0.66, cited_rank: 2, pool_n: 4,
+    eval_data: { pending: true, faithful: true, faithful_score: 0.88,
+      relevant: true, relevant_score: 0.91,
+      context_precision: null, context_recall: null,
+      expected_answer: "Espresso is 3.20 …", expected_source: "draft",
+      cited_rank: 2, pool_n: 4,
       latency_ms: 1400, top_sim: 0.58, deep_n: 0, retry_after_ms: 60_000 } },
-  // E. known-unanswerable, refused
-  { id: "m5", role: "assistant", content: "I couldn't find an answer…",
+  // E. judge graded binary WITHOUT a score — the fallback the primary panel
+  // renders as the passed/failed word over a 100/0 fill.
+  { id: "m5", role: "assistant", content: "Espresso is 3.20 … [1]", citations: [],
+    eval_line: "top sim 0.60 - 1000 ms",
+    eval_data: { pending: false, faithful: true, relevant: false,
+      context_precision: null, context_recall: null,
+      cited_rank: 1, pool_n: 4, latency_ms: 1000, top_sim: 0.60, deep_n: 0 } },
+  // F. known-unanswerable, refused
+  { id: "m6", role: "assistant", content: "I couldn't find an answer…",
     citations: [], eval_line: "top sim 0.31 - 900 ms",
     eval_data: { pending: false, latency_ms: 900, top_sim: 0.31, deep_n: 0,
       gold: { idx: 70, src: "demo",
         question: "Does Meridian sell gift cards?",
         unanswerable: true, refused: true } } },
-  // F. judge graded binary WITHOUT a score — the fallback that used to draw
-  // a 100/0 fill. Faithfulness passed; relevancy failed.
-  { id: "m6", role: "assistant", content: "Espresso is 3.20 … [1]", citations: [],
-    eval_line: "top sim 0.60 - 1000 ms",
-    eval_data: { pending: false, faithful: true, relevant: false,
-      correct: null, context_relevance: null, context_sufficiency: null,
-      cited_rank: 1, pool_n: 4, latency_ms: 1000, top_sim: 0.60, deep_n: 0 } },
   // G. known-unanswerable, answered anyway — the ✗ polarity of the refusal
   // pill.
   { id: "m7", role: "assistant", content: "Meridian offers…", citations: [],
@@ -135,6 +143,19 @@ const MESSAGES = [
         unanswerable: false, refused: false,
         mrr: 0.0, ndcg_at_k: 0.0, hit_rate_at_k: 0,
         context_recall: 0.25, precision_at_k: 0.1 } } },
+  // I. graded definitional verdict — context recall 0% because the passages
+  // cannot yield a reference. A system reason rides the graded row and must
+  // be reachable on hover; healthy rows stay tooltip-quiet.
+  { id: "m9", role: "assistant", content: "Meridian roasts… [1]", citations: [],
+    eval_line: "top sim 0.50 - 1050 ms",
+    eval_data: { pending: false,
+      faithful: true, faithful_score: 0.9,
+      relevant: true, relevant_score: 0.9,
+      context_precision: true, context_precision_score: 0.8,
+      context_recall: false, context_recall_score: 0.0,
+      expected_answer: "", expected_source: "draft",
+      expected_reason: "no reference derivable: the passages do not answer this",
+      latency_ms: 1050, top_sim: 0.50, deep_n: 0, pool_n: 4 } },
 ].map((m) => ({ ...m, eval_data: Object.fromEntries(Object.entries(m.eval_data || {}).filter(([, v]) => v !== undefined)) }));
 
 const EVAL_DONE = {
@@ -179,34 +200,40 @@ await page.route("**/api/eval/baseline", (route) => route.fulfill({ json: { base
 await page.route("**/api/eval", (route) => route.fulfill({ json: EVAL_DONE }));
 
 await page.goto(`${BASE}/app.html`, { waitUntil: "networkidle" });
-await page.waitForSelector(".score-row", { timeout: 15_000 });
+await page.waitForSelector("#eval-scorecard", { timeout: 15_000 });
 await page.waitForTimeout(300);
-
-const rowText = (label) =>
-  page.locator(".score-row", { hasText: label });
 
 // innerText returns RENDERED text and the pane styles tags/strip labels with
 // text-transform: uppercase — so every comparison below is case-folded. The
 // assertions are about provenance, not about a stylesheet.
 const lower = (s) => s.trim().toLowerCase();
 
-async function chipOf(label) {
-  return lower(await rowText(label).locator(".score-val").innerText());
+// Both panels use .score-row, so every locator is scoped to its panel: the
+// primary four live in #eval-scorecard, the nine benchmark rows in
+// #eval-benchmark (inside the expander).
+const pRow = (label) => page.locator("#eval-scorecard .score-row", { hasText: label });
+const dRow = (label) => page.locator("#eval-benchmark .score-row", { hasText: label });
+
+async function chipOf(row, label) {
+  return lower(await row(label).locator(".score-val").innerText());
 }
-async function tagOf(label) {
-  return lower(await rowText(label).locator(".score-tag").innerText());
+async function tagOf(row, label) {
+  return lower(await row(label).locator(".score-tag").innerText());
 }
-async function footOf(label) {
-  return lower(await rowText(label).locator(".score-foot").innerText());
+async function tagCount(row, label) {
+  return row(label).locator(".score-tag").count();
 }
-async function fillPct(label) {
-  return rowText(label).locator(".score-fill").evaluate((el) => el.style.width);
+async function footOf(row, label) {
+  return lower(await row(label).locator(".score-foot").innerText());
 }
-// The state pill a boolean live reading renders as, plus the two things that
-// must hold on its row: NO live fill (the pill is the state mark, not a
+async function fillPct(row, label) {
+  return row(label).locator(".score-fill").evaluate((el) => el.style.width);
+}
+// The state pill a boolean gold reading renders as, plus the two things that
+// must hold on its detail row: NO live fill (the pill is the state mark, not a
 // magnitude), and the gray benchmark bar still present for it to ride.
 async function pillInfo(label) {
-  const row = rowText(label);
+  const row = dRow(label);
   if ((await row.locator(".score-pill").count()) === 0) return null;
   const pill = row.locator(".score-pill");
   return {
@@ -222,32 +249,56 @@ async function clickChip(messageId) {
   await page.waitForTimeout(250);
 }
 
-const rowA = rowText("Matched the expected answer");
+// ---------- before any answer is selected: the ask-a-question state ----------
+check("empty: the primary panel invites the first compare",
+  (await page.locator("#eval-scorecard .empty-state").count()) === 1);
 
-// ---------- A. bank-referenced: gold on the bar, out of the strip ----------
+// ---------- A. bank-referenced: four readings, retrieval known ----------
 await clickChip("m1");
-check("A: correctness bar fills with the judge score",
-  (await fillPct("Matched the expected answer")) === "81%",
-  `width=${await fillPct("Matched the expected answer")}`);
-check("A: correctness row is live", await rowA.evaluate((el) => el.classList.contains("has-live")));
-check("A: chip reads the percentage", (await chipOf("Matched the expected answer")).includes("81%"),
-  await chipOf("Matched the expected answer"));
-check("A: tag is known", (await tagOf("Matched the expected answer")) === "known",
-  await tagOf("Matched the expected answer"));
-const footA = await footOf("Matched the expected answer");
-check("A: footer names the known answer and the golden entry",
-  footA.includes("known answer") && footA.includes("golden #64"), footA);
-check("A: footer does not claim passage measurement",
-  !footA.includes("known passages"), footA);
-// Gold retrieval rows still measured, from the same answer's gold entry.
-check("A: retrieval recall row stays gold-measured",
-  (await footOf("Found the right passages")).includes("golden #64") &&
-    (await footOf("Found the right passages")).includes("known passages"),
-  await footOf("Found the right passages"));
-check("A: faithfulness row is judged",
-  (await tagOf("Stuck to the sources")) === "judged", await tagOf("Stuck to the sources"));
+check("A: exactly four primary rows in two groups",
+  (await page.locator("#eval-scorecard .score-row").count()) === 4 &&
+    (await page.locator("#eval-scorecard .score-group").count()) === 2,
+  `rows=${await page.locator("#eval-scorecard .score-row").count()} groups=${await page.locator("#eval-scorecard .score-group").count()}`);
+check("A: precision chip reads the score",
+  (await chipOf(pRow, "Context precision")).includes("72%"), await chipOf(pRow, "Context precision"));
+check("A: recall chip reads the score",
+  (await chipOf(pRow, "Context recall")).includes("55%"), await chipOf(pRow, "Context recall"));
+check("A: faithfulness chip reads the score",
+  (await chipOf(pRow, "Stuck to the sources")).includes("93%"), await chipOf(pRow, "Stuck to the sources"));
+check("A: relevancy chip reads the score",
+  (await chipOf(pRow, "Answered what was asked")).includes("90%"), await chipOf(pRow, "Answered what was asked"));
+check("A: precision bar fills to the score",
+  (await fillPct(pRow, "Context precision")) === "72%", await fillPct(pRow, "Context precision"));
+check("A: recall bar fills to the score",
+  (await fillPct(pRow, "Context recall")) === "55%", await fillPct(pRow, "Context recall"));
+check("A: retrieval tags are known on a bank match",
+  (await tagOf(pRow, "Context precision")) === "known" &&
+    (await tagOf(pRow, "Context recall")) === "known");
+check("A: generation rows carry NO provenance tag",
+  (await tagCount(pRow, "Stuck to the sources")) === 0 &&
+    (await tagCount(pRow, "Answered what was asked")) === 0);
+check("A: the primary panel has no benchmark bars, legend or pills",
+  (await page.locator("#eval-scorecard .bench-fill").count()) === 0 &&
+    (await page.locator("#eval-scorecard .score-legend").count()) === 0 &&
+    (await page.locator("#eval-scorecard .score-pill").count()) === 0);
+
+// The detail, behind the expander, keeps the measured dimension only.
+await page.locator("#eval-details summary").click();
+await page.waitForTimeout(200);
+check("A: detail correctness row is benchmark-only (correctness left the live set)",
+  !(await dRow("Matched the expected answer").evaluate((el) => el.classList.contains("has-live"))) &&
+    (await tagOf(dRow, "Matched the expected answer")) === "bench" &&
+    (await footOf(dRow, "Matched the expected answer")).includes("benchmark 80%"),
+  await footOf(dRow, "Matched the expected answer"));
+check("A: detail recall row stays gold-measured",
+  (await footOf(dRow, "Found the right passages")).includes("golden #64") &&
+    (await footOf(dRow, "Found the right passages")).includes("known passages") &&
+    (await tagOf(dRow, "Found the right passages")) === "known",
+  await footOf(dRow, "Found the right passages"));
+check("A: detail recall bar fills to the gold reading",
+  (await fillPct(dRow, "Found the right passages")) === "100%");
 // Boolean gold readings are states: hit rate (gold 1) renders as a pill on
-// the benchmark track; a ratio that merely LANDS on 100% keeps its bar.
+// the benchmark track.
 const hit = await pillInfo("Right passage made the cut");
 check("A: hit-rate gold reading renders as a neutral pass pill",
   !!hit && !hit.fail && hit.text.includes("made the cut") && hit.text.includes("✓"),
@@ -255,142 +306,119 @@ check("A: hit-rate gold reading renders as a neutral pass pill",
 check("A: hit-rate row has NO live fill and rides the gray benchmark bar",
   !!hit && hit.fills === 0 && hit.benchFills === 1,
   hit && `fills=${hit.fills} benchFills=${hit.benchFills}`);
-check("A: hit-rate chip says the verdict, not 100%",
-  !(await chipOf("Right passage made the cut")).includes("100%") &&
-    (await chipOf("Right passage made the cut")).includes("made the cut"),
-  await chipOf("Right passage made the cut"));
-check("A: hit-rate foot keeps the golden pointer (unchanged by design)",
-  (await footOf("Right passage made the cut")).includes("golden #64"),
-  await footOf("Right passage made the cut"));
-const recallRow = rowText("Found the right passages");
-check("A: recall at a true 100% keeps its live bar (a ratio, not a state)",
-  (await recallRow.locator(".score-fill").count()) === 1 &&
-    (await recallRow.locator(".score-pill").count()) === 0 &&
-    (await recallRow.locator(".bench-fill").count()) === 1 &&
-    (await fillPct("Found the right passages")) === "100%",
-  `fills=${await recallRow.locator(".score-fill").count()} pills=${await recallRow.locator(".score-pill").count()} benchFills=${await recallRow.locator(".bench-fill").count()}`);
+await page.locator("#eval-details summary").click();
+await page.waitForTimeout(200);
 
-// ---------- B. drafted-reference: the strip keeps it, the bar stays benchmark ----------
+// ---------- B. drafted-reference: retrieval estimated ----------
 await clickChip("m2");
-check("B: correctness bar does NOT fill",
-  !(await rowA.evaluate((el) => el.classList.contains("has-live"))));
-check("B: correctness tag is bench", (await tagOf("Matched the expected answer")) === "bench",
-  await tagOf("Matched the expected answer"));
-check("B: correctness chip is the benchmark", (await chipOf("Matched the expected answer")).includes("80%"),
-  await chipOf("Matched the expected answer"));
-// No live reading: the row shows the gray benchmark bar alone, dimmed.
-check("B: bench-only row dims its single gray bar",
-  (await rowA.locator(".bench-fill").count()) === 1 &&
-    (await rowA.locator(".score-fill").count()) === 0 &&
-    (await rowA.locator(".score-bar.no-live").count()) === 1,
-  `benchFills=${await rowA.locator(".bench-fill").count()} fills=${await rowA.locator(".score-fill").count()} noLive=${await rowA.locator(".score-bar.no-live").count()}`);
-check("B: the estimates strip is gone entirely",
-  (await page.locator(".score-est").count()) === 0);
+check("B: retrieval tags are estimated on a drafted reference",
+  (await tagOf(pRow, "Context precision")) === "estimated" &&
+    (await tagOf(pRow, "Context recall")) === "estimated",
+  `${await tagOf(pRow, "Context precision")} / ${await tagOf(pRow, "Context recall")}`);
+check("B: generation rows still carry no tag",
+  (await tagCount(pRow, "Stuck to the sources")) === 0);
+check("B: the readings themselves still land",
+  (await chipOf(pRow, "Context precision")).includes("72%"));
 
-// ---------- C. pending + bank: the bar waits, the strip does not ----------
+// ---------- C. pending + bank: the rows wait ----------
 await clickChip("m3");
-check("C: correctness waits on the judge",
-  (await chipOf("Matched the expected answer")).includes("grading"),
-  await chipOf("Matched the expected answer"));
-check("C: waiting row is tagged known (that is the reading it waits for)",
-  (await tagOf("Matched the expected answer")) === "known",
-  await tagOf("Matched the expected answer"));
+check("C: all four rows wait on the judge",
+  (await chipOf(pRow, "Context precision")).includes("grading") &&
+    (await chipOf(pRow, "Context recall")).includes("grading") &&
+    (await chipOf(pRow, "Stuck to the sources")).includes("grading") &&
+    (await chipOf(pRow, "Answered what was asked")).includes("grading"));
+check("C: waiting rows still carry the bank tag (that is what they wait for)",
+  (await tagOf(pRow, "Context precision")) === "known");
+check("C: waiting rows show no phantom fill",
+  (await fillPct(pRow, "Context precision")) === "0%");
 
-// ---------- D. pending + drafted: no borrowed waiting state ----------
+// ---------- D. pending + drafted, mixed: a real sliced run ----------
 await clickChip("m4");
-check("D: correctness row still shows benchmark while drafted grading pends",
-  (await chipOf("Matched the expected answer")).includes("80%"),
-  await chipOf("Matched the expected answer"));
+check("D: landed generation readings show while the retrieval pair waits",
+  (await chipOf(pRow, "Stuck to the sources")).includes("88%") &&
+    (await chipOf(pRow, "Context precision")).includes("grading"),
+  `${await chipOf(pRow, "Stuck to the sources")} / ${await chipOf(pRow, "Context precision")}`);
+check("D: drafted provenance shows before the reading does",
+  (await tagOf(pRow, "Context precision")) === "estimated");
 
-// ---------- E. known-unanswerable refusal ----------
+// ---------- E. binary judge verdict without a score ----------
 await clickChip("m5");
-check("E: not-found row reads the refusal verdict",
-  (await chipOf("Admitted when it could not answer")).includes("refused"),
-  await chipOf("Admitted when it could not answer"));
-check("E: refusal row is known",
-  (await tagOf("Admitted when it could not answer")) === "known",
-  await tagOf("Admitted when it could not answer"));
+check("E: a scoreless pass reads the word, not a 100% claim",
+  (await chipOf(pRow, "Stuck to the sources")).includes("passed") &&
+    !(await chipOf(pRow, "Stuck to the sources")).includes("93%"),
+  await chipOf(pRow, "Stuck to the sources"));
+check("E: a scoreless pass fills the binary fallback",
+  (await fillPct(pRow, "Stuck to the sources")) === "100%");
+check("E: a scoreless fail reads the word and empties the bar",
+  (await chipOf(pRow, "Answered what was asked")).includes("failed") &&
+    (await fillPct(pRow, "Answered what was asked")) === "0%");
+check("E: ungraded retrieval rows show a dash with no tag (no reference yet)",
+  (await chipOf(pRow, "Context precision")).includes("—") &&
+    (await tagCount(pRow, "Context precision")) === 0);
+
+// ---------- I. a graded definitional verdict explains itself ----------
+await clickChip("m9");
+check("I: the definitional 0% renders as a score, not a state word",
+  (await chipOf(pRow, "Context recall")).includes("0%") &&
+    !(await chipOf(pRow, "Context recall")).includes("failed"),
+  await chipOf(pRow, "Context recall"));
+check("I: the definitional verdict carries its reason on hover",
+  (await pRow("Context recall").locator(".score-val")
+    .getAttribute("title") || "").includes("no reference derivable"));
+check("I: healthy rows stay tooltip-quiet",
+  ((await pRow("Stuck to the sources").locator(".score-val")
+    .getAttribute("title")) || "") === "");
+
+// ---------- F–H. the gold dimension of the detail, behind the expander ----------
+await page.locator("#eval-details summary").click();
+await page.waitForTimeout(200);
+await clickChip("m6");
+check("F: not-found row reads the refusal verdict",
+  (await chipOf(dRow, "Admitted when it could not answer")).includes("refused"),
+  await chipOf(dRow, "Admitted when it could not answer"));
+check("F: refusal row is known",
+  (await tagOf(dRow, "Admitted when it could not answer")) === "known");
 const refusedPill = await pillInfo("Admitted when it could not answer");
-check("E: refusal renders as a NEUTRAL pass pill on the track",
+check("F: refusal renders as a NEUTRAL pass pill on the track",
   !!refusedPill && !refusedPill.fail && refusedPill.text.includes("refused") &&
     refusedPill.text.includes("✓"),
   refusedPill && refusedPill.text);
-check("E: refusal row has NO live fill and rides the gray benchmark bar",
+check("F: refusal row has NO live fill and rides the gray benchmark bar",
   !!refusedPill && refusedPill.fills === 0 && refusedPill.benchFills === 1,
   refusedPill && `fills=${refusedPill.fills} benchFills=${refusedPill.benchFills}`);
 
-// ---------- F. judge graded binary without a score: pills, not 100/0 fills ----------
-await clickChip("m6");
-const faithPill = await pillInfo("Stuck to the sources");
-check("F: faithfulness binary verdict renders as a pass pill",
-  !!faithPill && !faithPill.fail && faithPill.text.includes("passed") &&
-    faithPill.text.includes("✓"),
-  faithPill && faithPill.text);
-check("F: faithfulness row has NO live fill and rides the gray benchmark bar",
-  !!faithPill && faithPill.fills === 0 && faithPill.benchFills === 1,
-  faithPill && `fills=${faithPill.fills} benchFills=${faithPill.benchFills}`);
-check("F: faithfulness tag is judged",
-  (await tagOf("Stuck to the sources")) === "judged", await tagOf("Stuck to the sources"));
-const relPill = await pillInfo("Answered what was asked");
-check("F: relevancy binary verdict renders as a FAIL pill",
-  !!relPill && relPill.fail && relPill.text.includes("failed") && relPill.text.includes("✗"),
-  relPill && relPill.text);
-check("F: relevancy row has NO live fill and rides the gray benchmark bar",
-  !!relPill && relPill.fills === 0 && relPill.benchFills === 1,
-  relPill && `fills=${relPill.fills} benchFills=${relPill.benchFills}`);
-check("F: foot names the benchmark, not a phantom verdict",
-  (await footOf("Answered what was asked")).includes("graded against the benchmark"),
-  await footOf("Answered what was asked"));
-
-// ---------- G. known-unanswerable, missed: the ✗ polarity ----------
 await clickChip("m7");
 const missedPill = await pillInfo("Admitted when it could not answer");
 check("G: a missed refusal renders as a FAIL pill",
   !!missedPill && missedPill.fail && missedPill.text.includes("missed") &&
     missedPill.text.includes("✗"),
   missedPill && missedPill.text);
-check("G: missed row has NO live fill and rides the gray benchmark bar",
-  !!missedPill && missedPill.fills === 0 && missedPill.benchFills === 1,
-  missedPill && `fills=${missedPill.fills} benchFills=${missedPill.benchFills}`);
-check("G: tag is known",
-  (await tagOf("Admitted when it could not answer")) === "known",
-  await tagOf("Admitted when it could not answer"));
 check("G: foot says the answer should have refused",
-  (await footOf("Admitted when it could not answer")).includes("should have refused"),
-  await footOf("Admitted when it could not answer"));
+  (await footOf(dRow, "Admitted when it could not answer")).includes("should have refused"),
+  await footOf(dRow, "Admitted when it could not answer"));
 
-// ---------- H. hit-rate 0: the ✗ polarity, and a ratio that lands on 0 ----------
 await clickChip("m8");
 const cutPill = await pillInfo("Right passage made the cut");
 check("H: a cut hit rate renders as a FAIL pill",
   !!cutPill && cutPill.fail && cutPill.text.includes("cut") &&
     !cutPill.text.includes("made") && cutPill.text.includes("✗"),
   cutPill && cutPill.text);
-check("H: cut row has NO live fill and rides the gray benchmark bar",
-  !!cutPill && cutPill.fills === 0 && cutPill.benchFills === 1,
-  cutPill && `fills=${cutPill.fills} benchFills=${cutPill.benchFills}`);
 check("H: cut chip says the verdict, not 0%",
-  !(await chipOf("Right passage made the cut")).includes("0%") &&
-    (await chipOf("Right passage made the cut")).includes("cut"),
-  await chipOf("Right passage made the cut"));
-check("H: foot keeps the provenance — the pill owns the verdict, not the foot",
-  (await footOf("Right passage made the cut")).includes("golden #72") &&
-    (await footOf("Right passage made the cut")).includes("known passages") &&
-    !/\bthis answer\b/.test(await footOf("Right passage made the cut")),
-  await footOf("Right passage made the cut"));
-check("H: tag is known", (await tagOf("Right passage made the cut")) === "known",
-  await tagOf("Right passage made the cut"));
-const mrrRow = rowText("Best passage ranked high");
+  !(await chipOf(dRow, "Right passage made the cut")).includes("0%") &&
+    (await chipOf(dRow, "Right passage made the cut")).includes("cut"),
+  await chipOf(dRow, "Right passage made the cut"));
+check("H: foot keeps the golden pointer (unchanged by design)",
+  (await footOf(dRow, "Right passage made the cut")).includes("golden #72"),
+  await footOf(dRow, "Right passage made the cut"));
+const mrrRow = dRow("Best passage ranked high");
 check("H: MRR at a true 0% keeps its bar (a ratio, not a state)",
   (await mrrRow.locator(".score-fill").count()) === 1 &&
     (await mrrRow.locator(".score-pill").count()) === 0,
   `fills=${await mrrRow.locator(".score-fill").count()} pills=${await mrrRow.locator(".score-pill").count()}`);
 
-// ---------- colour legend ----------
-// Two swatches, named once: gray = benchmark, lime = this answer. They
-// replaced both the per-row "· benchmark N%" foot suffixes and the old prose
-// provenance paragraph — the feet and the tags still carry provenance words.
-const legend = page.locator(".score-legend");
+// ---------- colour legend (detail only) ----------
+// Two swatches, named once: gray = benchmark, lime = this answer.
+const legend = page.locator("#eval-benchmark .score-legend");
 check("legend names the benchmark and this answer",
   lower(await legend.innerText()).includes("benchmark") &&
     lower(await legend.innerText()).includes("this answer"),

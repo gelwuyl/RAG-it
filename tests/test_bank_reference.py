@@ -1,18 +1,19 @@
-"""Bank-referenced correctness: a matched demo question's HUMAN answer is the
-grading reference, never a model-drafted one.
+"""Bank-referenced retrieval: a matched demo question's HUMAN answer is the
+context-recall reference, never a model-drafted one.
 
-The demo bank (eval/golden.py) now carries a human ``expected`` answer per
-question. When a live question matches an answerable entry, correctness must
-grade against THAT answer, must mark the reading ``expected_source: "bank"`` so
-the UI can promote it out of the estimates strip, and must never call
+The demo bank (eval/golden.py) carries a human ``expected`` answer per
+question. When a live question matches an answerable entry, context recall
+must grade against THAT answer, must mark the reading ``expected_source:
+"bank"`` so the UI renders the retrieval rows "known", and must never call
 ``synthesize_expected`` — not on the answer request, not on the deferred grade
-request, not on any retry. Everything else stays exactly as it was: unmatched
-questions keep the drafted-reference path, known-unanswerable matches stay on
-the refusal path, ``use_gold=False`` (the benchmark) is untouched, and a broken
-judge still means "not graded" (None), never a false FAIL.
+request, not on any retry. Unmatched questions keep the drafted-reference path
+(``expected_source: "draft"`` — rendered "estimated"), known-unanswerable
+matches stay on the refusal path, ``use_gold=False`` (the benchmark) is
+untouched, and a broken judge still means "not graded" (None), never a false
+FAIL.
 
 No network: every judge (and the drafter) is stubbed. What is under test is
-which reference the correctness judge RECEIVES and what is persisted around it.
+which reference the recall judge RECEIVES and what is persisted around it.
 """
 from __future__ import annotations
 
@@ -42,6 +43,7 @@ from ragchat import pipeline as _pl  # noqa: E402
 HUMAN = "Between 1 and 4 degrees Celsius; above 5, call extension 204."
 CONTEXT = "[1] Milk fridges must read between 1 and 4 degrees Celsius."
 ANSWER = "Between 1 and 4 degrees Celsius. [1]"
+POOL = ["Milk fridges must read between 1 and 4 degrees Celsius."]
 
 GOLD = {
     "question": "What temperature should the milk fridges read?",
@@ -77,28 +79,27 @@ def _make_cfg(**over):
     return _cfg.PipelineConfig(**base)
 
 
-def _stub_judges(monkeypatch, correct=(True, 0.87, "covers the facts")):
-    """Replace every judge with an instant stub; count what correctness
+def _stub_judges(monkeypatch, recall=(True, 0.87, "covers the reference")):
+    """Replace every judge with an instant stub; count what the recall judge
     receives and whether the drafter ran at all."""
-    calls = {"synth": 0, "correct_refs": []}
+    calls = {"synth": 0, "recall_refs": []}
 
     def _synth(question, context):
         calls["synth"] += 1
         return "drafted reference.", ""
 
-    def _correct(question, expected, answer):
-        calls["correct_refs"].append(expected)
-        if isinstance(correct, Exception):
-            raise correct
-        return correct
+    def _recall(question, reference, context):
+        calls["recall_refs"].append((reference, context))
+        if isinstance(recall, Exception):
+            raise recall
+        return recall
 
     monkeypatch.setattr(judges, "synthesize_expected", _synth)
-    monkeypatch.setattr(judges, "answer_correctness_scored", _correct)
+    monkeypatch.setattr(judges, "context_recall_scored", _recall)
     for name in (
         "faithfulness_scored",
         "answer_relevancy_scored",
-        "context_relevance_scored",
-        "context_sufficiency_scored",
+        "context_precision_scored",
     ):
         monkeypatch.setattr(judges, name, lambda *a, **k: (True, 0.9, "ok"))
     return calls
@@ -124,11 +125,11 @@ def test_matched_bank_question_grades_against_the_human_answer(monkeypatch):
     calls = _stub_judges(monkeypatch)
     cfg = _make_cfg()
     out = _pl._eval_answer("how cold?", ANSWER, CONTEXT, cfg,
-                           expected=HUMAN, expected_source="bank")
+                           expected=HUMAN, expected_source="bank", passages=POOL)
     assert calls["synth"] == 0, "a known answer must never be re-drafted"
-    assert calls["correct_refs"] == [HUMAN]
-    assert out["correct"] is True
-    assert out["correct_score"] == 0.87
+    assert calls["recall_refs"] == [(HUMAN, CONTEXT)]
+    assert out["context_recall"] is True
+    assert out["context_recall_score"] == 0.87
     assert out["expected_answer"] == HUMAN
     assert out["expected_source"] == "bank"
 
@@ -140,10 +141,10 @@ def test_ask_persists_the_bank_reference_on_the_answer(monkeypatch, rig):
     out = _pl.ask("u", "how cold?", [], cfg, grade=True, use_gold=True)
     ev = out["eval"]
     assert calls["synth"] == 0
-    assert calls["correct_refs"] == [HUMAN]
+    assert calls["recall_refs"][0][0] == HUMAN
     assert ev["expected_answer"] == HUMAN
     assert ev["expected_source"] == "bank"
-    assert ev["correct"] is True
+    assert ev["context_recall"] is True
     # The gold retrieval readings ride along unchanged.
     assert ev["gold"]["idx"] == GOLD["_idx"] and ev["gold"]["mrr"] == 1.0
 
@@ -165,29 +166,30 @@ def test_deferred_grade_reuses_the_persisted_bank_reference(monkeypatch):
         "top_sim": 0.62,
         "deep_n": 0,
     }
-    out = _pl.grade_answer("how cold?", ANSWER, CONTEXT, cfg, stored)
+    out = _pl.grade_answer("how cold?", ANSWER, CONTEXT, cfg, stored, passages=POOL)
     assert calls["synth"] == 0
-    assert calls["correct_refs"] == [HUMAN]
-    assert out["correct"] is True
+    assert calls["recall_refs"] == [(HUMAN, CONTEXT)]
+    assert out["context_recall"] is True
     assert out["expected_source"] == "bank"
 
 
 def test_retry_after_a_judge_failure_still_never_drafts(monkeypatch):
-    """First pass: the correctness judge fails (outage). The reference is
+    """First pass: the recall judge fails (outage). The reference is
     persisted anyway, so the retry scores against the SAME human answer."""
-    calls = _stub_judges(monkeypatch, correct=RuntimeError("judge 404"))
+    calls = _stub_judges(monkeypatch, recall=RuntimeError("judge 404"))
     cfg = _make_cfg()
     first = _pl._eval_answer("how cold?", ANSWER, CONTEXT, cfg,
-                             expected=HUMAN, expected_source="bank")
-    assert first["correct"] is None and first["correct_score"] is None
+                             expected=HUMAN, expected_source="bank", passages=POOL)
+    assert first["context_recall"] is None and first["context_recall_score"] is None
     assert first["expected_answer"] == HUMAN
     assert first["expected_source"] == "bank"
 
     calls2 = _stub_judges(monkeypatch)
-    second = _pl._eval_answer("how cold?", ANSWER, CONTEXT, cfg, previous=first)
+    second = _pl._eval_answer("how cold?", ANSWER, CONTEXT, cfg, previous=first,
+                              passages=POOL)
     assert calls2["synth"] == 0
-    assert calls2["correct_refs"] == [HUMAN]
-    assert second["correct"] is True
+    assert calls2["recall_refs"] == [(HUMAN, CONTEXT)]
+    assert second["context_recall"] is True
     assert second["expected_source"] == "bank"
 
 
@@ -218,6 +220,7 @@ def test_route_level_grade_keeps_the_marker(monkeypatch):
                      "expected_answer": HUMAN, "expected_source": "bank",
                      "top_sim": 0.62, "deep_n": 0, "latency_ms": 100},
             "context": CONTEXT,
+            "passages": POOL,
             "effective_query": "how cold?",
         }
 
@@ -228,8 +231,8 @@ def test_route_level_grade_keeps_the_marker(monkeypatch):
     assert r.status_code == 200, r.text
     ev = r.json()["eval"]
     assert calls["synth"] == 0
-    assert calls["correct_refs"] == [HUMAN]
-    assert ev["correct"] is True
+    assert calls["recall_refs"] == [(HUMAN, CONTEXT)]
+    assert ev["context_recall"] is True
     assert ev["expected_source"] == "bank"
     # ...and it is what a reload would serve from the stored message.
     chat = client.get(f"/api/chats/{cid}").json()
@@ -237,48 +240,50 @@ def test_route_level_grade_keeps_the_marker(monkeypatch):
         m["eval_data"] for m in chat["messages"] if m["role"] == "assistant"
     )
     assert stored["expected_source"] == "bank"
-    assert stored["correct"] is True
+    assert stored["context_recall"] is True
 
 
-# ---------- 3. everyone else keeps today's behavior ----------
+# ---------- 3. everyone else keeps the drafted path, marked estimated ----------
 
 def test_unmatched_question_still_drafts_its_reference(monkeypatch):
     calls = _stub_judges(monkeypatch)
     cfg = _make_cfg()
-    out = _pl._eval_answer("how cold?", ANSWER, CONTEXT, cfg)
+    out = _pl._eval_answer("how cold?", ANSWER, CONTEXT, cfg, passages=POOL)
     assert calls["synth"] == 1
-    assert calls["correct_refs"] == ["drafted reference."]
-    assert out["correct"] is True
-    assert "expected_source" not in out, "a drafted reference must not be labelled bank truth"
+    assert calls["recall_refs"] == [("drafted reference.", CONTEXT)]
+    assert out["context_recall"] is True
+    assert out["expected_source"] == "draft", \
+        "a drafted reference is labelled estimated, never bank truth"
     assert out["expected_answer"] == "drafted reference."
 
 
-def test_unmatched_ask_has_no_bank_marker(monkeypatch, rig):
+def test_unmatched_ask_marks_its_draft(monkeypatch, rig):
     calls = _stub_judges(monkeypatch)
     monkeypatch.setattr(golden, "match_question", lambda q: None)
     out = _pl.ask("u", "how cold?", [], _make_cfg(), grade=True, use_gold=True)
     assert calls["synth"] == 1
-    assert "expected_source" not in out["eval"]
+    assert out["eval"]["expected_source"] == "draft"
 
 
 def test_known_unanswerable_match_never_gets_a_bank_reference(monkeypatch, rig):
-    """A wrongly-answered unanswerable question is graded exactly as before —
-    drafted reference, no bank marker. Bank membership alone must not hand it
-    a reference (it has none) or change its verdict shape."""
+    """A wrongly-answered unanswerable question is graded exactly as an
+    unmatched one — drafted reference, estimated provenance. Bank membership
+    alone must not hand it a reference (it has none) or change its verdict
+    shape."""
     calls = _stub_judges(monkeypatch)
     monkeypatch.setattr(golden, "match_question", lambda q: UNANS)
     out = _pl.ask("u", "how much does the battery cost?", [], _make_cfg(),
                   grade=True, use_gold=True)
     ev = out["eval"]
     assert calls["synth"] == 1, "the drafted path is unchanged for unanswerables"
-    assert "expected_source" not in ev
+    assert ev["expected_source"] == "draft"
     assert ev["gold"]["refused"] is False
     assert ev["gold"]["unanswerable"] is True
 
 
 def test_known_unanswerable_refusal_attaches_no_reference(monkeypatch, rig):
-    """The model refuses: that is the measured verdict, and no correctness
-    judge runs at all — bank entry or not."""
+    """The model refuses: that is the measured verdict, and no recall judge
+    runs at all — bank entry or not."""
     rig["pool"] = []
     calls = _stub_judges(monkeypatch)
     monkeypatch.setattr(golden, "match_question", lambda q: UNANS)
@@ -302,19 +307,19 @@ def test_use_gold_false_benchmark_is_untouched(monkeypatch, rig):
     out = _pl.ask("u", "how cold?", [], _make_cfg(), grade=True, use_gold=False)
     assert seen["n"] == 0
     assert calls["synth"] == 1
-    assert "expected_source" not in out["eval"]
+    assert out["eval"]["expected_source"] == "draft"
     assert "gold" not in out["eval"]
 
 
 # ---------- 4. a broken judge stays ungraded, never a false FAIL ----------
 
 def test_bank_judge_failure_stays_ungraded_with_an_actionable_reason(monkeypatch):
-    calls = _stub_judges(monkeypatch, correct=RuntimeError("judge model 404"))
+    calls = _stub_judges(monkeypatch, recall=RuntimeError("judge model 404"))
     out = _pl._eval_answer("how cold?", ANSWER, CONTEXT, _make_cfg(),
-                           expected=HUMAN, expected_source="bank")
-    assert out["correct"] is None, "an outage must not become a verdict"
-    assert out["correct_score"] is None
+                           expected=HUMAN, expected_source="bank", passages=POOL)
+    assert out["context_recall"] is None, "an outage must not become a verdict"
+    assert out["context_recall_score"] is None
     assert out["expected_answer"] == HUMAN, "the reference persists for the retry"
     assert out["expected_source"] == "bank"
     assert calls["synth"] == 0
-    assert "Answer correctness unavailable" in out.get("judge_error", "")
+    assert "Context recall unavailable" in out.get("judge_error", "")

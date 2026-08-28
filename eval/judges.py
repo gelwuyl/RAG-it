@@ -1,11 +1,14 @@
 """LLM-as-judge metrics for answer and context quality.
 
 The reference-based correctness judge is used by the benchmark. The live chat
-also uses two explicitly reference-free context checks — context relevance and
-context sufficiency — plus synthesize_expected, which DRAFTS a reference from
-the retrieved passages so arbitrary answers can carry an estimated correctness.
-Proxies and synthesized references must not be mistaken for golden-set recall,
-precision, or correctness; callers label them estimated in the UI.
+grades the FOUR canonical RAGAS metrics — faithfulness and answer relevancy for
+the generation, rank-aware context precision and reference-based context recall
+for the retrieval — plus synthesize_expected, which DRAFTS a reference from the
+retrieved passages when no human one exists (a matched demo-bank question's
+HUMAN answer outranks any draft). Drafted references are estimates, not
+golden-set recall; callers label them estimated in the UI. The retired live
+proxies (context relevance, context sufficiency, answer correctness) are kept
+below because the benchmark CLI harness still calls them.
 
 All judges reuse the same proxy LLM (qwen3.8-max) per user decision 2026-08-15.
 The judge returns PASS/FAIL (or a 0-1 score) plus one line of reasoning.
@@ -105,6 +108,22 @@ _VERDICT_CONTRACT_SCORED = (
 )
 
 _SCORE_LINE = re.compile(r"SCORE:\s*([0-9]+(?:\.[0-9]+)?)", re.IGNORECASE)
+
+# The context-precision judge's contract: one mark line per passage, in
+# retrieval order, then the usual verdict pair. The marks are the measurement
+# (average precision is computed from them, not from the judge's own SCORE);
+# the verdict line exists so a truncated reply fails the same "no verdict"
+# check every other judge fails through.
+_MARKS_CONTRACT = (
+    "Reply in exactly this format, with NO preamble, NO chain-of-thought, "
+    "NO commentary outside these lines. Do NOT show your working — decide "
+    "silently and output only:\n"
+    "PASSAGE 1: RELEVANT or IRRELEVANT\n"
+    "PASSAGE 2: RELEVANT or IRRELEVANT\n"
+    "(exactly one line for EVERY passage, in order)\n"
+    "VERDICT: PASS or FAIL\n"
+    "REASON: one short sentence citing the specific evidence.\n"
+)
 
 
 # Reasoning-tuned models wrap output in these; strip before parsing so a
@@ -305,9 +324,16 @@ def context_sufficiency(question: str, context: str) -> tuple[bool, str]:
 
 # --- scored variants for the live scorecard --------------------------------
 #
-# Same questions, same criteria, one extra 0-100 reading. Only the live chat
-# calls these; the benchmark keeps the boolean functions above so its published
-# pass-rate numbers keep meaning exactly what they meant when published.
+# Same questions, same criteria, one extra 0-100 reading. The benchmark keeps
+# the boolean functions above so its published pass-rate numbers keep meaning
+# exactly what they meant when published. Since the pivot to the four canonical
+# RAGAS metrics, the live chat calls only faithfulness_scored and
+# answer_relevancy_scored from this block (plus context_precision_scored and
+# context_recall_scored above it); context_relevance_scored,
+# context_sufficiency_scored and answer_correctness_scored are retired from the
+# live path but KEPT — their semantics document what the proxies were and were
+# not, and deleting them would orphan nothing but would also erase the reason
+# the newer judges exist.
 
 
 def faithfulness_scored(question: str, context: str, answer: str) -> tuple[bool, float, str]:
@@ -403,6 +429,121 @@ def context_sufficiency_scored(question: str, context: str) -> tuple[bool, float
     # every passage inside <thought> on long contexts. Probed live: 2048 still
     # ends finish_reason="length" with no verdict emitted; 4096 returns stop
     # with a parseable verdict.
+    return _parse_verdict_scored(_judge(prompt, max_tokens=4096))
+
+
+def context_precision_scored(
+    question: str, passages: list[str]
+) -> tuple[bool, float, str]:
+    """Rank-aware Context Precision (RAGAS-style): average precision over the pool.
+
+    ONE judge call, not one per passage. Each retrieved passage is marked
+    RELEVANT/IRRELEVANT in the order it was ranked, and the 0-1 score is
+    average precision computed HERE, not by the model — judges are unreliable
+    at arithmetic and the score must be reproducible from the marks. Relevant
+    material ranking low is what this metric punishes; a flat list of passage
+    texts would have thrown that away.
+
+    The judge's VERDICT line is parsed only as the fail-open anchor (no
+    verdict → JudgeError → the caller records "not graded"); the verdict we
+    RETURN is the measured one: PASS when average precision is at least 0.5.
+    Marks that do not cover every passage are a broken or truncated reply —
+    a partial mark set would silently distort a rank-aware statistic, so it
+    is a JudgeError, never a score.
+
+    ``passages`` must be the retrieved chunks IN POOL ORDER. The live caller
+    persists that order at answer time, because the deferred grade request
+    has no pool of its own and re-running retrieval would risk grading a
+    different list than the model read.
+    """
+    if not passages:
+        return False, 0.0, "no passages retrieved"
+    n = len(passages)
+    numbered = "\n\n".join(
+        f"[PASSAGE {i}]\n{p}" for i, p in enumerate(passages, start=1)
+    )
+    prompt = (
+        "You are grading a RAG system's CONTEXT PRECISION. Below are the "
+        "passages its retriever returned, IN THE ORDER IT RANKED THEM. For "
+        "EACH passage decide whether it contains information needed to answer "
+        "the question. A passage that is off-topic, filler, or does not bear "
+        "on the question is IRRELEVANT. Relevant passages ranked near the top "
+        "must yield a high score; relevant passages buried low are penalized. "
+        "Judge only the question and the passages; do not use outside "
+        "knowledge and do not judge any generated answer.\n\n"
+        f"Question: {question}\n\n"
+        f"Passages, in retrieval order:\n\n{numbered}\n\n"
+        + _MARKS_CONTRACT
+    )
+    # 4096, not 512: the configured judge is thinking-capable and reasons about
+    # every passage inside <thought> on long pools — the same budget every
+    # scored judge runs with.
+    out = _judge(prompt, max_tokens=4096)
+    text = _THINK_BLOCK.sub("", out or "")
+    text = _UNCLOSED_THINK_BLOCK.sub("", text).strip()
+    verdict_j, reason = _parse_verdict(text)
+    marks = {
+        int(m.group(1)): m.group(2).upper()
+        for m in re.finditer(
+            r"PASSAGE\s*(\d+)\s*:\s*(RELEVANT|IRRELEVANT)", text, re.IGNORECASE
+        )
+    }
+    missing = [i for i in range(1, n + 1) if i not in marks]
+    if missing:
+        raise JudgeError(
+            f"judge marked {len(marks)} of {n} passages (missing: {missing[:5]})"
+        )
+    hits = 0
+    precision_sum = 0.0
+    for i in range(1, n + 1):
+        if marks[i] == "RELEVANT":
+            hits += 1
+            precision_sum += hits / i
+    ap = precision_sum / hits if hits else 0.0
+    # The returned verdict is the MEASURED one, not the judge's line: a score
+    # and a verdict that disagree would be two graders in one column.
+    return ap >= 0.5, ap, reason or f"judge verdict: {'PASS' if verdict_j else 'FAIL'}"
+
+
+def context_recall_scored(
+    question: str, reference: str, context: str
+) -> tuple[bool, float, str]:
+    """RAGAS Context Recall: how much of a known reference the context supports.
+
+    The reference is broken into its distinct factual claims (silently — the
+    judge must not show its working), and SCORE is the percentage of those
+    claims the retrieved context states or entails. This is the first live
+    reading in this app that measures retrieval against real answer material:
+    everything before it judged the context against the question alone,
+    which cannot see a passage the ranker dropped.
+
+    An empty reference is a caller bug, not a measurement — the same rule the
+    judges apply to an empty judge reply — so it raises JudgeError (fail-open
+    to "not graded") instead of manufacturing a 0. An empty CONTEXT is a
+    measurement: nothing was retrieved, so nothing of the reference can be in
+    it.
+    """
+    if not reference.strip():
+        raise JudgeError("empty reference: there is nothing to attribute to the context")
+    if not context.strip():
+        return False, 0.0, "empty context"
+    prompt = (
+        "You are grading a RAG system's CONTEXT RECALL. You are given the "
+        "question, a REFERENCE answer, and the CONTEXT the system retrieved. "
+        "Silently break the reference into its distinct factual claims, then "
+        "decide for each whether the CONTEXT states or entails that same "
+        "fact. SCORE is the percentage of the reference's claims the context "
+        "supports. VERDICT is PASS when every claim is supported. Judge only "
+        "from the context; do not use outside knowledge to fill gaps, and do "
+        "not judge the system's generated answer.\n\n"
+        f"Question: {question}\n\n"
+        f"Reference answer:\n{reference}\n\n"
+        f"Retrieved context:\n{context}\n\n"
+        + _VERDICT_CONTRACT_SCORED
+    )
+    # 4096, not 512: the configured judge is thinking-capable and enumerates
+    # every claim inside <thought> on long references — the same budget every
+    # scored judge runs with.
     return _parse_verdict_scored(_judge(prompt, max_tokens=4096))
 
 
