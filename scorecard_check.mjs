@@ -19,12 +19,18 @@
  *   here — the published run is not this panel's subject.
  *
  *   DETAIL (#eval-benchmark, behind "See the benchmark in detail") — the
- *   nine-metric published run, intact: stacked bars, one legend, pills, feet.
- *   Its only per-answer dimension is MEASURED: a bank-matched question's gold
- *   readings (against that question's KNOWN passages) land on the rows with a
- *   "known" tag and a golden foot. Judged readings of the selected answer no
- *   longer appear here at all — a verdict about one answer beside an average
- *   over 53 questions is the comparison the four-RAGAS pivot stopped making.
+ *   published run, minus the four metric families the primary panel carries
+ *   (context recall, precision@k, faithfulness, answer relevancy): the same
+ *   name above and below the fold read as the same row twice. What remains —
+ *   answer correctness, not-found rate, MRR, NDCG, hit rate@k — is exactly
+ *   what the primary panel does not show: stacked bars, one legend, pills,
+ *   feet. Its only per-answer dimension is MEASURED: a bank-matched
+ *   question's gold readings land on the surviving rows with a "known" tag
+ *   and a golden foot (gold readings for the trimmed families no longer
+ *   render anywhere — the primary panel's live grades superseded them).
+ *   Judged readings of the selected answer no longer appear here at all — a
+ *   verdict about one answer beside an average over 53 questions is the
+ *   comparison the four-RAGAS pivot stopped making.
  *
  * Fixture states (one per answer):
  *   A. bank-referenced, graded  — primary: four scores, retrieval "known";
@@ -290,13 +296,18 @@ check("A: detail correctness row is benchmark-only (correctness left the live se
     (await tagOf(dRow, "Matched the expected answer")) === "bench" &&
     (await footOf(dRow, "Matched the expected answer")).includes("benchmark 80%"),
   await footOf(dRow, "Matched the expected answer"));
-check("A: detail recall row stays gold-measured",
-  (await footOf(dRow, "Found the right passages")).includes("golden #64") &&
-    (await footOf(dRow, "Found the right passages")).includes("known passages") &&
-    (await tagOf(dRow, "Found the right passages")) === "known",
-  await footOf(dRow, "Found the right passages"));
-check("A: detail recall bar fills to the gold reading",
-  (await fillPct(dRow, "Found the right passages")) === "100%");
+check("A: the four primary-panel families are trimmed from the detail",
+  (await dRow("Found the right passages").count()) === 0 &&
+    (await dRow("Sent mostly relevant text").count()) === 0 &&
+    (await dRow("Stuck to the sources").count()) === 0 &&
+    (await dRow("Answered what was asked").count()) === 0,
+  `recall=${await dRow("Found the right passages").count()} ` +
+    `precision=${await dRow("Sent mostly relevant text").count()} ` +
+    `faith=${await dRow("Stuck to the sources").count()} ` +
+    `rel=${await dRow("Answered what was asked").count()}`);
+// Even with a bank match whose gold payload CARRIES recall/precision@k
+// readings (fixture GOLD_RETRIEVAL), the trimmed rows must not resurrect —
+// the trim is about the name reading twice, not about missing data.
 // Boolean gold readings are states: hit rate (gold 1) renders as a pill on
 // the benchmark track.
 const hit = await pillInfo("Right passage made the cut");

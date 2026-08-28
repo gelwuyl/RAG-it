@@ -2752,6 +2752,19 @@ function renderRagasScorecard() {
 // answer beside an average over 53 questions was the comparison the four-
 // RAGAS pivot stopped making, and those readings live on the primary panel
 // now.
+//
+// The four metric families the primary panel carries are ALSO trimmed from
+// here, even as golden-set averages: the same name above and below the fold
+// read as the same row twice, and a visitor could not be expected to know
+// one was a per-answer grade and the other a 53-question rate. What remains
+// is exactly what the primary panel does not show.
+const BENCH_DETAIL_TRIMMED = new Set([
+  "context_recall", // "Found the right passages" — primary: Context recall
+  "precision_at_k", // "Sent mostly relevant text" — primary: Context precision
+  "faithfulness", // primary: Faithfulness
+  "answer_relevancy", // primary: Answer relevancy
+]);
+
 function renderScorecard(metrics, runMode) {
   const el = $("eval-benchmark");
   el.innerHTML = "";
@@ -2762,6 +2775,7 @@ function renderScorecard(metrics, runMode) {
   // published run does not carry cannot leave an empty heading behind it.
   let openGroup = null;
   for (const [key, t] of Object.entries(EVAL_TARGETS)) {
+    if (BENCH_DETAIL_TRIMMED.has(key)) continue;
     const bench = metrics ? metrics[key] : null;
     if (bench == null) continue;
     shown++;
