@@ -1251,7 +1251,6 @@ html[data-kind="guest"] .identity-hint .hint-badge { display: inline-block; }
   /* The wait still has to be legible without motion, so the bar holds the
      accent instead of sweeping it. */
   .score-row.is-waiting .score-bar::after { animation: none; width: 100%; opacity: 0.3; }
-  .score-est-wait,
   .eval-dot[data-state="pending"] { animation: none; }
 }
 .score-fill.live  { background: var(--primary); }
@@ -1318,29 +1317,6 @@ html[data-kind="guest"] .identity-hint .hint-badge { display: inline-block; }
   background: var(--primary);
   animation: dot-pulse 1.2s ease-in-out infinite;
 }
-
-/* The estimates strip — the four per-answer readings that are measured against
-   a proxy (a drafted reference, a rank of the passage that was used) rather
-   than against ground truth. Mono, nano, uppercase, faint — the same register
-   as the timing strip that now lives under each response, because both are
-   metadata with no benchmark counterpart. One step quieter than the bars on
-   purpose: its values take --muted, so an estimate can never out-shout a
-   measured number on this pane. */
-.score-est {
-  display: flex; flex-wrap: wrap; align-items: baseline;
-  column-gap: 8px; row-gap: 3px;
-  padding-top: 9px; margin-top: 2px;
-  border-top: 1px dashed var(--border);
-  font-family: var(--font-mono); font-size: var(--text-nano);
-  letter-spacing: var(--tracking-telemetry); text-transform: uppercase;
-  color: var(--faint);
-}
-.score-est-pair { display: inline-flex; align-items: baseline; gap: 5px; }
-.score-est-pair strong {
-  color: var(--muted); font-weight: 700; font-variant-numeric: tabular-nums;
-}
-.score-est-sep { color: var(--border-strong); }
-.score-est-wait { animation: dot-pulse 1.2s ease-in-out infinite; }
 
 /* "compare" on the chip under an answer: the way back to an older answer's
    readings once a newer one has taken the bars. */

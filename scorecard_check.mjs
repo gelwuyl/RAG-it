@@ -8,14 +8,14 @@
  * The state under test:
  *   A. bank-referenced  — expected_source: "bank": the correctness judge
  *      graded against the question's HUMAN known answer, so the reading is
- *      GOLD: it fills the Answer correctness bar, names the golden entry, and
- *      must NOT appear in the estimates strip as "vs drafted ref".
- *   B. drafted-reference — the old behaviour, which must survive untouched:
- *      the reading stays in the strip, the bar stays benchmark-only.
- *   C. pending + bank    — the bar waits for its gold reading; the strip
- *      neither claims it nor waits for it.
- *   D. pending + drafted — the strip's grading indicator covers correctness,
- *      as before.
+ *      GOLD: it fills the Answer correctness bar and names the golden entry.
+ *      (The per-answer estimates strip that used to echo drafted readings was
+ *      removed — proxy-measured numbers no longer appear on this pane at all.)
+ *   B. drafted-reference — the bar stays benchmark-only: the drafted reading
+ *      is measured against a proxy, so it appears nowhere on the bars.
+ *   C. pending + bank    — the bar waits for its gold reading.
+ *   D. pending + drafted — correctness pends without borrowing the bank
+ *      rows' waiting state: the row keeps the benchmark.
  *   E. known-unanswerable refusal — the not-found row reads "refused".
  *   F. judge graded binary WITHOUT a score — the old 100/0 fill is now a
  *      state pill: faithfulness ✓ passed, relevancy ✗ failed.
@@ -93,10 +93,9 @@ const MESSAGES = [
       expected_answer: "Espresso is 3.20, cappuccino 4.50 …",
       expected_source: "bank", latency_ms: 1300, top_sim: 0.62, deep_n: 0,
       retry_after_ms: 60_000 } },
-  // D. pending, drafted — correctness landed (so the strip carries
-  // "vs drafted ref") while a context estimate is still grading (so the
-  // strip also carries the grading indicator), which is the mixed state a
-  // sliced judge run actually produces.
+  // D. pending, drafted — correctness landed (but against a drafted
+  // reference, so it fills no bar) while the judges are still out, which is
+  // the mixed state a sliced judge run actually produces.
   { id: "m4", role: "assistant", content: "Espresso is 3.20 … [1]", citations: [],
     eval_line: "top sim 0.58 - 1400 ms",
     eval_data: { pending: true, faithful: null, relevant: null,
@@ -240,9 +239,6 @@ check("A: footer names the known answer and the golden entry",
   footA.includes("known answer") && footA.includes("golden #64"), footA);
 check("A: footer does not claim passage measurement",
   !footA.includes("known passages"), footA);
-const estA = lower(await page.locator(".score-est").innerText().catch(() => ""));
-check("A: strip has no 'vs drafted ref'", !estA.includes("vs drafted ref"), estA);
-check("A: strip still carries the cited-rank estimate", estA.includes("cited"), estA);
 // Gold retrieval rows still measured, from the same answer's gold entry.
 check("A: retrieval recall row stays gold-measured",
   (await footOf("Found the right passages")).includes("golden #64") &&
@@ -288,9 +284,8 @@ check("B: bench-only row dims its single gray bar",
     (await rowA.locator(".score-fill").count()) === 0 &&
     (await rowA.locator(".score-bar.no-live").count()) === 1,
   `benchFills=${await rowA.locator(".bench-fill").count()} fills=${await rowA.locator(".score-fill").count()} noLive=${await rowA.locator(".score-bar.no-live").count()}`);
-const estB = lower(await page.locator(".score-est").innerText());
-check("B: strip carries 'vs drafted ref'", estB.includes("vs drafted ref"), estB);
-check("B: drafted binary verdict renders as 100%", estB.includes("100%"), estB);
+check("B: the estimates strip is gone entirely",
+  (await page.locator(".score-est").count()) === 0);
 
 // ---------- C. pending + bank: the bar waits, the strip does not ----------
 await clickChip("m3");
@@ -300,17 +295,12 @@ check("C: correctness waits on the judge",
 check("C: waiting row is tagged known (that is the reading it waits for)",
   (await tagOf("Matched the expected answer")) === "known",
   await tagOf("Matched the expected answer"));
-const estC = lower(await page.locator(".score-est").innerText());
-check("C: strip has no 'vs drafted ref' while waiting", !estC.includes("vs drafted ref"), estC);
 
-// ---------- D. pending + drafted: unchanged behaviour ----------
+// ---------- D. pending + drafted: no borrowed waiting state ----------
 await clickChip("m4");
 check("D: correctness row still shows benchmark while drafted grading pends",
   (await chipOf("Matched the expected answer")).includes("80%"),
   await chipOf("Matched the expected answer"));
-const estD = lower(await page.locator(".score-est").innerText());
-check("D: strip carries 'vs drafted ref' and the grading indicator",
-  estD.includes("vs drafted ref") && estD.includes("grading"), estD);
 
 // ---------- E. known-unanswerable refusal ----------
 await clickChip("m5");

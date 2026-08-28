@@ -2277,13 +2277,13 @@ function buildEvalBlock(evalData, evalLine) {
     meta.className = "msg-meta";
     const pairs = [];
     if (evalData.top_sim != null)
-      pairs.push(["sim", evalData.top_sim.toFixed(2)]);
+      pairs.push(["top similarity", evalData.top_sim.toFixed(2)]);
     if (evalData.latency_ms != null)
-      pairs.push(["answered", `${(evalData.latency_ms / 1000).toFixed(1)}s`]);
+      pairs.push(["answered", `${(evalData.latency_ms / 1000).toFixed(1)} sec`]);
     pairs.push([
       "graded",
       !evalData.pending && evalData.grade_ms != null && evalData.grade_ms > 0
-        ? `${(evalData.grade_ms / 1000).toFixed(1)}s`
+        ? `${(evalData.grade_ms / 1000).toFixed(1)} sec`
         : "—",
     ]);
     meta.innerHTML = pairs
@@ -2613,11 +2613,6 @@ const EVAL_TARGETS = {
   hit_rate_at_k: { group: "ranking", label: "Right passage made the cut", sub: "Hit rate@k", target: 0.80, higher: true },
 };
 
-function fmtPct(v) {
-  if (v == null) return "—";
-  return `${Math.round(v * 100)}%`;
-}
-
 // Which per-answer reading belongs on which benchmark bar.
 //
 // Context recall asks whether known answer passages were retrieved. A normal
@@ -2883,7 +2878,7 @@ function renderScorecard(metrics, runMode) {
               // Every row without a live reading arrives here: hit rate and
               // the not-found rate (no per-answer reading exists for either —
               // the pool is already the top-k cut; a rate over a set), and the
-              // five estimate rows, whose readings moved to the strip below.
+              // five estimate rows, which have no bar at all.
               // All of them light up when the question matches the golden
               // bank. Saying why beats leaving a row that looks broken.
               : `needs a known answer`
@@ -2894,61 +2889,6 @@ function renderScorecard(metrics, runMode) {
   if (!shown) {
     el.innerHTML = emptyState("◔", "", "No benchmark metrics available.");
     return;
-  }
-
-  // The four estimate readings, gathered onto ONE quiet line instead of
-  // borrowing benchmark rows. They are real readings — three judges and a
-  // citation rank, all paid for at answer time — but each is measured against
-  // a proxy (a drafted reference, a rank of the passage that was used), so
-  // none may fill a bar the reader reads against the benchmark bar. Landed
-  // readings only; the line exists while something has landed or is on its
-  // way, and is absent entirely once nothing is either.
-  if (live) {
-    // Prefer the judge's 0-1 score; a bare verdict (older graded messages)
-    // falls back to 100/0, same as the bars used to.
-    const estOf = (f) =>
-      live[`${f}_score`] != null ? live[`${f}_score`] : liveValue(live, f);
-    const estPairs = [];
-    if (estOf("context_sufficiency") != null)
-      estPairs.push(["sufficiency", fmtPct(estOf("context_sufficiency"))]);
-    if (estOf("context_relevance") != null)
-      estPairs.push(["on-topic", fmtPct(estOf("context_relevance"))]);
-    // A bank-referenced correctness reading was graded against the question's
-    // KNOWN answer — it lives on the Answer correctness bar as gold, and
-    // calling it "vs drafted ref" here would misstate what was graded.
-    if (estOf("correct") != null && !bankRef)
-      estPairs.push(["vs drafted ref", fmtPct(estOf("correct"))]);
-    if (live.cited_rank != null)
-      estPairs.push([
-        "cited",
-        `#${live.cited_rank}${live.pool_n != null ? ` of ${live.pool_n}` : ""}`,
-      ]);
-    // The rank reading is computed when the answer is; the judge estimates
-    // arrive with the follow-up request, so the line waits on those. The
-    // bank-referenced correctness reading is not one of them — its wait is
-    // the Answer correctness row's, and it is graded against gold truth.
-    const estPending =
-      !!live.pending &&
-      (bankRef
-        ? ["context_sufficiency", "context_relevance"]
-        : ["context_sufficiency", "context_relevance", "correct"]
-      ).some((f) => estOf(f) == null);
-    if (estPairs.length || estPending) {
-      const strip = document.createElement("div");
-      strip.className = "score-est";
-      strip.innerHTML =
-        `<span class="score-est-lead">estimated for this answer</span>` +
-        estPairs
-          .map(
-            ([k, v]) =>
-              `<span class="score-est-pair"><span>${k}</span><strong>${v}</strong></span>`,
-          )
-          .join(`<span class="score-est-sep">·</span>`) +
-        (estPending
-          ? `<span class="score-est-sep">·</span><span class="score-est-pair"><span>grading</span><strong class="score-est-wait">…</strong></span>`
-          : "");
-      el.appendChild(strip);
-    }
   }
 
   // One legend, once, at the bottom of the panel: the gray bar is the
