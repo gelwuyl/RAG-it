@@ -24,6 +24,18 @@
         "8000"
       ],
       "port": 8000
+    },
+    {
+      "name": "mockup",
+      "runtimeExecutable": ".venv/Scripts/python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8899",
+        "--bind",
+        "127.0.0.1"
+      ],
+      "port": 8899
     }
   ]
 }
