@@ -1764,11 +1764,12 @@ const chatStatusOverride = new Map(); // chatId -> "pending" | "done"
 // answer, not a chipless empty state.
 const DEMO_QUESTIONS = {
   "helios_energy_handbook.md": [
-    "What warranty comes with the SunPak 5 battery?",
+    "What warranty does the SunPak 5 ship with?",
   ],
   "meridian_coffee_ops.md": [
-    "What time do Meridian's stores open at the weekend?",
-    "What does the espresso machine opening checklist require?",
+    "What time do Meridian stores open on weekends?",
+    "What does the Meridian opening checklist start with?",
+    "Does Meridian sell gift cards?",
   ],
 };
 
