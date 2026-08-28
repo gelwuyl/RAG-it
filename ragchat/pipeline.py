@@ -493,6 +493,8 @@ def _eval_answer(
     context_text: str,
     cfg: PipelineConfig,
     previous: dict | None = None,
+    expected: str | None = None,
+    expected_source: str | None = None,
 ) -> dict | None:
     """Judge unresolved live checks without replacing a completed verdict.
 
@@ -501,6 +503,11 @@ def _eval_answer(
     call on a metric that already completed — or replace that result with a
     later outage. Finality belongs to the HTTP route, where the persisted attempt
     count is available.
+
+    ``expected``/``expected_source`` carry a KNOWN reference for this question
+    (a matched demo-bank entry): correctness is then scored against the human
+    answer instead of a drafted one, and the provenance lands in the payload so
+    the UI can tell the two apart.
     """
     if not cfg.eval_show:
         return None
@@ -560,6 +567,12 @@ def _eval_answer(
             out["judge_error"] = " · ".join(missing)
         return out
 
+    # A matched bank question's HUMAN reference. It outranks any drafted one:
+    # the draft call is never purchased on this path, and a retry re-derives
+    # the reference from the persisted fields rather than re-drafting it.
+    bank_expected = (expected or "").strip()
+    if not bank_expected and previous.get("expected_source") == "bank":
+        bank_expected = (previous.get("expected_answer") or "").strip()
     expected_text = previous.get("expected_answer")
     expected_reason = previous.get("expected_reason") or ""
     if values["correct"] is None and (
@@ -623,43 +636,55 @@ def _eval_answer(
             return None, str(exc)
 
     if not correct_done and _time_left() > _SLICE_MIN_SECONDS:
-        # Resume a draft-outage marker ("expected_answer": "" + a reason) by
-        # re-running synthesis; NO_ANSWER_DERIVABLE was already converted to a
-        # FAIL verdict above. An absent key means "not yet attempted".
-        if previous.get("expected_answer") == "" or expected_text is None:
-            expected_text, expected_reason = _run2(
-                synthesize_expected, question, context_text
-            )
-        if expected_text:
-            # A real reference exists: score against it and persist it so a
-            # retry never re-purchases the same draft call. Correctness is TWO
-            # sequential calls (draft + score), so the deadline is re-checked
-            # between them rather than only before the pair.
-            if _time_left() > _SLICE_MIN_SECONDS:
-                values["expected_answer"] = expected_text
-                _put("correct", _run(
-                    answer_correctness_scored, question, expected_text, answer
-                ))
-            else:
-                # Draft bought but not yet scored: persist just the text.
-                # A resumed pass finds a non-empty expected_answer with
-                # correct=None, skips synthesis above, and scores directly.
-                values["expected_answer"] = expected_text
+        if bank_expected:
+            # The known answer is DATA, not a model call, so correctness is
+            # ONE judge call on this path — there is no draft to buy and no
+            # window to pause between reference and score. Both fields persist
+            # even if the judge below fails: a retry must re-use this
+            # reference, never replace it with a drafted one.
+            values["expected_answer"] = bank_expected
+            values["expected_source"] = "bank"
+            _put("correct", _run(
+                answer_correctness_scored, question, bank_expected, answer
+            ))
         else:
-            # No usable text. Two different meanings: the passages genuinely
-            # cannot answer (a graded verdict — correctness is FAIL by
-            # definition, since there was nothing to be right about), or the
-            # draft call itself failed (an outage the retry will heal, and the
-            # draft failure reason is stored as data, not an error string).
-            values["expected_answer"] = ""
-            if expected_reason:
-                values["expected_reason"] = expected_reason
-            if expected_reason == NO_ANSWER_DERIVABLE:
-                values["correct"] = False
-                values[LIVE_SCORE_FIELDS["correct"]] = 0.0
-                reasons["correct"] = (
-                    "no reference derivable: the passages do not answer this"
+            # Resume a draft-outage marker ("expected_answer": "" + a reason) by
+            # re-running synthesis; NO_ANSWER_DERIVABLE was already converted to a
+            # FAIL verdict above. An absent key means "not yet attempted".
+            if previous.get("expected_answer") == "" or expected_text is None:
+                expected_text, expected_reason = _run2(
+                    synthesize_expected, question, context_text
                 )
+            if expected_text:
+                # A real reference exists: score against it and persist it so a
+                # retry never re-purchases the same draft call. Correctness is TWO
+                # sequential calls (draft + score), so the deadline is re-checked
+                # between them rather than only before the pair.
+                if _time_left() > _SLICE_MIN_SECONDS:
+                    values["expected_answer"] = expected_text
+                    _put("correct", _run(
+                        answer_correctness_scored, question, expected_text, answer
+                    ))
+                else:
+                    # Draft bought but not yet scored: persist just the text.
+                    # A resumed pass finds a non-empty expected_answer with
+                    # correct=None, skips synthesis above, and scores directly.
+                    values["expected_answer"] = expected_text
+            else:
+                # No usable text. Two different meanings: the passages genuinely
+                # cannot answer (a graded verdict — correctness is FAIL by
+                # definition, since there was nothing to be right about), or the
+                # draft call itself failed (an outage the retry will heal, and the
+                # draft failure reason is stored as data, not an error string).
+                values["expected_answer"] = ""
+                if expected_reason:
+                    values["expected_reason"] = expected_reason
+                if expected_reason == NO_ANSWER_DERIVABLE:
+                    values["correct"] = False
+                    values[LIVE_SCORE_FIELDS["correct"]] = 0.0
+                    reasons["correct"] = (
+                        "no reference derivable: the passages do not answer this"
+                    )
 
     out = {
         **values,
@@ -1324,7 +1349,21 @@ def _ask(
     # not-found path, which returns before this point and always did report the
     # honest number. The UI renders this as "Answered in".
     answer_ms = (time.time() - t0) * 1000
-    eval_d = _eval_answer(effective_query, answer, context, cfg) if grade else _ungraded_eval(cfg)
+    # A matched, ANSWERABLE bank question carries a human expected answer.
+    # Correctness grades against it instead of a model-drafted reference —
+    # known-unanswerable matches stay on the refusal path and never get one.
+    bank_expected = ""
+    if gold is not None and not gold.get("unanswerable"):
+        bank_expected = (gold.get("expected") or "").strip()
+    eval_d = (
+        _eval_answer(
+            effective_query, answer, context, cfg,
+            expected=bank_expected or None,
+            expected_source="bank" if bank_expected else None,
+        )
+        if grade
+        else _ungraded_eval(cfg)
+    )
     # An escalation is a thing the APP decided to do, so it is reported even
     # when evaluation is switched off entirely. Hiding a decision the reader did
     # not make would be the worst of the options here.
@@ -1375,6 +1414,13 @@ def _ask(
         # passages (eval/golden.py). Refusals and known-unanswerables are
         # attached by `_gold_attach` back in `ask()`, which sees every exit
         # path; this is the one branch that needs the pool itself.
+        if bank_expected:
+            # Persist the human reference and its provenance alongside: the
+            # deferred grade request (and any retry) finds them in the stored
+            # eval dict, so it scores against the bank's known answer and can
+            # label the reading as bank truth — never a drafted one.
+            eval_d["expected_answer"] = bank_expected
+            eval_d["expected_source"] = "bank"
         if gold is not None:
             if gold.get("unanswerable"):
                 # The model ANSWERED a question with no document answer: the

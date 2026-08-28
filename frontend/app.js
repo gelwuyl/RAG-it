@@ -2616,6 +2616,11 @@ const LIVE_TO_BENCHMARK = {
 // fills is read against the benchmark tick, and a proxy judgement cannot
 // honour that comparison. These readings render in the estimates strip under
 // the bars instead (renderScorecard).
+//
+// One exception, driven by DATA not config: when the eval payload carries
+// expected_source: "bank", the correctness judge graded against the matched
+// demo question's HUMAN known answer — a gold reference, not a drafted one —
+// and renderScorecard promotes that reading onto the Answer correctness bar.
 const LIVE_ESTIMATED_FIELDS = new Set([
   "correct",
   "context_relevance",
@@ -2661,6 +2666,11 @@ function renderScorecard(metrics, runMode) {
   // it is there — a judge that failed open leaves no readings and no line, and
   // pointing at it anyway would be the quiet lie this pane exists to refuse.
   let anyEst = false;
+  // A matched demo-bank question grades correctness against the question's
+  // HUMAN known answer (the eval payload carries the reference plus
+  // expected_source: "bank"), not against a drafted one — so that reading is
+  // gold, not an estimate, and belongs on the bar.
+  const bankRef = live?.expected_source === "bank";
 
   // Emitted as the group CHANGES rather than looped per group, so a metric the
   // published run does not carry cannot leave an empty heading behind it.
@@ -2699,8 +2709,11 @@ function renderScorecard(metrics, runMode) {
     // the two scored-judge fields qualify: the estimated fields are judged
     // too, but what their judges grade is a proxy, so they are excluded.
     const isEstRow =
-      (field != null && LIVE_ESTIMATED_FIELDS.has(field)) ||
+      (field != null && LIVE_ESTIMATED_FIELDS.has(field) &&
+        !(field === "correct" && bankRef)) ||
       ESTIMATED_RANK_FIELDS[key] != null;
+    // The bank-referenced correctness reading, once the judge lands.
+    const bankCorrect = field === "correct" && bankRef;
     const gold = live?.gold;
     const goldV =
       gold && !gold.unanswerable && gold[key] != null ? gold[key] : null;
@@ -2748,7 +2761,7 @@ function renderScorecard(metrics, runMode) {
     // next to a 65%-full bar than "passed". A refusal verdict gets its own
     // words, because "passed" says nothing about what was actually right.
     const chip = hasLive
-      ? score != null || goldV != null
+      ? score != null || goldV != null || bankCorrect
         ? `${livePct}%`
         : refused != null
           ? refused
@@ -2762,9 +2775,12 @@ function renderScorecard(metrics, runMode) {
     // benchmark-only chip is the easy one to misread as this answer's grade —
     // the quiet "bench" tag exists to stop exactly that reading. A pending
     // judge row is tagged for the reading it is waiting for; gold wins over
-    // judged because measured beats judged in the precedence above.
+    // judged because measured beats judged in the precedence above. A
+    // bank-referenced correctness verdict is gold too — it is graded against
+    // the question's known answer.
     const tag =
-      goldV != null || goldRefused != null
+      goldV != null || goldRefused != null ||
+      (bankCorrect && (hasLive || waiting))
         ? "gold"
         : hasLive || waiting
           ? "judged"
@@ -2795,7 +2811,12 @@ function renderScorecard(metrics, runMode) {
               // readings against known passages — the same ground truth the
               // benchmark had. Saying which question keeps it auditable.
               `golden #${gold.idx} — measured against this question's known passages · benchmark ${benchPct}%`
-            : refused != null
+            : bankCorrect
+              ? // A judge score against the bank's HUMAN reference — truth,
+                // but a judgement, not a retrieval measurement, so the words
+                // say exactly that.
+                `golden #${gold?.idx ?? "?"} — judged vs this question's known answer · benchmark ${benchPct}%`
+              : refused != null
               ? `this question has no document answer — ${
                   refused
                     ? "refusing is correct"
@@ -2839,20 +2860,26 @@ function renderScorecard(metrics, runMode) {
       estPairs.push(["sufficiency", fmtPct(estOf("context_sufficiency"))]);
     if (estOf("context_relevance") != null)
       estPairs.push(["on-topic", fmtPct(estOf("context_relevance"))]);
-    if (estOf("correct") != null)
+    // A bank-referenced correctness reading was graded against the question's
+    // KNOWN answer — it lives on the Answer correctness bar as gold, and
+    // calling it "vs drafted ref" here would misstate what was graded.
+    if (estOf("correct") != null && !bankRef)
       estPairs.push(["vs drafted ref", fmtPct(estOf("correct"))]);
     if (live.cited_rank != null)
       estPairs.push([
         "cited",
         `#${live.cited_rank}${live.pool_n != null ? ` of ${live.pool_n}` : ""}`,
       ]);
-    // The rank reading is computed when the answer is; the three judge
-    // estimates arrive with the follow-up request, so the line waits on those.
+    // The rank reading is computed when the answer is; the judge estimates
+    // arrive with the follow-up request, so the line waits on those. The
+    // bank-referenced correctness reading is not one of them — its wait is
+    // the Answer correctness row's, and it is graded against gold truth.
     const estPending =
       !!live.pending &&
-      ["context_sufficiency", "context_relevance", "correct"].some(
-        (f) => estOf(f) == null,
-      );
+      (bankRef
+        ? ["context_sufficiency", "context_relevance"]
+        : ["context_sufficiency", "context_relevance", "correct"]
+      ).some((f) => estOf(f) == null);
     if (estPairs.length || estPending) {
       // Remembered for the legend below: it may only point at this line when
       // the line exists — a broken estimate judge leaves nothing to point at.
@@ -2907,7 +2934,7 @@ function renderScorecard(metrics, runMode) {
   // doubts a number is sent, so it names all three and says where the
   // estimates went.
   legend.textContent = anyLive
-    ? "Each chip names its source: gold — measured against this question's known passages; judged — graded for this answer; bench — the published benchmark only." +
+    ? "Each chip names its source: gold — measured against this question's known passages or known answer; judged — graded for this answer; bench — the published benchmark only." +
       (anyEst
         ? " Estimates for this answer never take a bar; they sit on the line below."
         : "") +
