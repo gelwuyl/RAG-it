@@ -1,0 +1,390 @@
+LIVE JUDGE CALIBRATION — tightened judges (2026-08-29)
+Direction assertions only; every raw reply below is verbatim.
+
+========================================================================
+CONSTRUCTED CASES (synthetic passages, real judge calls)
+========================================================================
+
+faithfulness / grounded answer
+  answer: The TF-300 has a 4-litre basket, a 1500 W heating element, and a two-year manufacturer warranty.
+
+[prompt] You are grading a RAG system for FAITHFULNESS. Decide for each distinct factual claim in the answer whether the context supports it.
+A claim is SUPPOR...
+--- raw judge reply ---
+CLAIM 1: SUPPORTED
+CLAIM 2: SUPPORTED
+CLAIM 3: SUPPORTED
+VERDICT: PASS
+REASON: All claims about the basket, heating element, and warranty are explicitly stated in contexts [1] and [2].
+-----------------------
+  faithfulness_scored: 100  (All claims about the basket, heating element, and warranty are explicitly stated in contexts [1] and [2].)
+  [PASS] faithfulness / grounded answer: scored expect >= 0.8  (100)
+  [PASS] faithfulness / grounded answer: scored verdict PASS  (verdict=True)
+
+[prompt] You are grading a RAG system for FAITHFULNESS. Decide for each distinct factual claim in the answer whether the context supports it.
+A claim is SUPPOR...
+--- raw judge reply ---
+CLAIM 1: SUPPORTED
+CLAIM 2: SUPPORTED
+CLAIM 3: SUPPORTED
+VERDICT: PASS
+REASON: All claims in the answer are directly stated in the provided context documents.
+-----------------------
+  faithfulness (benchmark): True  (All claims in the answer are directly stated in the provided context documents.)
+  [PASS] faithfulness / grounded answer: boolean PASS  (verdict=True)
+
+faithfulness / mixed (2 of 4 claims fabricated)
+  answer: The TF-300 has a 4-litre basket, a 1500 W heating element, a 9-hour cooking timer, and a stainless steel body.
+
+[prompt] You are grading a RAG system for FAITHFULNESS. Decide for each distinct factual claim in the answer whether the context supports it.
+A claim is SUPPOR...
+--- raw judge reply ---
+CLAIM 1: SUPPORTED
+CLAIM 2: SUPPORTED
+CLAIM 3: UNSUPPORTED
+CLAIM 4: UNSUPPORTED
+VERDICT: FAIL
+REASON: The context does not mention a 9-hour cooking timer or a stainless steel body.
+-----------------------
+  faithfulness_scored: 50  (The context does not mention a 9-hour cooking timer or a stainless steel body.)
+  [PASS] faithfulness / mixed (2 of 4 claims fabricated): scored expect sub-100  (50)
+  [PASS] faithfulness / mixed (2 of 4 claims fabricated): scored verdict FAIL  (verdict=False)
+
+[prompt] You are grading a RAG system for FAITHFULNESS. Decide for each distinct factual claim in the answer whether the context supports it.
+A claim is SUPPOR...
+--- raw judge reply ---
+CLAIM 1: SUPPORTED
+CLAIM 2: SUPPORTED
+CLAIM 3: UNSUPPORTED
+CLAIM 4: UNSUPPORTED
+VERDICT: FAIL
+REASON: The context does not mention a 9-hour cooking timer or a stainless steel body.
+-----------------------
+  faithfulness (benchmark): False  (The context does not mention a 9-hour cooking timer or a stainless steel body.)
+  [PASS] faithfulness / mixed (2 of 4 claims fabricated): boolean FAIL  (verdict=False)
+
+faithfulness / fully fabricated answer
+  answer: The TF-300 has a 9-hour cooking timer and costs 249 euros.
+
+[prompt] You are grading a RAG system for FAITHFULNESS. Decide for each distinct factual claim in the answer whether the context supports it.
+A claim is SUPPOR...
+--- raw judge reply ---
+CLAIM 1: UNSUPPORTED
+CLAIM 2: UNSUPPORTED
+VERDICT: FAIL
+REASON: The context does not mention a 9-hour cooking timer or a price of 249 euros.
+-----------------------
+  faithfulness_scored: 0  (The context does not mention a 9-hour cooking timer or a price of 249 euros.)
+  [PASS] faithfulness / fully fabricated answer: scored expect near 0  (0)
+  [PASS] faithfulness / fully fabricated answer: scored verdict FAIL  (verdict=False)
+
+[prompt] You are grading a RAG system for FAITHFULNESS. Decide for each distinct factual claim in the answer whether the context supports it.
+A claim is SUPPOR...
+--- raw judge reply ---
+CLAIM 1: UNSUPPORTED
+CLAIM 2: UNSUPPORTED
+VERDICT: FAIL
+REASON: The context does not mention a 9-hour cooking timer or a price of 249 euros.
+-----------------------
+  faithfulness (benchmark): False  (The context does not mention a 9-hour cooking timer or a price of 249 euros.)
+  [PASS] faithfulness / fully fabricated answer: boolean FAIL  (verdict=False)
+
+relevancy / direct answer
+  answer: The TF-300 ships with a two-year manufacturer warranty.
+
+[prompt] You are grading a RAG system for ANSWER RELEVANCY. Judge whether the answer addresses the SPECIFIC ask of the question — the entity, figure, compariso...
+--- raw judge reply ---
+VERDICT: PASS
+SCORE: 100
+REASON: The answer directly states the two-year warranty period requested in the question.
+-----------------------
+  answer_relevancy_scored: 100  (The answer directly states the two-year warranty period requested in the question.)
+  [PASS] relevancy / direct answer: scored expect >= 0.8  (100)
+  [PASS] relevancy / direct answer: scored verdict PASS  (verdict=True)
+
+[prompt] You are grading a RAG system for ANSWER RELEVANCY. Decide whether the answer addresses the SPECIFIC ask of the question — the entity, figure, comparis...
+--- raw judge reply ---
+VERDICT: PASS
+REASON: The answer directly provides the requested two-year warranty period for the TF-300 air fryer.
+-----------------------
+  answer_relevancy (benchmark): True  (The answer directly provides the requested two-year warranty period for the TF-300 air fryer.)
+  [PASS] relevancy / direct answer: boolean PASS  (verdict=True)
+
+relevancy / true but different aspect
+  answer: The TF-300 has a 4-litre basket and a 1500 W heating element.
+
+[prompt] You are grading a RAG system for ANSWER RELEVANCY. Judge whether the answer addresses the SPECIFIC ask of the question — the entity, figure, compariso...
+--- raw judge reply ---
+VERDICT: FAIL
+SCORE: 0
+REASON: The answer provides basket and wattage details instead of the requested warranty period of the TF-300 air fryer.
+-----------------------
+  answer_relevancy_scored: 0  (The answer provides basket and wattage details instead of the requested warranty period of the TF-300 air fryer.)
+  [PASS] relevancy / true but different aspect: scored expect sub-100  (0)
+  [PASS] relevancy / true but different aspect: below the direct answer's reading  (0 < 100)
+
+[prompt] You are grading a RAG system for ANSWER RELEVANCY. Decide whether the answer addresses the SPECIFIC ask of the question — the entity, figure, comparis...
+--- raw judge reply ---
+VERDICT: FAIL
+REASON: The answer provides the basket capacity and wattage instead of the requested warranty period.
+-----------------------
+  answer_relevancy (benchmark): False  (The answer provides the basket capacity and wattage instead of the requested warranty period.)
+
+relevancy / evasive non-answer
+  answer: Air fryers are a popular kind of kitchen appliance.
+
+[prompt] You are grading a RAG system for ANSWER RELEVANCY. Judge whether the answer addresses the SPECIFIC ask of the question — the entity, figure, compariso...
+--- raw judge reply ---
+VERDICT: FAIL
+SCORE: 0
+REASON: The answer provides generic background about air fryers instead of stating the warranty period of the TF-300.
+-----------------------
+  answer_relevancy_scored: 0  (The answer provides generic background about air fryers instead of stating the warranty period of the TF-300.)
+  [PASS] relevancy / evasive non-answer: scored expect near 0  (0)
+
+[prompt] You are grading a RAG system for ANSWER RELEVANCY. Decide whether the answer addresses the SPECIFIC ask of the question — the entity, figure, comparis...
+--- raw judge reply ---
+VERDICT: FAIL
+REASON: The answer provides generic information about air fryers instead of stating the warranty period of the TF-300 air fryer.
+-----------------------
+  answer_relevancy (benchmark): False  (The answer provides generic information about air fryers instead of stating the warranty period of the TF-300 air fryer.)
+  [PASS] relevancy / evasive non-answer: boolean FAIL  (verdict=False)
+
+context precision / relevant passage ranked first
+
+[prompt] You are grading a RAG system's CONTEXT PRECISION. Below are the passages its retriever returned, IN THE ORDER IT RANKED THEM. For EACH passage decide...
+--- raw judge reply ---
+PASSAGE 1: RELEVANT
+PASSAGE 2: IRRELEVANT
+VERDICT: PASS
+REASON: Passage 1 explicitly states the two-year warranty period needed to answer the question, while Passage 2 only discusses administration and is not strictly necessary.
+-----------------------
+  context_precision_scored: AP 100  (Passage 1 explicitly states the two-year warranty period needed to answer the question, while Passage 2 only discusses administration and is not strictly necessary.)
+  [PASS] precision / top-ranked: expect >= 0.8  (100)
+  [PASS] precision / top-ranked: verdict PASS  (verdict=True)
+
+context precision / relevant passage buried under filler
+
+[prompt] You are grading a RAG system's CONTEXT PRECISION. Below are the passages its retriever returned, IN THE ORDER IT RANKED THEM. For EACH passage decide...
+--- raw judge reply ---
+PASSAGE 1: IRRELEVANT
+PASSAGE 2: IRRELEVANT
+PASSAGE 3: IRRELEVANT
+PASSAGE 4: RELEVANT
+VERDICT: FAIL
+REASON: The only relevant passage containing the warranty period was ranked last (Passage 4), while top ranks contained unrelated information.
+-----------------------
+  context_precision_scored: AP 25  (The only relevant passage containing the warranty period was ranked last (Passage 4), while top ranks contained unrelated information.)
+  [PASS] precision / buried: expect <= 0.6  (25)
+  [PASS] precision / buried: verdict FAIL  (verdict=False)
+
+========================================================================
+REAL GOLDEN-SET RE-GRADES (published 2026-08-21 answers, tightened judges)
+========================================================================
+
+Q: What is the Havenmark Method in Chinese, and what does it mean in English?
+A: The Havenmark Method in Chinese is 恒安方法, and in English, it is defined by four principles: Systematised, Data-led, Human, and Long-term [1].
+  graded against: havenmark_method.txt
+
+[prompt] You are grading a RAG system for FAITHFULNESS. Decide for each distinct factual claim in the answer whether the context supports it.
+A claim is SUPPOR...
+--- raw judge reply ---
+CLAIM 1: SUPPORTED
+CLAIM 2: SUPPORTED
+VERDICT: PASS
+REASON: The context explicitly states the Chinese name as "恒安方法" and lists the four English principles of the Havenmark Method.
+-----------------------
+  faithfulness (benchmark): True  (The context explicitly states the Chinese name as "恒安方法" and lists the four English principles of the Havenmark Method.)
+
+[prompt] You are grading a RAG system for FAITHFULNESS. Decide for each distinct factual claim in the answer whether the context supports it.
+A claim is SUPPOR...
+--- raw judge reply ---
+CLAIM 1: SUPPORTED
+CLAIM 2: SUPPORTED
+VERDICT: PASS
+REASON: The context explicitly states the Chinese name is 恒安方法 and lists the four English principles of the Havenmark Method.
+-----------------------
+  faithfulness_scored: 100  (The context explicitly states the Chinese name is 恒安方法 and lists the four English principles of the Havenmark Method.)
+
+[prompt] You are grading a RAG system for ANSWER RELEVANCY. Decide whether the answer addresses the SPECIFIC ask of the question — the entity, figure, comparis...
+--- raw judge reply ---
+VERDICT: PASS
+REASON: The answer provides both the Chinese translation and the English definition as requested by the question.
+-----------------------
+  answer_relevancy (benchmark): True  (The answer provides both the Chinese translation and the English definition as requested by the question.)
+
+[prompt] You are grading a RAG system for ANSWER RELEVANCY. Judge whether the answer addresses the SPECIFIC ask of the question — the entity, figure, compariso...
+--- raw judge reply ---
+VERDICT: PASS
+SCORE: 100
+REASON: The answer directly provides both the Chinese translation and the English definition of the Havenmark Method as requested.
+-----------------------
+  answer_relevancy_scored: 100  (The answer directly provides both the Chinese translation and the English definition of the Havenmark Method as requested.)
+
+Q: How does Havenmark classify clients, and where should an agent spend their time?
+A: Havenmark classifies clients differently depending on whether the agent is working in residential or commercial/industrial sectors:
+
+**Residential Classification**
+Residential practice follows the Havenmark Method, which classifies clients into four tiers [1, 2]:
+*   **P1:** Meets three specific con
+  graded against: havenmark_method.txt
+
+[prompt] You are grading a RAG system for FAITHFULNESS. Decide for each distinct factual claim in the answer whether the context supports it.
+A claim is SUPPOR...
+--- raw judge reply ---
+CLAIM 1: UNSUPPORTED
+CLAIM 2: UNSUPPORTED
+CLAIM 3: SUPPORTED
+CLAIM 4: SUPPORTED
+CLAIM 5: SUPPORTED
+CLAIM 6: SUPPORTED
+CLAIM 7: SUPPORTED
+CLAIM 8: UNSUPPORTED
+CLAIM 9: UNSUPPORTED
+CLAIM 10: UNSUPPORTED
+CLAIM 11: UNSUPPORTED
+CLAIM 12: UNSUPPORTED
+CLAIM 13: UNSUPPORTED
+CLAIM 14: SUPPORTED
+CLAIM 15: UNSUPPORTED
+CLAIM 16: UNSUPPORTED
+VERDICT: FAIL
+REASON: The context contains no mention of commercial or industrial sectors, C1, C2, or Hold classifications.
+-----------------------
+  faithfulness (benchmark): False  (The context contains no mention of commercial or industrial sectors, C1, C2, or Hold classifications.)
+
+[prompt] You are grading a RAG system for FAITHFULNESS. Decide for each distinct factual claim in the answer whether the context supports it.
+A claim is SUPPOR...
+--- raw judge reply ---
+CLAIM 1: UNSUPPORTED
+CLAIM 2: SUPPORTED
+CLAIM 3: SUPPORTED
+CLAIM 4: SUPPORTED
+CLAIM 5: SUPPORTED
+CLAIM 6: SUPPORTED
+CLAIM 7: UNSUPPORTED
+CLAIM 8: UNSUPPORTED
+CLAIM 9: UNSUPPORTED
+CLAIM 10: UNSUPPORTED
+CLAIM 11: UNSUPPORTED
+CLAIM 12: UNSUPPORTED
+CLAIM 13: UNSUPPORTED
+CLAIM 14: UNSUPPORTED
+CLAIM 15: SUPPORTED
+CLAIM 16: UNSUPPORTED
+CLAIM 17: UNSUPPORTED
+VERDICT: FAIL
+REASON: The context contains no information about commercial or industrial client classifications and time allocations.
+-----------------------
+  faithfulness_scored: 35  (The context contains no information about commercial or industrial client classifications and time allocations.)
+
+[prompt] You are grading a RAG system for ANSWER RELEVANCY. Decide whether the answer addresses the SPECIFIC ask of the question — the entity, figure, comparis...
+--- raw judge reply ---
+VERDICT: PASS
+REASON: The answer directly details both how Havenmark classifies residential and commercial clients and where agents should spend their time.
+-----------------------
+  answer_relevancy (benchmark): True  (The answer directly details both how Havenmark classifies residential and commercial clients and where agents should spend their time.)
+
+[prompt] You are grading a RAG system for ANSWER RELEVANCY. Judge whether the answer addresses the SPECIFIC ask of the question — the entity, figure, compariso...
+--- raw judge reply ---
+VERDICT: PASS
+SCORE: 100
+REASON: The answer directly details both how Havenmark classifies residential and commercial clients and where agents should spend their time according to the provided text.
+-----------------------
+  answer_relevancy_scored: 100  (The answer directly details both how Havenmark classifies residential and commercial clients and where agents should spend their time according to the provided text.)
+
+Q: What three conditions must be met at once for a client to be graded P1?
+A: To be graded as a P1 client, the following three conditions must be met at once:
+
+*   Financing is pre-checked [1, 2].
+*   The decision maker has been identified [1, 2].
+*   There is a move-in or completion date within six months [1, 2].
+
+Missing any one of these three conditions makes the client a 
+  graded against: havenmark_method.txt
+
+[prompt] You are grading a RAG system for FAITHFULNESS. Decide for each distinct factual claim in the answer whether the context supports it.
+A claim is SUPPOR...
+--- raw judge reply ---
+CLAIM 1: SUPPORTED
+CLAIM 2: SUPPORTED
+CLAIM 3: SUPPORTED
+CLAIM 4: SUPPORTED
+VERDICT: PASS
+REASON: All claims about P1 client conditions and consequences of missing them are explicitly stated in section 2.2 of the context.
+-----------------------
+  faithfulness (benchmark): True  (All claims about P1 client conditions and consequences of missing them are explicitly stated in section 2.2 of the context.)
+
+[prompt] You are grading a RAG system for FAITHFULNESS. Decide for each distinct factual claim in the answer whether the context supports it.
+A claim is SUPPOR...
+--- raw judge reply ---
+CLAIM 1: SUPPORTED
+CLAIM 2: SUPPORTED
+CLAIM 3: SUPPORTED
+CLAIM 4: SUPPORTED
+VERDICT: PASS
+REASON: All claims in the answer are explicitly supported by section 2.2 of the context.
+-----------------------
+  faithfulness_scored: 100  (All claims in the answer are explicitly supported by section 2.2 of the context.)
+
+[prompt] You are grading a RAG system for ANSWER RELEVANCY. Decide whether the answer addresses the SPECIFIC ask of the question — the entity, figure, comparis...
+--- raw judge reply ---
+VERDICT: PASS
+REASON: The answer directly lists the exact three conditions required for a client to be graded P1, matching the specific ask of the question.
+-----------------------
+  answer_relevancy (benchmark): True  (The answer directly lists the exact three conditions required for a client to be graded P1, matching the specific ask of the question.)
+
+[prompt] You are grading a RAG system for ANSWER RELEVANCY. Judge whether the answer addresses the SPECIFIC ask of the question — the entity, figure, compariso...
+--- raw judge reply ---
+VERDICT: PASS
+SCORE: 100
+REASON: The answer directly and accurately identifies the three specific conditions required to grade a client as P1.
+-----------------------
+  answer_relevancy_scored: 100  (The answer directly and accurately identifies the three specific conditions required to grade a client as P1.)
+
+Q: What is Havenmark's position on using external web search to answer client questions?
+A: I couldn't find this in your documents.
+  graded against: (no golden doc — refusal case)
+
+[prompt] You are grading a RAG system for FAITHFULNESS. Decide for each distinct factual claim in the answer whether the context supports it.
+A claim is SUPPOR...
+--- raw judge reply ---
+CLAIM 1: NONE
+VERDICT: PASS
+REASON: The answer correctly refuses to answer based on the lack of information in the context.
+-----------------------
+  faithfulness (benchmark): True  (The answer correctly refuses to answer based on the lack of information in the context.)
+
+[prompt] You are grading a RAG system for FAITHFULNESS. Decide for each distinct factual claim in the answer whether the context supports it.
+A claim is SUPPOR...
+--- raw judge reply ---
+CLAIM 1: NONE
+VERDICT: PASS
+REASON: The answer correctly refuses to answer based on the absence of information in the context.
+-----------------------
+  faithfulness_scored: 100  (The answer correctly refuses to answer based on the absence of information in the context.)
+
+[prompt] You are grading a RAG system for ANSWER RELEVANCY. Decide whether the answer addresses the SPECIFIC ask of the question — the entity, figure, comparis...
+--- raw judge reply ---
+VERDICT: PASS
+REASON: The answer appropriately states that the information is not found in the documents when the sources lack the answer.
+-----------------------
+  answer_relevancy (benchmark): True  (The answer appropriately states that the information is not found in the documents when the sources lack the answer.)
+
+[prompt] You are grading a RAG system for ANSWER RELEVANCY. Judge whether the answer addresses the SPECIFIC ask of the question — the entity, figure, compariso...
+--- raw judge reply ---
+VERDICT: PASS
+SCORE: 90
+REASON: The system appropriately issued a refusal because the documents lack information on Havenmark's position regarding external web search.
+-----------------------
+  answer_relevancy_scored: 90  (The system appropriately issued a refusal because the documents lack information on Havenmark's position regarding external web search.)
+  [PASS] real refusal: faithfulness PASS  (100)
+  [PASS] real refusal: relevancy PASS  (90)
+  [PASS] real material still scores high on relevancy (>= 2 of 3 PASS)  (3/3)
+  [PASS] real material still scores high on faithfulness (>= 2 of 3 PASS)  (2/3)
+
+========================================================================
+RESULT: ALL 24 DIRECTION ASSERTIONS PASSED
+Judge model: models/gemini-3.5-flash-lite
+Provenance: readings from these tightened judges are NOT directly
+comparable to the published 2026-08-21 run, which predates them.

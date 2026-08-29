@@ -20,6 +20,17 @@ single-line verdict + one-sentence reason. Previously the model could emit a
 thinking trace before the verdict, which leaked into the parsed "reason" and
 occasionally flipped the verdict parse. We also cap max_tokens so the model
 cannot ramble, and the parser only reads the verdict line + first sentence.
+
+Tightened 2026-08-29 (judge-discrimination pass): both faithfulness judges and
+the scored relevancy judge stopped trusting the model's own vibe-read. The
+faithfulness judges now make the judge MARK each claim SUPPORTED/UNSUPPORTED,
+one line per claim, and the ratio/verdict is computed here in Python (the
+context_precision pattern). The relevancy and precision prompts bar the
+benefit of the doubt and demand specificity — the published run's flat 100%
+pass rates on faithfulness and relevancy came from judges that charitably
+passed anything on-topic. Fail-open semantics are unchanged: a reply without
+a usable verdict, or with marks that do not cover every claim, is a
+JudgeError ("not graded"), never a guessed score.
 """
 from __future__ import annotations
 
@@ -121,6 +132,28 @@ _MARKS_CONTRACT = (
     "PASSAGE 1: RELEVANT or IRRELEVANT\n"
     "PASSAGE 2: RELEVANT or IRRELEVANT\n"
     "(exactly one line for EVERY passage, in order)\n"
+    "VERDICT: PASS or FAIL\n"
+    "REASON: one short sentence citing the specific evidence.\n"
+)
+
+# The faithfulness judges' contract, on the context_precision model: the judge
+# MARKS each claim and the ratio/verdict is computed in Python. A judge asked
+# for one aggregate vibe-read passes nearly everything (the published run's
+# flat 100%); a judge asked to commit to a mark per claim has to defend each
+# one, and a mark that cannot be defended becomes UNSUPPORTED. The verdict
+# line is the fail-open anchor only — a reply without it fails through the
+# same "no verdict" path every other judge uses.
+_CLAIMS_CONTRACT = (
+    "Reply in exactly this format, with NO preamble, NO chain-of-thought, "
+    "NO commentary outside these lines. Do NOT show your working — decide "
+    "silently and output only:\n"
+    "CLAIM 1: SUPPORTED or UNSUPPORTED\n"
+    "CLAIM 2: SUPPORTED or UNSUPPORTED\n"
+    "(exactly one line for EVERY distinct factual claim in the answer, "
+    "numbered in order)\n"
+    "If and only if the answer makes NO factual claims at all (e.g. a proper "
+    "'the documents do not say' refusal), output the single line "
+    "CLAIM 1: NONE\n"
     "VERDICT: PASS or FAIL\n"
     "REASON: one short sentence citing the specific evidence.\n"
 )
@@ -234,38 +267,149 @@ def _parse_verdict_scored(out: str) -> tuple[bool, float, str]:
     return verdict, score, reason
 
 
+# One mark per claim, the faithfulness twin of the PASSAGE marks. NONE is
+# reserved for the whole-reply case ("the answer makes no factual claims"),
+# because that is the only shape in which it is unambiguous.
+_CLAIM_MARK = re.compile(
+    r"CLAIM\s*(\d+)\s*:\s*(SUPPORTED|UNSUPPORTED|NONE)", re.IGNORECASE
+)
+
+
+def _parse_claim_marks(out: str) -> list[str]:
+    """Ordered claim marks from a faithfulness reply: ['SUPPORTED', ...].
+
+    The list index IS the claim number — the caller computes the
+    supported/total ratio from it, so the marks must be trustworthy:
+
+    * numbering gaps and duplicated numbers are a truncated or garbled reply
+      — a partial claim set would silently inflate the ratio, so JudgeError
+      (fail-open to "not graded"), never a score;
+    * NONE mixed with real marks is ambiguous (which claims are the none
+      ones?) and raises for the same reason.
+
+    Thinking traces are stripped first, exactly as _parse_verdict does, so a
+    model rehearsing marks inside <thought> cannot clobber the real ones.
+    An empty reply raises via the caller's verdict-anchor parse.
+    """
+    text = _THINK_BLOCK.sub("", out or "")
+    text = _UNCLOSED_THINK_BLOCK.sub("", text).strip()
+    marks: dict[int, str] = {}
+    for m in _CLAIM_MARK.finditer(text):
+        idx = int(m.group(1))
+        token = m.group(2).upper()
+        if idx in marks and marks[idx] != token:
+            raise JudgeError(
+                f"claim {idx} marked twice: {marks[idx]} then {token}"
+            )
+        marks[idx] = token
+    if not marks:
+        return []
+    tokens = [marks[k] for k in sorted(marks)]
+    if tokens == ["NONE"]:
+        return tokens
+    if "NONE" in tokens:
+        raise JudgeError("claim marks mix NONE with SUPPORTED/UNSUPPORTED")
+    if sorted(marks) != list(range(1, len(marks) + 1)):
+        raise JudgeError(
+            f"claim marks are not a contiguous 1..{len(marks)} set: {tokens}"
+        )
+    return tokens
+
+
+def _faithfulness_prompt(question: str, context: str, answer: str) -> str:
+    """The shared criteria for both faithfulness judges.
+
+    One prompt body so the benchmark's boolean verdict and the live scorecard's
+    ratio always MEAN the same thing — the pairing rule that made the boolean
+    twins of every scored judge. "Give no benefit of the doubt" is the whole
+    point of the 2026-08-29 tightening: judges default to charity, and a
+    charity-defaulted grader reads 100% on answers that asserted facts the
+    passages never stated.
+    """
+    return (
+        "You are grading a RAG system for FAITHFULNESS. Decide for each "
+        "distinct factual claim in the answer whether the context supports "
+        "it.\n"
+        "A claim is SUPPORTED only if a passage in the context EXPLICITLY "
+        "states it (trivial rewording is fine). Give no benefit of the "
+        "doubt: if the context is silent on the claim, only implies it, or "
+        "the claim would need outside knowledge to believe, it is "
+        "UNSUPPORTED. Hedged wording ('probably', 'likely') does not rescue "
+        "an unsupported claim.\n"
+        "A hallucinated detail is UNSUPPORTED even when the rest of the "
+        "answer is grounded. A figure that contradicts the context is "
+        "UNSUPPORTED. Judge from the context only, never outside "
+        "knowledge.\n"
+        "Judge each claim INDEPENDENTLY on its own merits: a long answer "
+        "can be part grounded and part not, and the marks must show that — "
+        "one unsupported claim must not colour the marks of the claims "
+        "around it.\n\n"
+        f"Question: {question}\n\n"
+        f"Context:\n{context}\n\n"
+        f"Answer: {answer}\n\n"
+        + _CLAIMS_CONTRACT
+    )
+
+
 def faithfulness(question: str, context: str, answer: str) -> tuple[bool, str]:
     """Is every claim in the answer supported by the retrieved context?
 
     This is the missing anti-hallucination check. The judge must decide ONLY
     from the provided context — not from prior knowledge.
+
+    Tightened 2026-08-29 to match its scored sibling: the judge marks each
+    claim and the verdict is computed HERE (every claim SUPPORTED, or a
+    no-claims refusal), not taken from the model's own PASS/FAIL line — a
+    judge asked for one aggregate opinion passed nearly everything. The
+    verdict line is the fail-open anchor: a reply without one is a broken
+    grader (JudgeError), never a FAIL.
+    """
+    if not answer.strip():
+        return False, "empty answer"
+    prompt = _faithfulness_prompt(question, context, answer)
+    # 4096, not the 512 default: claim enumeration reasons more than a
+    # vibe-read, and the configured judge is thinking-capable — the same
+    # budget every scored judge runs with.
+    out = _judge(prompt, max_tokens=4096)
+    text = _THINK_BLOCK.sub("", out or "")
+    text = _UNCLOSED_THINK_BLOCK.sub("", text).strip()
+    verdict_j, reason = _parse_verdict(text)
+    marks = _parse_claim_marks(text)
+    if not marks:
+        raise JudgeError("no CLAIM marks in judge reply")
+    ok = marks == ["NONE"] or all(m == "SUPPORTED" for m in marks)
+    if not reason:
+        reason = (
+            "all claims supported" if ok
+            else f"{sum(1 for m in marks if m != 'SUPPORTED')} of "
+            f"{len(marks)} claims unsupported"
+        )
+    # The returned verdict is the MEASURED one; the judge's own line was only
+    # the presence anchor. A verdict that disagrees with the marks would be
+    # two graders in one column.
+    return ok, reason or f"judge verdict: {'PASS' if verdict_j else 'FAIL'}"
+
+
+def answer_relevancy(question: str, answer: str) -> tuple[bool, str]:
+    """Does the answer address the SPECIFIC ask of the question?
+
+    Tightened 2026-08-29: accuracy is not the bar, addressment is. An answer
+    that is factually true but answers a different aspect of the question, or
+    pads with same-topic background, is a FAIL — the published run's flat
+    100% relevancy came from judges that accepted anything on-topic.
     """
     if not answer.strip():
         return False, "empty answer"
     prompt = (
-        "You are grading a RAG system for HALLUCINATION. Decide whether EVERY "
-        "factual claim in the answer is supported by the context. If the answer "
-        "states something not present in or contradicted by the context, it is a "
-        "FAIL (hallucination). Minor phrasing is fine. Do NOT use outside "
-        f"knowledge.\n\n"
-        f"Question: {question}\n\n"
-        f"Context:\n{context}\n\n"
-        f"Answer: {answer}\n\n"
-        + _VERDICT_CONTRACT
-    )
-    return _parse_verdict(_judge(prompt))
-
-
-def answer_relevancy(question: str, answer: str) -> tuple[bool, str]:
-    """Does the answer address the question (regardless of source grounding)?"""
-    if not answer.strip():
-        return False, "empty answer"
-    prompt = (
-        "You are grading a RAG system for ANSWER RELEVANCY. Decide whether the "
-        "answer actually addresses what was asked. Off-topic, evasive, or "
-        "'I don't know' answers when an answer exists are FAIL. A correct-in-"
-        "spirit answer (including an appropriate 'not found' when warranted) is "
-        "PASS.\n\n"
+        "You are grading a RAG system for ANSWER RELEVANCY. Decide whether "
+        "the answer addresses the SPECIFIC ask of the question — the "
+        "entity, figure, comparison, or scope it requests. An answer that "
+        "is factually accurate but answers a DIFFERENT aspect of the "
+        "question, restates the question, or offers generic background "
+        "instead of the requested fact is FAIL. Off-topic or evasive "
+        "answers are FAIL. A specific, direct answer is PASS, and so is an "
+        "appropriate 'not found in the documents' when the sources lack "
+        "the answer.\n\n"
         f"Question: {question}\n\n"
         f"Answer: {answer}\n\n"
         + _VERDICT_CONTRACT
@@ -342,40 +486,68 @@ def faithfulness_scored(question: str, context: str, answer: str) -> tuple[bool,
     The pass/fail twin is the anti-hallucination gate; this one measures HOW
     MUCH of the answer stands on the context — 3 of 4 claims supported is 75,
     which is a reading a single verdict destroys.
+
+    Tightened 2026-08-29, on the context_precision pattern: the judge no
+    longer reports the SCORE itself. It marks each claim SUPPORTED or
+    UNSUPPORTED (one line per claim, shared prompt with the boolean judge via
+    _faithfulness_prompt) and the ratio is computed HERE in Python — judges
+    are unreliable at both arithmetic and vibe-pass/fail, and reliable at
+    per-item marks. The verdict line is the fail-open anchor; a reply without
+    one, or with marks that do not cover the claims, is a JudgeError ("not
+    graded"), never a guessed score.
     """
     if not answer.strip():
         return False, 0.0, "empty answer"
     prompt = (
-        "You are grading a RAG system for FAITHFULNESS. List the distinct "
-        "factual claims in the answer, then decide for each whether the context "
-        "supports it. SCORE is the percentage of claims the context supports "
-        "(an answer with no claims scores 100 only if it is a correct refusal). "
-        "VERDICT is PASS when every claim is supported. Judge from the context "
-        "only, never outside knowledge. A hallucinated detail drags the score "
-        "down even if the rest is grounded.\n\n"
-        f"Question: {question}\n\n"
-        f"Context:\n{context}\n\n"
-        f"Answer: {answer}\n\n"
-        + _VERDICT_CONTRACT_SCORED
+        _faithfulness_prompt(question, context, answer)
+        + "\nSCORE is computed from your marks: SUPPORTED claims divided by "
+        "total claims (about half unsupported is 50)."
     )
     # 4096, not 512: the configured judge is thinking-capable and enumerates
-    # every passage inside <thought> on long contexts. Probed live: 2048 still
+    # every claim inside <thought> on long contexts. Probed live: 2048 still
     # ends finish_reason="length" with no verdict emitted; 4096 returns stop
     # with a parseable verdict.
-    return _parse_verdict_scored(_judge(prompt, max_tokens=4096))
+    out = _judge(prompt, max_tokens=4096)
+    text = _THINK_BLOCK.sub("", out or "")
+    text = _UNCLOSED_THINK_BLOCK.sub("", text).strip()
+    verdict_j, reason = _parse_verdict(text)
+    marks = _parse_claim_marks(text)
+    if marks == ["NONE"]:
+        # A no-claims answer (a proper refusal) cannot be unfaithful to
+        # anything — the RAGAS convention. Answer relevancy judges evasion.
+        return True, 1.0, reason or "no factual claims: a proper refusal"
+    if not marks:
+        raise JudgeError("no CLAIM marks in judge reply")
+    supported = sum(1 for m in marks if m == "SUPPORTED")
+    score = supported / len(marks)
+    # Verdict is the measured one (all claims supported), matching the
+    # boolean judge's meaning; the judge's VERDICT line was only the
+    # fail-open anchor.
+    return score == 1.0, score, reason or f"{supported} of {len(marks)} claims supported"
 
 
 def answer_relevancy_scored(question: str, answer: str) -> tuple[bool, float, str]:
-    """How completely the answer addresses what was asked, 0-100."""
+    """How directly the answer addresses what was asked, 0-100.
+
+    Tightened 2026-08-29 with calibration anchors and a specificity demand:
+    the bar is the question's actual ask (entity, figure, comparison, scope),
+    not topic overlap. An accurate answer to a different aspect fails, and a
+    restatement of the question scores near 0 — previously a true-but-tangent
+    answer passed with the same 100 as a direct one.
+    """
     if not answer.strip():
         return False, 0.0, "empty answer"
     prompt = (
-        "You are grading a RAG system for ANSWER RELEVANCY. SCORE is how well "
-        "the answer addresses what was asked: 100 fully and directly answers "
-        "the question; partial or incomplete answers score in between; "
-        "off-topic or evasive answers score near 0. An appropriate 'not found' "
-        "when the sources lack the answer still scores 80+. VERDICT is PASS "
-        "unless the answer misses the question.\n\n"
+        "You are grading a RAG system for ANSWER RELEVANCY. Judge whether "
+        "the answer addresses the SPECIFIC ask of the question — the "
+        "entity, figure, comparison, or scope it requests.\n"
+        "SCORE 100 only for an answer that directly and specifically "
+        "answers what was asked. An answer that is accurate but answers a "
+        "DIFFERENT aspect of the question scores 40 or below. A "
+        "restatement of the question, or generic background instead of the "
+        "requested fact, scores near 0. An appropriate 'not found in the "
+        "documents' refusal when the sources lack the answer scores 80-95. "
+        "VERDICT is PASS unless the answer misses the question.\n\n"
         f"Question: {question}\n\n"
         f"Answer: {answer}\n\n"
         + _VERDICT_CONTRACT_SCORED
@@ -465,12 +637,16 @@ def context_precision_scored(
     prompt = (
         "You are grading a RAG system's CONTEXT PRECISION. Below are the "
         "passages its retriever returned, IN THE ORDER IT RANKED THEM. For "
-        "EACH passage decide whether it contains information needed to answer "
-        "the question. A passage that is off-topic, filler, or does not bear "
-        "on the question is IRRELEVANT. Relevant passages ranked near the top "
-        "must yield a high score; relevant passages buried low are penalized. "
-        "Judge only the question and the passages; do not use outside "
-        "knowledge and do not judge any generated answer.\n\n"
+        "EACH passage decide whether it contains information NEEDED to "
+        "answer this question — a fact, figure, definition, or statement "
+        "that a complete answer would have to use. Mark RELEVANT only for "
+        "passages that CLEAR THE BAR: a passage that is same-topic "
+        "background, tangential, or merely mentions the subject without "
+        "bearing on the specific question is IRRELEVANT. Relevant passages "
+        "ranked near the top must yield a high score; relevant passages "
+        "buried low are penalized. Judge only the question and the "
+        "passages; do not use outside knowledge and do not judge any "
+        "generated answer.\n\n"
         f"Question: {question}\n\n"
         f"Passages, in retrieval order:\n\n{numbered}\n\n"
         + _MARKS_CONTRACT

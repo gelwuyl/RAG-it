@@ -629,3 +629,177 @@ def test_recall_on_an_empty_context_is_measured_zero(monkeypatch):
     a real 0, not an outage."""
     ok, score, why = judges.context_recall_scored("q", "reference", "   ")
     assert ok is False and score == 0.0 and "empty context" in why
+
+
+# ---------- faithfulness claim marks (2026-08-29 tightening) ----------
+
+
+def _claims_reply(marks, verdict="PASS", reason="marks explain it"):
+    lines = [f"CLAIM {i}: {m}" for i, m in enumerate(marks, start=1)]
+    lines.append(f"VERDICT: {verdict}")
+    lines.append(f"REASON: {reason}.")
+    return "\n".join(lines)
+
+
+def test_faithfulness_scored_computes_the_ratio_from_marks(monkeypatch):
+    """2 of 3 claims supported -> 0.667, computed in Python from the marks,
+    not taken from anything the judge says about a SCORE."""
+    monkeypatch.setattr(
+        judges, "_judge", lambda p, max_tokens=512: _claims_reply(
+            ["SUPPORTED", "UNSUPPORTED", "SUPPORTED"], verdict="FAIL")
+    )
+    ok, score, why = judges.faithfulness_scored("q", "ctx", "answer")
+    assert ok is False, "verdict is the measured one: not every claim supported"
+    assert abs(score - 2 / 3) < 1e-9
+    assert "marks" in why
+
+
+def test_faithfulness_scored_all_supported_is_a_full_pass(monkeypatch):
+    monkeypatch.setattr(
+        judges, "_judge", lambda p, max_tokens=512: _claims_reply(
+            ["SUPPORTED", "SUPPORTED"])
+    )
+    ok, score, why = judges.faithfulness_scored("q", "ctx", "answer")
+    assert ok is True and score == 1.0
+
+
+def test_faithfulness_scored_no_claims_refusal_scores_full(monkeypatch):
+    """A proper refusal makes no factual claims and cannot be unfaithful to
+    anything — the RAGAS convention. Evasion is answer relevancy's job."""
+    monkeypatch.setattr(
+        judges, "_judge", lambda p, max_tokens=512: _claims_reply(
+            ["NONE"], reason="the answer asserts nothing")
+    )
+    ok, score, why = judges.faithfulness_scored("q", "ctx", "not in documents")
+    assert ok is True and score == 1.0
+
+
+def test_faithfulness_scored_gap_in_marks_is_a_broken_grader(monkeypatch):
+    """A missing claim mark would silently inflate the ratio — JudgeError,
+    "not graded", never a score."""
+    # Claim 3 exists in the reply but claim 2's line is missing entirely.
+    raw = "CLAIM 1: SUPPORTED\nCLAIM 3: SUPPORTED\nVERDICT: PASS\nREASON: x."
+    monkeypatch.setattr(judges, "_judge", lambda p, max_tokens=512: raw)
+    with pytest.raises(JudgeError):
+        judges.faithfulness_scored("q", "ctx", "answer")
+
+
+def test_faithfulness_scored_conflicting_duplicate_marks_raise(monkeypatch):
+    raw = (
+        "CLAIM 1: SUPPORTED\nCLAIM 1: UNSUPPORTED\n"
+        "VERDICT: PASS\nREASON: x."
+    )
+    monkeypatch.setattr(judges, "_judge", lambda p, max_tokens=512: raw)
+    with pytest.raises(JudgeError):
+        judges.faithfulness_scored("q", "ctx", "answer")
+
+
+def test_faithfulness_scored_none_mixed_with_marks_is_ambiguous(monkeypatch):
+    raw = (
+        "CLAIM 1: NONE\nCLAIM 2: SUPPORTED\n"
+        "VERDICT: PASS\nREASON: x."
+    )
+    monkeypatch.setattr(judges, "_judge", lambda p, max_tokens=512: raw)
+    with pytest.raises(JudgeError):
+        judges.faithfulness_scored("q", "ctx", "answer")
+
+
+def test_faithfulness_scored_without_marks_or_verdict_fails_open(monkeypatch):
+    """The core fail-open invariant on the tightened judge: no marks and no
+    verdict -> JudgeError -> the caller records None, never a score."""
+    monkeypatch.setattr(
+        judges, "_judge", lambda p, max_tokens=512: "Looks well grounded to me."
+    )
+    with pytest.raises(JudgeError):
+        judges.faithfulness_scored("q", "ctx", "answer")
+
+
+def test_faithfulness_scored_ignores_marks_inside_a_thinking_trace(monkeypatch):
+    raw = (
+        "<thought>First pass: CLAIM 1: UNSUPPORTED</thought>\n"
+        "CLAIM 1: SUPPORTED\nVERDICT: PASS\nREASON: supported."
+    )
+    monkeypatch.setattr(judges, "_judge", lambda p, max_tokens=512: raw)
+    _, score, _ = judges.faithfulness_scored("q", "ctx", "answer")
+    assert score == 1.0
+
+
+def test_boolean_faithfulness_fails_on_any_unsupported_claim(monkeypatch):
+    """The benchmark judge shares the scored sibling's meaning: one
+    unsupported claim is a FAIL, computed from the marks not the vibe."""
+    monkeypatch.setattr(
+        judges, "_judge", lambda p, max_tokens=512: _claims_reply(
+            ["SUPPORTED", "SUPPORTED", "UNSUPPORTED"], verdict="PASS")
+    )
+    ok, why = judges.faithfulness("q", "ctx", "answer")
+    assert ok is False
+
+    monkeypatch.setattr(
+        judges, "_judge", lambda p, max_tokens=512: _claims_reply(
+            ["SUPPORTED", "SUPPORTED"])
+    )
+    ok2, _ = judges.faithfulness("q", "ctx", "answer")
+    assert ok2 is True
+
+
+def test_boolean_faithfulness_passes_a_no_claims_refusal(monkeypatch):
+    monkeypatch.setattr(
+        judges, "_judge", lambda p, max_tokens=512: _claims_reply(["NONE"])
+    )
+    ok, _ = judges.faithfulness("q", "ctx", "I couldn't find this in your documents.")
+    assert ok is True
+
+
+def test_boolean_faithfulness_without_marks_fails_open(monkeypatch):
+    monkeypatch.setattr(
+        judges, "_judge", lambda p, max_tokens=512: "VERDICT: PASS\nREASON: fine."
+    )
+    with pytest.raises(JudgeError):
+        judges.faithfulness("q", "ctx", "answer")
+
+
+def test_empty_answer_still_a_real_fail_on_the_tightened_judges():
+    assert judges.faithfulness_scored("q", "ctx", "  ") == (False, 0.0, "empty answer")
+    assert judges.faithfulness("q", "ctx", "  ") == (False, "empty answer")
+
+
+def test_tightened_prompts_bar_the_benefit_of_the_doubt(monkeypatch):
+    """The leniency levers must actually be IN the prompts the judges send."""
+    seen = {}
+
+    def _spy(prompt, max_tokens=512):
+        seen.setdefault("prompts", []).append(prompt)
+        if "CONTEXT PRECISION" in prompt:
+            return _precision_reply(["RELEVANT"])
+        return _claims_reply(["SUPPORTED"])
+
+    monkeypatch.setattr(judges, "_judge", _spy)
+    judges.faithfulness("q", "ctx", "a")
+    judges.faithfulness_scored("q", "ctx", "a")
+    judges.answer_relevancy("q", "a")
+    judges.answer_relevancy_scored("q", "a")
+    judges.context_precision_scored("q", ["p1"])
+    joined = "\n".join(seen["prompts"])
+    assert "benefit of the doubt" in joined
+    assert "EXPLICITLY" in joined
+    assert "DIFFERENT aspect" in joined, "relevancy must demand specificity"
+    assert "NEEDED to answer" in joined, "precision bar must be need, not topic"
+
+
+def test_both_faithfulness_judges_share_one_prompt_body(monkeypatch):
+    """The pairing rule: benchmark verdict and live ratio must MEAN the same
+    thing, which falls apart if the two prompts drift apart."""
+    seen = []
+
+    def _spy(prompt, max_tokens=512):
+        seen.append(prompt)
+        return _claims_reply(["SUPPORTED"])
+
+    monkeypatch.setattr(judges, "_judge", _spy)
+    judges.faithfulness("q", "ctx", "a")
+    judges.faithfulness_scored("q", "ctx", "a")
+    scored_body = seen[1].replace(
+        "\nSCORE is computed from your marks: SUPPORTED claims divided by "
+        "total claims (about half unsupported is 50).", ""
+    )
+    assert scored_body == seen[0]

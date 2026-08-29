@@ -24,6 +24,15 @@ Regenerate after a change that should move the published numbers:
 
 Read the diff before committing it. Publishing a run without looking at it is
 how a regression becomes the number on the landing page.
+
+PROVENANCE CAVEAT: the committed run was generated 2026-08-21, BEFORE the
+judge-prompt tightening of 2026-08-29 (see eval/judges.py and
+eval/judge_calibration.py). Its faithfulness and answer_relevancy pass rates
+were read by the earlier, more lenient judges and are NOT directly comparable
+to readings taken after that date — the tightened judges discriminate, so
+sub-100% values appear where the old judges flatly passed everything.
+Re-publishing requires a full benchmark re-run, which is a separate
+user-approved model spend.
 """
 from __future__ import annotations
 
