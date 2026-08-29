@@ -317,6 +317,14 @@ html[data-kind="guest"] .identity-hint .hint-badge { display: inline-block; }
   opacity: 0.45;
   cursor: not-allowed;
 }
+/* On the composer's web chip the strike is the point, not just the dim: the
+   feature exists and is one sign-in away, so "locked" is the message and the
+   strike says it without the ? mark or a tooltip (which does not exist on
+   touch). Clicking still works — the handler explains instead of toggling. */
+.switch-btn.guest-locked {
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
 
 /* Optional Google sign-in: last item in the top bar, never a layout owner. */
 /* No margin of its own: .topbar-identity owns the spacing between the guest
@@ -395,10 +403,11 @@ html[data-kind="guest"] .identity-hint .hint-badge { display: inline-block; }
    grew with a multi-line question would drift up the box away from the control
    they belong beside.
 
-   Stacked, because there are two of them and the composer is the width of the
-   conversation: side by side they crowd the textarea on a laptop and wrap
-   unpredictably on a phone. Stacking also reads as a list of tools, which is
-   what it is. */
+   Stacked, but only up here: side by side they crowd the textarea on a laptop,
+   where the composer is the width of the conversation. On a phone the textarea
+   takes its own row (media query at the bottom of this file), so there the two
+   chips go horizontal instead — a stacked pair cost a whole extra row of
+   vertical space under the question. */
 /* Sized to land FLUSH with the Ask button: two 18px pills plus a 4px gap is
    40px, which is exactly #ask-btn's height. The pills are deliberately one step
    down the type scale from the rest of the composer — they are labels on
@@ -409,6 +418,10 @@ html[data-kind="guest"] .identity-hint .hint-badge { display: inline-block; }
   flex-shrink: 0; align-self: flex-end;
 }
 .tool-row { display: inline-flex; align-items: center; gap: 4px; }
+/* The display here beats the UA's [hidden] rule — author CSS always does — so
+   app.js's `row.hidden = !state.webAvailable` was a no-op and guests were shown
+   a WEB SEARCH chip the server would refuse to honour. Pin it explicitly. */
+.tool-row[hidden] { display: none; }
 #deep-toggle, #web-toggle { white-space: nowrap; }
 /* Equal widths, or the ? marks zig-zag down the column. */
 .tool-row .switch-btn {
@@ -2088,25 +2101,39 @@ fieldset legend {
    question into 130px.
 
    So the box takes a row of its own, the way every messaging app on the device
-   already works, and the two controls sit under it: the toggle left, the send
-   button right. Nothing is hidden, and the box goes from 130px to full width. */
+   already works, and the two controls sit under it: the tool chips left, the
+   send button right. Nothing is hidden, and the box goes from 130px to full
+   width.
+
+   The chips themselves sit SIDE BY SIDE down here. Stacked they ate two rows
+   of vertical space under the textarea — on a phone that is the difference
+   between one question and the next being visible. Both pills drop their
+   min-width and the ? marks shrink to 22px so two chips, their marks, and the
+   Ask button still fit a 375px screen on one line; `wrap` is the pressure
+   valve, so a 320px phone folds the second chip under the first instead of
+   overflowing. */
 @media (max-width: 560px) {
   .ask-form { flex-wrap: wrap; align-items: center; gap: 8px 10px; }
   .ask-form textarea {
     order: 1; flex: 1 0 100%;
     min-height: 46px;
   }
-  .tool-switches { order: 2; margin-right: auto; align-self: center; }
+  .tool-switches {
+    order: 2; margin-right: auto; align-self: center;
+    flex-direction: row; flex-wrap: wrap; align-items: center; gap: 6px 8px;
+  }
   #ask-btn { order: 3; padding: 10px 22px; }
 
   /* Smaller, as asked: this is a modifier on the question, not the action.
-     The tap target stays 44px tall — it is only the type and the horizontal
-     padding that shrink, which is what was making it look oversized. */
-  #deep-toggle {
+     Both pills equalize here — the desktop min-width that keeps the ? marks
+     from zig-zagging down a column would push the pair past the button in a
+     row — and the tap target stays 26px tall, only the horizontal padding
+     shrinking, which is what was making them look oversized. */
+  .tool-row .switch-btn {
     font-size: 11px; letter-spacing: 0.02em;
-    padding: 4px 10px; min-width: 0;
+    padding: 4px 8px; min-width: 0;
   }
-  .tool-row .term-mark { width: 26px; height: 26px; }
+  .tool-row .term-mark { width: 22px; height: 22px; }
 }
 
 

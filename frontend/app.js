@@ -1094,6 +1094,17 @@ $("deep-toggle").onclick = () => {
 };
 
 $("web-toggle").onclick = () => {
+  // The struck-through guest chip is not a toggle: it explains the one thing
+  // that would unlock it. state.webSearch is left alone, and the ask payload
+  // also guards on state.webAvailable, so web_search can never leave this
+  // page true for a guest — the route's refusal stays unreachable from here.
+  if (state.isGuest && !state.webAvailable) {
+    toast(
+      "Sign in with Google to use web search — it fetches the web with the deployment's key, which is spent only in signed-in workspaces.",
+      true,
+    );
+    return;
+  }
   state.webSearch = !state.webSearch;
   syncToolToggles();
   toast(
@@ -1117,12 +1128,31 @@ function syncToolToggles() {
     btn.classList.toggle("on", on);
     btn.setAttribute("aria-pressed", String(on));
   }
-  // The web row is hidden rather than disabled when it is not on offer: a
-  // guest has no way to make it work, and a dead control they cannot fix is
-  // worse than one that is not there. `web_search_available` is the SERVER's
-  // answer, so the control can never promise something the route refuses.
+  // The web row ships hidden and stays hidden until the server says what this
+  // caller gets. For a guest it is then shown STRUCK THROUGH rather than
+  // hidden: signing in genuinely enables it, so hiding it denied a capability
+  // one tap away and advertised nothing — the old "dead control they cannot
+  // fix" reasoning was never true of this chip. It gets the .guest-locked
+  // treatment (dimmed, aria-disabled) and its handler explains on tap instead
+  // of toggling. A signed-in account on a deployment WITHOUT a Tavily key is
+  // the other way webAvailable comes back false; there signing in fixes
+  // nothing, so that caller keeps the old hidden treatment.
+  // `web_search_available` is still the SERVER's answer either way — the
+  // control can never promise something the route refuses.
   const row = $("web-row");
-  if (row) row.hidden = !state.webAvailable;
+  const btn = $("web-toggle");
+  const locked = state.isGuest && !state.webAvailable;
+  if (row) row.hidden = !state.webAvailable && !state.isGuest;
+  if (btn) {
+    btn.classList.toggle("guest-locked", locked);
+    if (locked) {
+      btn.setAttribute("aria-disabled", "true");
+      btn.title = "Sign in with Google to use web search.";
+    } else {
+      btn.removeAttribute("aria-disabled");
+      btn.title = btn.dataset.title;
+    }
+  }
 }
 
 // Delete vector rows whose document is gone, plus any left under a superseded
