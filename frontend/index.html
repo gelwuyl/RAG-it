@@ -4,12 +4,11 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>RAG-it — grounded answers from your own documents</title>
-    <meta name="description" content="A document-grounded RAG chat app: hybrid retrieval, LLM reranking and RAGAS-style generation metrics, deployed as a single serverless function." />
+    <meta name="description" content="RAG-it searches your documents, chooses bounded fallbacks, and shows the evidence behind every answer." />
     <meta name="color-scheme" content="dark light" />
     <script>
-      // Same key and same rule as the app (app.html), so a light-theme visitor
-      // does not get a dark pitch page followed by a light workspace.
-      // Must stay inline and blocking, or dark-theme users flash white.
+      // Apply the saved theme before the stylesheet paints, so the landing page
+      // and workspace keep the same appearance across navigation.
       (function () {
         try {
           var saved = localStorage.getItem("ragchat-theme");
@@ -22,190 +21,205 @@
         }
       })();
     </script>
-    <link rel="stylesheet" href="/landing.css?v=15" />
+    <link rel="stylesheet" href="/landing.css?v=16" />
   </head>
   <body>
-    <button id="theme-toggle" class="theme-toggle" type="button"
-      title="Switch between the dark and light theme" aria-pressed="false">☾</button>
-
-    <!-- ============================ hero ============================ -->
-    <header class="hero">
-      <div class="starfield" aria-hidden="true"></div>
-      <div class="hero-grid" aria-hidden="true"></div>
-      <div class="wrap">
-        <div class="hero-mark">
-          <span class="hero-mark-glyph" aria-hidden="true">◆</span>
-          <span class="hero-mark-name">RAG-it</span>
-        </div>
-
-        <h1 class="hero-title">Ask your documents. Get <em>cited</em> answers.</h1>
-
-        <p class="hero-lede">
-          PDFs, notes, reports — whatever you have. Every answer points at the
-          passage it came from. One click to check, not one leap of faith.
-        </p>
-
-        <div class="hero-cta">
-          <a class="btn btn-primary" href="/app">Start with sample documents →</a>
-          <a class="btn" href="/app?signin=1">Sign in with Google</a>
-        </div>
-        <p class="hero-note">
-          No sign-up. A private workspace immediately. Sign in later and your
-          work comes with you.
-        </p>
+    <header class="topbar">
+      <div class="wrap topbar-inner">
+        <a class="wordmark" href="#top" aria-label="RAG-it home">
+          <span class="wordmark-mark" aria-hidden="true">◆</span>
+          <span class="wordmark-name">RAG-it</span>
+        </a>
+        <button id="theme-toggle" class="theme-toggle" type="button"
+          title="Switch to the light theme" aria-label="Switch theme" aria-pressed="false">☾</button>
       </div>
     </header>
 
-    <!-- =================== what the stages do (bridge) ===================
-         Unnumbered on purpose: it is the plain-language read of the pipeline,
-         and it sits BEFORE 01 because it is the most legible thing on the
-         page — someone who reads only this knows what the app does. The
-         numbered section that follows is the same five stages with their
-         serverless constraints attached, for the reader who wants them. -->
-    <!-- ================= what makes this non-trivial =================
-         Unnumbered on purpose: it is the plain-language read of the whole
-         system, and it sits FIRST because it is the most legible thing on the
-         page — someone who reads only this knows what the app does and why it
-         is not a weekend project. It used to be split in two, a stage list
-         here and a "what makes it non-trivial" card grid four screens down,
-         which said the same things twice in different words.
+    <main id="top">
+      <section class="hero">
+        <div class="hero-grid" aria-hidden="true"></div>
+        <div class="hero-glow" aria-hidden="true"></div>
+        <div class="wrap hero-inner">
+          <p class="hero-kicker telemetry">Document-grounded · agentic RAG</p>
+          <h1 class="hero-title">Ask your documents. Get <em>cited</em> answers.</h1>
+          <p class="hero-copy">Search, Choose, Cite, And Check — Under The Limits Of One Serverless Function.</p>
+          <div class="hero-actions">
+            <a class="btn btn-primary" href="/app">Start with sample documents <span aria-hidden="true">→</span></a>
+            <a class="btn" href="/app?signin=1">Sign in with Google</a>
+          </div>
+          <p class="hero-foot telemetry">No sign-up · private workspace · sign in later</p>
+        </div>
+      </section>
 
-         FIVE across, one row, and the count is not incidental: these are the
-         five decisions the system is made of, and breaking them over two rows
-         made the fifth look like an afterthought rather than the answer to
-         the failure the other four share. -->
-    <section class="stages">
-      <div class="wrap">
-        <div class="stage-notes">
-          <div class="stage-note">
-            <span class="stage-key">Rewrite</span>
-            <p>Nobody asks a question the way a document answers it. Restated
-              first, then searched.</p>
+      <div class="trace-line" aria-hidden="true"></div>
+
+      <section class="band" id="agentic">
+        <div class="wrap">
+          <div class="band-head">
+            <div>
+              <p class="band-kicker telemetry">The difference</p>
+              <h2 class="band-title">Not just retrieve, then generate.</h2>
+            </div>
+            <p class="band-intro">Most RAG retrieves once. RAG-it can inspect failure and choose a bounded fallback.</p>
           </div>
-          <div class="stage-note">
-            <span class="stage-key">Retrieve</span>
-            <p>Two searches at once: one for meaning, one for exact words. An
-              invoice number and a paraphrase are both findable.</p>
-          </div>
-          <div class="stage-note">
-            <span class="stage-key">Rerank</span>
-            <p>A model re-orders every candidate against your actual question.
-              Similarity is a guess. This is a judgement.</p>
-          </div>
-          <div class="stage-note is-feature">
-            <span class="stage-key">Deep search<span class="stage-tag">grep</span></span>
-            <p>Search ranks, and whatever falls below the cut may as well not
-              exist. This doesn't rank. It reads every document word for word —
-              if your words are there, they're used.</p>
-          </div>
-          <div class="stage-note">
-            <span class="stage-key">Judge</span>
-            <p>A second model checks the answer against its own sources. If it
-              can't decide, it says so. It never guesses a verdict.</p>
+          <div class="agent-grid">
+            <article class="agent-item">
+              <span class="item-label telemetry">01 · Search</span>
+              <h3 class="item-title">Meaning + exact</h3>
+              <p class="item-copy">Meaning and exact search catch paraphrases, identifiers, and awkward wording.</p>
+            </article>
+            <article class="agent-item">
+              <span class="item-label telemetry">02 · Rerank</span>
+              <h3 class="item-title">Question-aware</h3>
+              <p class="item-copy">Reranking judges candidates against the actual question.</p>
+            </article>
+            <article class="agent-item is-feature">
+              <span class="item-label telemetry">03 · Deep search <small>grep</small></span>
+              <h3 class="item-title">Read everything</h3>
+              <p class="item-copy">Deep search reads every document when ranking misses.</p>
+            </article>
+            <article class="agent-item">
+              <span class="item-label telemetry">04 · Web, optional</span>
+              <h3 class="item-title">Last resort</h3>
+              <p class="item-copy">Web search stays optional, labelled, and last.</p>
+            </article>
           </div>
         </div>
-      </div>
-    </section>
+      </section>
 
-    <!-- ===================== 02 · metric tiles ====================== -->
-    <section>
-      <div class="wrap">
-        <!-- No section number: there is one section. A lone "01" promises a
-             "02" that never comes. -->
-        <div class="section-label">
-          <span class="section-name">By the numbers</span>
+      <section class="band" id="scores">
+        <div class="wrap">
+          <div class="band-head">
+            <div>
+              <p class="band-kicker telemetry">The scorecard</p>
+              <h2 class="band-title">Four RAGAS scores. One honest read.</h2>
+            </div>
+            <div class="band-copy-stack">
+              <p class="band-intro">Four canonical RAGAS metrics judge every response: two generation, two retrieval.</p>
+              <p class="band-intro">56 questions, including 3 unanswerable checks, over 27 documents, shape the scorecard.</p>
+            </div>
+          </div>
+          <div class="metric-layout">
+            <div class="metric-groups">
+              <section class="metric-group" aria-labelledby="generation-heading">
+                <span class="metric-group-label telemetry" id="generation-heading">Generation · answer quality</span>
+                <div class="metric">
+                  <span class="metric-name">Faithfulness</span>
+                  <p class="metric-copy">Did the answer stay inside the retrieved evidence?</p>
+                  <span class="metric-rail" aria-hidden="true"></span>
+                </div>
+                <div class="metric">
+                  <span class="metric-name">Answer relevancy</span>
+                  <p class="metric-copy">Did the answer address the specific question?</p>
+                  <span class="metric-rail" aria-hidden="true"></span>
+                </div>
+              </section>
+              <section class="metric-group" aria-labelledby="retrieval-heading">
+                <span class="metric-group-label telemetry" id="retrieval-heading">Retrieval · evidence quality</span>
+                <div class="metric">
+                  <span class="metric-name">Context precision</span>
+                  <p class="metric-copy">Did useful passages arrive near the top?</p>
+                  <span class="metric-rail" aria-hidden="true"></span>
+                </div>
+                <div class="metric">
+                  <span class="metric-name">Context recall</span>
+                  <p class="metric-copy">Did retrieved context support the reference?</p>
+                  <span class="metric-rail" aria-hidden="true"></span>
+                </div>
+              </section>
+            </div>
+            <aside class="number-panel">
+              <h3 class="number-heading telemetry">The four, split cleanly</h3>
+              <div class="numbers">
+                <div class="number">
+                  <span class="number-value">4</span>
+                  <span class="number-label">RAGAS metrics</span>
+                </div>
+                <div class="number">
+                  <span class="number-value">2</span>
+                  <span class="number-label">Generation</span>
+                </div>
+                <div class="number">
+                  <span class="number-value">2</span>
+                  <span class="number-label">Retrieval</span>
+                </div>
+              </div>
+              <p class="number-note">Known truth labels retrieval scores; estimates stay explicit.</p>
+            </aside>
+          </div>
+          <div class="fact-strip" aria-label="Implementation facts">
+            <div class="fact">
+              <span class="tile-id telemetry">Corpus</span>
+              <span class="tile-num">27</span>
+              <span class="tile-label telemetry">Documents</span>
+            </div>
+            <div class="fact">
+              <span class="tile-id telemetry">Evaluation</span>
+              <span class="tile-num">56</span>
+              <span class="tile-label telemetry">Golden questions</span>
+            </div>
+            <div class="fact">
+              <span class="tile-id telemetry">Vectors</span>
+              <span class="tile-num">768</span>
+              <span class="tile-label telemetry">Fixed dimensions</span>
+            </div>
+          </div>
         </div>
-        <p class="pipeline-intro">
-          56 questions with known answers, over 27 documents. Some are
-          unanswerable on purpose — refusing is a behaviour worth measuring.
-          The corpus is confusable on purpose too: same firm, same vocabulary,
-          different facts. The scored result ships with the app. Nobody has to
-          run it.
-        </p>
-        <!-- Said out loud rather than only in the <meta> description, which no
-             reader ever sees. And said precisely: RAGAS covers the generation
-             side and part of retrieval, while MRR, NDCG and hit rate are
-             ordinary information-retrieval metrics that predate it by decades.
-             Calling all nine "RAGAS" was a small overclaim. -->
-        <p class="pipeline-intro">
-          Nine readings, three questions.
-          <strong>RAGAS-style generation metrics</strong> — faithfulness,
-          relevancy, correctness — plus the classic retrieval ones. Did the
-          right passage come back, did it come back near the top, was the
-          answer any good.
-        </p>
-        <!-- Structural facts, verifiable from the repo and TESTED against it
-             (tests/test_landing_claims.py) — the corpus count said 10 for as
-             long as it was 27, because nothing connected the sentence to the
-             directory. Deliberately NOT benchmark scores: those live in the
-             app's Evaluation pane, where a published run backs them, and would
-             go stale here without anything noticing. -->
-        <div class="tiles">
-          <div class="tile">
-            <span class="tile-id">A1</span>
-            <span class="tile-num">56</span>
-            <span class="tile-label">Golden questions</span>
-          </div>
-          <div class="tile">
-            <span class="tile-id">A2</span>
-            <span class="tile-num">27</span>
-            <span class="tile-label">Corpus documents</span>
-          </div>
-          <div class="tile">
-            <span class="tile-id">A3</span>
-            <span class="tile-num">768</span>
-            <span class="tile-label">Vector dimensions</span>
-          </div>
-          <div class="tile">
-            <span class="tile-id">A4</span>
-            <span class="tile-num">1</span>
-            <span class="tile-label">Serverless function</span>
-          </div>
-        </div>
+      </section>
 
-        <!-- The three architecture facts that belong to no single stage. -->
-        <div class="platform">
+      <section class="band" id="constraints">
+        <div class="wrap">
+          <div class="band-head">
+            <div>
+              <p class="band-kicker telemetry">The boundary</p>
+              <h2 class="band-title">Built around the limit.</h2>
+            </div>
+            <p class="band-intro">One function freezes after response, so every long job is bounded and persisted.</p>
+          </div>
+          <div class="constraint-grid">
+            <article class="constraint">
+              <span class="item-label telemetry">Serverless</span>
+              <h3 class="item-title">Bounded work</h3>
+              <p class="item-copy">Grading arrives after the answer, not before it.</p>
+            </article>
+            <article class="constraint">
+              <span class="item-label telemetry">Persistence</span>
+              <h3 class="item-title">Neon + pgvector</h3>
+              <p class="item-copy">Neon stores state and vectors; the runtime writes nothing durable.</p>
+            </article>
+            <article class="constraint">
+              <span class="item-label telemetry">Outside the function</span>
+              <h3 class="item-title">Five-minute sweeps</h3>
+              <p class="item-copy">External sweeps clean expired guests every five minutes.</p>
+            </article>
+            <article class="constraint">
+              <span class="item-label telemetry">Judge contract</span>
+              <h3 class="item-title">Fail open</h3>
+              <p class="item-copy">Broken judges report ungraded, never a confident failure.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="finale">
+        <div class="wrap finale-inner">
           <div>
-            <span class="trace-key">Benchmarks · long jobs</span>
-            <p>A background thread freezes the moment the response is sent.
-              So the benchmark is sliced: bounded steps, each committing before
-              it returns.</p>
+            <h2 class="finale-title">The answer is the product. The score explains it.</h2>
+            <p class="finale-copy">Bring a document. See what came back. Check what survived.</p>
           </div>
-          <div>
-            <span class="trace-key">Interface · frontend</span>
-            <p>Vanilla JavaScript. No framework, no runtime dependencies, two
-              entry points and one stylesheet.</p>
-          </div>
+          <a class="btn btn-primary" href="/app">Open the workspace <span aria-hidden="true">→</span></a>
         </div>
+      </section>
+    </main>
 
-        <!-- The way through to the build write-up. It was a section of three
-             teaser cards, which meant summarising the same findings twice and
-             keeping both in step. One line does the job: it belongs to the
-             numbers above it, and the numbers are what earn the click. -->
-        <a class="handoff" href="/built">
-          <span class="handoff-text">How it was built — the measurements, the
-            things that only broke in production, and what was left undone</span>
-          <span class="handoff-go" aria-hidden="true">→</span>
-        </a>
-      </div>
-    </section>
-
-    <footer class="foot">
-      <div class="wrap" style="display:flex;flex-wrap:wrap;gap:16px;align-items:center;justify-content:space-between;">
-        <span class="tel">RAG-it</span>
-        <span class="foot-links">
-          <a href="/built">How it was built</a>
-          <a href="/app">Open the app</a>
-          <a href="/api/health">Health</a>
-          <a href="/docs">API</a>
-        </span>
+    <footer class="footer">
+      <div class="wrap footer-inner">
+        <span class="telemetry">RAG-it · grounded retrieval, made inspectable</span>
+        <span class="telemetry faint">Your documents stay the source.</span>
       </div>
     </footer>
 
     <script>
-      // The ONLY script on this page. No app JS, no API calls — the landing
-      // page is CDN-served and costs zero serverless invocations for visitors
-      // who never enter. Kept inline for the same reason.
       (function () {
         var KEY = "ragchat-theme";
         var btn = document.getElementById("theme-toggle");
@@ -221,6 +235,26 @@
         btn.onclick = function () {
           apply(document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark");
         };
+      })();
+
+      // Warm only the static workspace shell after the page is idle. Avoid slow
+      // connections and data-saving mode; the workspace owns all runtime calls.
+      (function () {
+        var connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+        if (connection && (connection.saveData || /^(slow-)?2g$/.test(connection.effectiveType || ""))) return;
+        function warm() {
+          ["/app.html", "/styles.css", "/app." + "js"].forEach(function (href) {
+            var link = document.createElement("link");
+            link.rel = "prefetch";
+            link.href = href;
+            document.head.appendChild(link);
+          });
+        }
+        if ("requestIdleCallback" in window) {
+          window.requestIdleCallback(warm, { timeout: 2500 });
+        } else {
+          window.setTimeout(warm, 1500);
+        }
       })();
     </script>
   </body>

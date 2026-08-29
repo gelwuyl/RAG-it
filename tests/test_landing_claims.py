@@ -11,6 +11,7 @@ numbers that change once a quarter; a failing test naming the file to edit is.
 """
 from __future__ import annotations
 
+import json
 import re
 import sys
 from pathlib import Path
@@ -31,8 +32,20 @@ def _n_corpus() -> int:
     return len([p for p in CORPUS.iterdir() if p.is_file()])
 
 
+def _golden_rows() -> list[dict]:
+    return [
+        json.loads(ln)
+        for ln in GOLDEN.read_text(encoding="utf-8").splitlines()
+        if ln.strip()
+    ]
+
+
 def _n_golden() -> int:
-    return len([ln for ln in GOLDEN.read_text(encoding="utf-8").splitlines() if ln.strip()])
+    return len(_golden_rows())
+
+
+def _n_unanswerable() -> int:
+    return sum(row.get("unanswerable", False) for row in _golden_rows())
 
 
 def test_the_tiles_count_what_is_actually_there():
@@ -49,18 +62,22 @@ def test_the_tiles_count_what_is_actually_there():
 
 
 def test_the_prose_claim_matches_too():
-    """The tiles and the sentence drifted apart once; both are read."""
-    # Anchored on the NUMBERS and their nouns rather than on one exact
-    # sentence: the copy has now been reworded twice, and a test that only
-    # survives verbatim prose fails for style edits while missing the drift it
-    # exists to catch.
-    m = re.search(r"(\d+) questions with known answers,? over (\d+) documents", _landing())
+    """The page names the full bank, its no-answer checks, and corpus size."""
+    # Keep this anchored on the numbers and their nouns rather than on one exact
+    # sentence, so style edits do not discard the fact check.
+    m = re.search(
+        r"(\d+) questions, including (\d+) unanswerable checks, over (\d+) documents",
+        _landing(),
+    )
     assert m, "the corpus claim was reworded — re-point this test at it"
     assert int(m.group(1)) == _n_golden(), (
         f"claims {m.group(1)} golden questions, there are {_n_golden()}"
     )
-    assert int(m.group(2)) == _n_corpus(), (
-        f"claims {m.group(2)} corpus documents, there are {_n_corpus()}"
+    assert int(m.group(2)) == _n_unanswerable(), (
+        f"claims {m.group(2)} unanswerable checks, there are {_n_unanswerable()}"
+    )
+    assert int(m.group(3)) == _n_corpus(), (
+        f"claims {m.group(3)} corpus documents, there are {_n_corpus()}"
     )
 
 

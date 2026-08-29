@@ -22,8 +22,8 @@ Two other documents stay separate on purpose:
 - **`README.md`** — the public front door: stack table, architecture diagram,
   how to run it.
 
-The narrative version of §16, written for a visitor rather than a maintainer,
-is the live page at [`/built`](https://rag-gel.vercel.app/built).
+The engineering story is folded into the landing page, written for a visitor
+rather than a maintainer.
 
 > **Section numbers §1–§9 are load-bearing.** Roughly two dozen comments across
 > `frontend/` and `ragchat/presets.py` cite them by number (`IDEA.md §6`).
@@ -38,7 +38,7 @@ is the live page at [`/built`](https://rag-gel.vercel.app/built).
 | Audience | Portfolio / showcase piece that is also genuinely usable |
 | Theming | Dark **and** light, toggleable — dark default, both verified at every breakpoint |
 | Accent | Acid lime, meaning *active / live* — **never "good"** (§6) |
-| Entry | Landing at `/`, workspace at `/app`, build write-up at `/built` |
+| Entry | Merged landing at `/`, workspace at `/app` |
 | First run | **Guest-first** — a private workspace on arrival, no sign-in wall (§3) |
 | Access model | Private writable guest workspace; sign in to keep it (§3) |
 | Explanatory content | Inline in the panes — no About route |
@@ -95,37 +95,30 @@ radar/grid inside the workspace.
 
 ---
 
-## 2. Landing page, and the build write-up
+## 2. Landing page
 
-Three pages, two of them static documents that ship **no app JS** and make **no
-API calls** — CDN-served, costing zero serverless invocations for a visitor who
-never enters.
+Two pages: the landing page ships **no app JS** and makes **no API calls** — it
+is CDN-served and costs zero serverless invocations for a visitor who never
+enters.
 
-- **`/` — the landing page.** Near-literal homage to the reference: space
-  backdrop, large geometric hero type, numbered section labels, the five
-  pipeline stages in one row, grid-lined `A1–A4` metric tiles with
-  display-scale numerals. The tile figures are **structural facts** (56 golden
-  questions, 27 corpus documents, 768 dimensions, 1 serverless function) and
-  are asserted by `tests/test_landing_claims.py` — the page once claimed a
-  10-document corpus for as long as it had 27, because nothing connected the
-  sentence to the directory it described.
-- **`/built` — how it was built.** What was measured, what only broke in
-  production, and what was left undone. This is where the engineering story
-  lives; §16 is its maintainer-facing counterpart.
+- **`/` — the merged landing page.** A measured overview of the product's three
+  boundaries: bounded tool choice, four canonical RAGAS readings, and the
+  serverless runtime. Structural facts (56 golden questions, 27 corpus
+  documents, and 768 vector dimensions) stay separate from benchmark scores
+  and are asserted by `tests/test_landing_claims.py`.
 - **`/app` — the workspace.**
 
 Benchmark *scores* deliberately do not appear on the landing page. They live in
 the app's Evaluation pane where a published run backs them, and would go stale
 on a static page with nothing noticing.
 
-All three read `data-theme` from the same `localStorage` key, so a light-theme
+Both pages read `data-theme` from the same `localStorage` key, so a light-theme
 visitor never gets a dark pitch page followed by a light workspace. The theme
 script is inline and blocking in each `<head>` for the same reason.
 
-**Routing.** Two entry points in `frontend/vite.config.js`
-(`index.html`, `app.html`, `built.html`) and rewrites in `vercel.json`. In local
-dev the clean paths do not exist — use `/app.html` and `/built.html`, because
-`/app` and `/built` are Vercel rewrites and the Vite dev server has no router.
+**Routing.** Two entry points in `frontend/vite.config.js` (`index.html`,
+`app.html`) and the `/app` rewrite in `vercel.json`. In local dev the clean path
+does not exist — use `/app.html` because the Vite dev server has no router.
 
 ---
 
@@ -648,7 +641,7 @@ the judges across steps rather than raising the batch.
 cd frontend && npm install && npm run dev
 ```
 
-In dev the pages are `/`, `/app.html` and `/built.html` (§2).
+In dev the pages are `/` and `/app.html` (§2).
 
 ```bash
 # Tests — no network, ~13s
@@ -657,7 +650,7 @@ In dev the pages are `/`, `/app.html` and `/built.html` (§2).
 # Retrieval metrics react to retrieval quality (standalone script, not pytest)
 .venv/Scripts/python eval/check_metrics.py
 
-# Screenshots: 3 pages x 5 breakpoints x 2 themes. Fails on horizontal overflow,
+# Screenshots: 2 pages x 5 breakpoints x 2 themes. Fails on horizontal overflow,
 # any page error, a grid left with one item under a full row, or overlapping
 # controls. Needs the root manifest: npm install
 node shot.mjs http://localhost:5173

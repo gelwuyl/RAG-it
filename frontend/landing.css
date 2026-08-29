@@ -1,646 +1,496 @@
-/* ==========================================================================
-   Landing page (`/`) — a near-literal Grok-UI homage.
+/*
+   Landing page — a measured overview of RAG-it.
 
-   Separate from styles.css on purpose. This page has NO long-form answer to
-   protect, so it carries the reference's visual vocabulary at full strength:
-   display-scale numerals, hero type, starfield, grid tiles, numbered section
-   labels. IDEA.md §1 bans those from the workspace precisely so
-   they can be concentrated here, where they cost the reader nothing.
-
-   It shares tokens.css with the app, so both read as one product despite the
-   deliberately inverted proportions. It ships NO app JS and makes NO API
-   calls — it is CDN-served and costs zero serverless invocations for visitors
-   who never enter.
-   ========================================================================== */
+   The landing page shares the workspace tokens but has its own layout. The
+   answer is the product, so this page keeps its telemetry quiet and gives the
+   three product boundaries room to breathe.
+*/
 
 @import "./tokens.css";
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
+html { scroll-behavior: smooth; }
+
 body {
-  font-family: var(--font-sans);
+  min-width: 0;
+  overflow-x: hidden;
   background: var(--bg);
   color: var(--text);
+  font-family: var(--font-sans);
   font-size: var(--text-body);
-  line-height: 1.6;
+  line-height: 1.55;
   -webkit-text-size-adjust: 100%;
-  overflow-x: hidden;
-}
-
-/* Everything on this page sits on one measure. */
-.wrap {
-  width: min(1080px, 100% - 2.5rem);
-  margin-inline: auto;
 }
 
 a { color: inherit; }
+button { font: inherit; }
 
-/* ---------- the telemetry register, same contract as the app ---------- */
-
-.tel {
-  font-family: var(--font-mono);
-  font-size: var(--text-micro);
-  letter-spacing: var(--tracking-telemetry);
-  text-transform: uppercase;
-  color: var(--muted);
+.wrap {
+  width: min(1120px, calc(100% - 48px));
+  margin-inline: auto;
 }
 
-/* Numbered section labels (01 / 02 / 03) with the reference's accent
-   underline bar. The bar is what makes the number read as a marker rather
-   than as body text that happens to be a digit. */
-.section-label {
-  display: flex; align-items: center; gap: 12px;
-  margin-bottom: 28px;
-}
-.section-label::after {
-  content: ""; flex: 1; height: 1px; background: var(--border);
-}
-.section-num {
-  font-family: var(--font-mono);
-  font-size: var(--text-micro);
-  letter-spacing: var(--tracking-telemetry);
-  color: var(--primary-ink);
-  padding-bottom: 3px;
-  border-bottom: 2px solid var(--primary);
-}
-/* The nano labels were 12px in muted grey — small AND low contrast, which is
-   the combination nobody reads. Lime at 13px: still quiet in the hierarchy,
-   but legible without leaning in. */
-.section-name {
+.telemetry {
   font-family: var(--font-mono);
   font-size: var(--text-xs);
   letter-spacing: var(--tracking-telemetry);
   text-transform: uppercase;
-  color: var(--primary-ink);
 }
 
-section { padding: 88px 0; }
+/* WCAG AA: --faint is 2.4:1 on light / 3.5:1 on dark body background — below
+   the 4.5:1 floor for this page's 13px footnotes. The workspace keeps the
+   original token; the landing darkens it locally in both themes. */
+:root {
+  --faint-aa: #667085;
+}
+[data-theme="dark"] {
+  --faint-aa: #78859a;
+}
+
+/* ---------- top bar ---------- */
+
+.topbar {
+  border-bottom: 1px solid var(--border);
+}
+.topbar-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 68px;
+}
+.wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  color: var(--text);
+  font-weight: 700;
+  text-decoration: none;
+}
+.wordmark-mark {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-md);
+  background: var(--primary);
+  color: var(--on-primary);
+  font-size: 13px;
+}
+.wordmark-name {
+  font-family: var(--font-mono);
+  letter-spacing: -0.03em;
+}
+.theme-toggle {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
+}
+.theme-toggle:hover { background: var(--btn-hover); }
+
+.wordmark:focus-visible,
+.theme-toggle:focus-visible,
+.btn:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
+}
 
 /* ---------- hero ---------- */
 
 .hero {
   position: relative;
-  padding: 108px 0 96px;
   overflow: hidden;
+  padding: clamp(76px, 11vw, 144px) 0 clamp(72px, 9vw, 116px);
   border-bottom: 1px solid var(--border);
 }
-
-/* Starfield, drawn entirely in CSS — no image, no licence question, no
-   network request, and it scales to any viewport without going soft.
-   Three layers at different sizes so it reads as depth rather than as noise. */
-.starfield {
-  position: absolute; inset: 0; z-index: 0;
-  pointer-events: none;
-  background-image:
-    radial-gradient(1.4px 1.4px at 12% 22%, var(--star-bright), transparent),
-    radial-gradient(1.2px 1.2px at 78% 14%, var(--star-bright), transparent),
-    radial-gradient(1.6px 1.6px at 45% 68%, var(--star-bright), transparent),
-    radial-gradient(1px 1px at 62% 42%, var(--star-dim), transparent),
-    radial-gradient(1px 1px at 27% 55%, var(--star-dim), transparent),
-    radial-gradient(1px 1px at 88% 61%, var(--star-dim), transparent),
-    radial-gradient(1px 1px at 8% 78%, var(--star-dim), transparent),
-    radial-gradient(1px 1px at 94% 33%, var(--star-dim), transparent),
-    radial-gradient(0.8px 0.8px at 36% 12%, var(--star-faint), transparent),
-    radial-gradient(0.8px 0.8px at 55% 86%, var(--star-faint), transparent),
-    radial-gradient(0.8px 0.8px at 71% 74%, var(--star-faint), transparent),
-    radial-gradient(0.8px 0.8px at 18% 38%, var(--star-faint), transparent),
-    /* the horizon glow the stars sit above */
-    radial-gradient(ellipse 80% 55% at 50% 118%, var(--star-glow), transparent);
-}
-/* The grid motif, kept to the hero. Masked to fade out before it reaches the
-   text, so it stays a texture and never competes with the words. */
 .hero-grid {
-  position: absolute; inset: 0; z-index: 0;
+  position: absolute;
+  inset: 0;
   pointer-events: none;
+  opacity: 0.65;
   background-image:
     linear-gradient(var(--grid-line) 1px, transparent 1px),
     linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
-  background-size: 64px 64px;
-  -webkit-mask-image: radial-gradient(ellipse 65% 70% at 50% 50%, transparent 35%, #000 100%);
-          mask-image: radial-gradient(ellipse 65% 70% at 50% 50%, transparent 35%, #000 100%);
+  background-size: 68px 68px;
+  -webkit-mask-image: radial-gradient(ellipse 72% 86% at 50% 54%, transparent 28%, #000 100%);
+          mask-image: radial-gradient(ellipse 72% 86% at 50% 54%, transparent 28%, #000 100%);
 }
-
-.hero > .wrap { position: relative; z-index: 1; }
-
-.hero-mark {
-  display: inline-flex; align-items: center; gap: 10px;
-  margin-bottom: 30px;
+.hero-glow {
+  position: absolute;
+  width: 720px;
+  height: 280px;
+  left: 50%;
+  bottom: -250px;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: var(--primary-soft);
+  filter: blur(26px);
+  pointer-events: none;
 }
-.hero-mark-glyph {
-  width: 30px; height: 30px;
-  display: grid; place-items: center;
-  border-radius: 9px;
-  background: var(--primary);
-  color: var(--on-primary);
-  font-size: 14px;
-}
-.hero-mark-name { font-weight: 700; font-size: 15px; letter-spacing: -0.01em; }
-
-/* The hero face is JetBrains Mono at display size — no second webfont.
-   Big letterspaced mono leans into the instrument identity rather than
-   borrowing a generic geometric sans, and it ties the landing page to the
-   app's telemetry register instead of introducing a third voice. */
+.hero-inner { position: relative; z-index: 1; }
+.hero-kicker,
+.band-kicker { color: var(--primary-ink); }
+.hero-kicker { margin-bottom: 22px; }
 .hero-title {
+  max-width: 760px;
+  margin-bottom: 24px;
   font-family: var(--font-mono);
-  font-weight: 700;
-  font-size: clamp(2.2rem, 7vw, 4.6rem);
-  line-height: 1.04;
-  letter-spacing: -0.03em;
-  margin-bottom: 26px;
-  max-width: 16ch;
+  font-size: clamp(2.35rem, 7vw, 5.5rem);
+  line-height: 1.02;
+  letter-spacing: -0.06em;
 }
 .hero-title em {
-  font-style: normal;
   color: var(--primary-ink);
+  font-style: normal;
 }
-.hero-lede {
-  font-size: clamp(1rem, 2vw, 1.2rem);
-  line-height: 1.6;
+.hero-copy {
+  max-width: 47ch;
+  margin-bottom: 34px;
   color: var(--muted);
-  max-width: 56ch;
-  margin-bottom: 38px;
+  font-size: clamp(1rem, 2vw, 1.18rem);
 }
-
-.hero-cta { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
 .btn {
-  display: inline-flex; align-items: center; gap: 8px;
-  font: inherit; font-size: var(--text-body);
-  padding: 12px 22px;
-  border-radius: var(--r-md);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 46px;
+  padding: 10px 20px;
   border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
   background: var(--panel);
   color: var(--text);
+  font: inherit;
   text-decoration: none;
   cursor: pointer;
   transition: background 0.14s ease, border-color 0.14s ease;
 }
 .btn:hover { background: var(--btn-hover); }
 .btn-primary {
-  background: var(--primary);
   border-color: var(--primary);
-  color: var(--on-primary);
-  font-weight: 600;
-}
-.btn-primary:hover { background: var(--primary-hover); }
-.hero-note {
-  margin-top: 18px;
-  font-family: var(--font-mono);
-  font-size: var(--text-micro);
-  letter-spacing: 0.05em;
-  color: var(--faint);
-}
-
-/* ---------- A1–A4 metric tiles ----------
-   Display-scale numerals live here and in the expanded benchmark view, and
-   nowhere else (plan §1). No answer is present to protect, so telemetry IS
-   the content.
-
-   Every figure is a STRUCTURAL fact — true by construction and verifiable
-   from the repo — not a score. Benchmark rates would need a published run
-   behind them and would go stale silently; these cannot. */
-.tiles {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-  overflow: hidden;
-  background: var(--panel);
-}
-.tile {
-  position: relative;
-  padding: 26px 22px 22px;
-  border-right: 1px solid var(--border);
-}
-.tile:last-child { border-right: 0; }
-.tile-id {
-  font-family: var(--font-mono);
-  font-size: var(--text-nano);
-  letter-spacing: var(--tracking-telemetry);
-  color: var(--faint);
-  display: block;
-  margin-bottom: 14px;
-}
-.tile-num {
-  font-family: var(--font-mono);
-  font-weight: 700;
-  font-size: clamp(2.4rem, 5vw, 3.4rem);
-  line-height: 1;
-  letter-spacing: -0.04em;
-  font-variant-numeric: tabular-nums;
-  display: block;
-  margin-bottom: 12px;
-}
-/* The accent underline bar — the reference's most reusable marker. */
-.tile-num::after {
-  content: ""; display: block;
-  width: 34px; height: 2px;
   background: var(--primary);
-  margin-top: 14px;
+  color: var(--on-primary);
+  font-weight: 650;
 }
-.tile-label {
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--primary-ink);
-  display: block;
+.btn-primary:hover {
+  border-color: var(--primary-hover);
+  background: var(--primary-hover);
 }
-
-/* ---------- the four stages, in plain language ----------
-   A band between the hero and 01. Shorter padding than a numbered section
-   and a hairline underneath, so it reads as a caption on the hero rather
-   than as a section someone forgot to number.
-
-   Each label gets a rule the full width of its column: with four columns of
-   ragged prose and no boxes, those rules are the only thing holding the row
-   on a grid. Labels take --primary-ink, the same theme-aware accent the
-   section numbers use — at this size the mono/uppercase register alone reads
-   as grey noise above the prose, and these four words are the page's index. */
-.stages { padding: 56px 0; border-bottom: 1px solid var(--border); }
-
-/* FIVE across, explicitly — not auto-fit.
-   auto-fit packed as many 212px columns as fit and dropped the rest to a second
-   row, which left four across and one orphan below: the fifth read as an
-   afterthought rather than as one of five equal decisions. These are a set, so
-   they get a set's layout, and they are allowed to be tall to earn it. */
-.stage-notes {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 28px;
-}
-/* Deep search is the one that answers a failure the other four share, so it
-   takes the accent — a lime rule above it and a tag on its label. One emphasis
-   on the page; everything around it stays quiet or the accent means nothing. */
-.stage-note.is-feature { border-top: 2px solid var(--primary); padding-top: 12px; }
-.stage-note.is-feature .stage-key { color: var(--primary-ink); }
-.stage-tag {
-  margin-left: 7px; padding: 1px 6px;
-  border: 1px solid var(--primary); border-radius: var(--r-pill);
-  font-size: 0.85em; letter-spacing: 0.04em; text-transform: lowercase;
-  color: var(--primary-ink);
-}
-.stage-note code {
-  font-family: var(--font-mono); font-size: 0.88em;
-  background: var(--panel-sunken); border: 1px solid var(--border);
-  padding: 0 4px; border-radius: 3px;
+.hero-foot {
+  margin-top: 18px;
+  color: var(--faint-aa);
 }
 
-.stage-key {
-  display: block;
-  font-family: var(--font-mono);
-  font-size: var(--text-micro);
-  letter-spacing: var(--tracking-telemetry);
-  text-transform: uppercase;
-  color: var(--primary-ink);
-  padding-bottom: 12px;
+.trace-line {
+  position: relative;
+  height: 52px;
   border-bottom: 1px solid var(--border);
 }
-.stage-note p {
-  margin: 14px 0 0;
-  color: var(--muted);
-  font-size: var(--text-prose);
-  max-width: 34ch;
-}
-
-/* ---------- pipeline: the diagram and its constraints, vertical ----------
-
-   The horizontal SVG and the separate Architecture table are gone; both are
-   this. Each stage box sits in a left rail with its architecture note pinned
-   in the gutter beside it, so the constraint that explains a stage is next to
-   the stage instead of four screens further down.
-
-   Everything is CSS, not SVG: the boxes are text that wraps and scales with
-   the type scale, and the flow reflows to one column on a phone. The old
-   980-wide viewBox could only scroll sideways. */
-
-/* 62ch is the measure for a column of body text. These are one- or two-sentence
-   openers under a section label, with a lot of air around them, and at 62ch
-   they broke into a narrow ribbon against the full-width rules above and below.
-   Wider reads as deliberate rather than as text that ran out. */
-.pipeline-intro {
-  max-width: 82ch; color: var(--muted); margin-bottom: 40px;
-  font-size: var(--text-content); line-height: var(--lh-content);
-}
-
-.trace { display: grid; grid-template-columns: 268px minmax(0, 1fr); gap: 0 48px; }
-
-.trace-rail { display: grid; }
-.trace-step { position: relative; padding-bottom: 30px; }
-.trace-step:last-child { padding-bottom: 0; }
-.trace-box {
-  background: var(--panel);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--r-md);
-  padding: 13px 16px;
-}
-/* One highlighted stage, matching the old SVG's highlighted GENERATE node:
-   the point of the whole pipeline is the cited answer. */
-.trace-step.is-live .trace-box { border-color: var(--primary); }
-/* Indexing is an INPUT to retrieval, not a stage a question passes through.
-   Dashed and indented, as the old diagram drew it, for the same reason. */
-.trace-step.is-aside .trace-box {
-  border-style: dashed;
-  background: transparent;
-  margin-left: 40px;
-}
-.trace-id {
-  display: block;
-  font-family: var(--font-mono); font-size: var(--text-nano); font-weight: 700;
-  letter-spacing: var(--tracking-telemetry); text-transform: uppercase;
-  color: var(--faint);
-  margin-bottom: 5px;
-}
-.trace-step.is-live .trace-id { color: var(--primary-ink); }
-.trace-label {
-  font-family: var(--font-mono); font-size: var(--text-sm); font-weight: 700;
-  letter-spacing: 0.05em; text-transform: uppercase; color: var(--text);
-}
-.trace-sub {
-  display: block; margin-top: 4px;
-  font-family: var(--font-sans); font-size: var(--text-sm);
-  color: var(--muted);
-  letter-spacing: 0; text-transform: none; font-weight: 400;
-}
-
-/* Connector + arrowhead, in CSS. A 1px pseudo-element and a border-triangle
-   beat path data that has to be re-measured whenever a box changes height. */
-.trace-step:not(:last-child)::after {
+.trace-line::before {
   content: "";
-  position: absolute; left: 26px; bottom: 8px; height: 22px;
-  width: 1px; background: var(--border-strong);
+  position: absolute;
+  left: max(24px, calc((100% - 1120px) / 2));
+  right: max(24px, calc((100% - 1120px) / 2));
+  top: 25px;
+  height: 1px;
+  background: var(--primary);
+  opacity: 0.75;
 }
-.trace-step:not(:last-child)::before {
+.trace-line::after {
   content: "";
-  position: absolute; left: 22.5px; bottom: 3px;
-  border-left: 4px solid transparent;
-  border-right: 4px solid transparent;
-  border-top: 6px solid var(--border-strong);
+  position: absolute;
+  top: 19px;
+  left: 50%;
+  width: 13px;
+  height: 13px;
+  border: 2px solid var(--primary);
+  border-radius: 50%;
+  background: var(--bg);
+  transform: translateX(-50%);
 }
-/* The indented aside branch: dashed edge, offset by its own margin. */
-.trace-step.is-aside::after {
-  left: 66px; width: 0; background: none;
-  border-left: 1px dashed var(--border-strong);
-}
-.trace-step.is-aside::before { left: 62.5px; }
 
-.trace-notes { display: grid; }
-.trace-note { padding: 13px 0 30px; border-top: 1px solid var(--border); }
-.trace-note:first-child { border-top: 0; padding-top: 0; }
-.trace-note p { margin: 7px 0 0; color: var(--muted); font-size: var(--text-prose); max-width: 58ch; }
+/* ---------- the three product bands ---------- */
 
-.trace-key {
-  display: block;
-  font-family: var(--font-mono); font-size: var(--text-nano);
-  letter-spacing: var(--tracking-telemetry); text-transform: uppercase;
-  color: var(--faint);
+.band {
+  padding: clamp(56px, 8vw, 96px) 0;
+  border-bottom: 1px solid var(--border);
 }
-.trace-note code, .platform code {
+.band-head {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.7fr) minmax(0, 1.3fr);
+  gap: 32px;
+  align-items: start;
+  margin-bottom: 34px;
+}
+.band-kicker { margin: 4px 0 12px; }
+.band-title {
   font-family: var(--font-mono);
-  font-size: 0.92em;
+  font-size: clamp(1.45rem, 3vw, 2.25rem);
+  line-height: 1.12;
+  letter-spacing: -0.04em;
+}
+.band-copy-stack {
+  display: grid;
+  gap: 10px;
+}
+.band-intro {
+  max-width: 54ch;
+  color: var(--muted);
+  font-size: var(--text-content);
+}
+
+/* Hairline cells keep the story legible without turning it into a dashboard. */
+.agent-grid,
+.constraint-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  border: 1px solid var(--border);
+  background: var(--border);
+}
+.agent-item,
+.constraint {
+  min-height: 174px;
+  padding: 22px 20px;
+  background: var(--panel);
+}
+.agent-item.is-feature { background: var(--primary-soft); }
+.item-label {
+  display: block;
+  margin-bottom: 26px;
   color: var(--primary-ink);
 }
-
-/* Architecture facts that belong to no single stage. */
-.platform {
-  margin-top: 36px; padding-top: 24px;
-  border-top: 1px solid var(--border);
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 24px 40px;
+.item-label small {
+  padding: 1px 5px;
+  border: 1px solid var(--primary-ink);
+  border-radius: var(--r-pill);
+  font-size: 0.85em;
+  letter-spacing: 0.04em;
+  text-transform: lowercase;
 }
-.platform p { margin: 7px 0 0; color: var(--muted); font-size: var(--text-prose); }
-
-/* One column: the notes fall under the rail, so it reads diagram-then-notes.
-   Same content, same order, no sideways scroll. */
-/* The five-up row steps down rather than shrinking: below ~1180px five columns
-   put three or four words on a line, which is unreadable long before it is
-   narrow. Explicit counts at every step so the row is never left with a single
-   orphan under a full row — the shape the auto-fit version kept producing. */
-@media (max-width: 1180px) {
-  .stage-notes { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 26px; }
+.item-title {
+  margin-bottom: 9px;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
 }
-@media (max-width: 860px) {
-  .trace { grid-template-columns: minmax(0, 1fr); gap: 34px; }
-  .trace-note p { max-width: none; }
-  .stage-notes { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
-}
-@media (max-width: 560px) {
-  /* One column on a phone. Two columns of ~150px is not a layout, it is two
-     columns of hyphens. */
-  .stage-notes { grid-template-columns: minmax(0, 1fr); gap: 22px; }
+.item-copy {
+  color: var(--muted);
+  font-size: var(--text-sm);
 }
 
-/* ---------- feature cards ---------- */
+/* ---------- four RAGAS readings ---------- */
 
-.cards {
+.metric-layout {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-template-columns: minmax(0, 1.35fr) minmax(220px, 0.65fr);
+  gap: 34px;
+  align-items: stretch;
+}
+.metric-groups {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  border: 1px solid var(--border);
+  background: var(--border);
+}
+.metric-group { padding: 18px; background: var(--panel); }
+.metric-group + .metric-group { border-left: 1px solid var(--border); }
+.metric-group-label {
+  display: block;
+  margin-bottom: 18px;
+  color: var(--primary-ink);
+}
+.metric {
+  padding: 15px 0;
+  border-top: 1px solid var(--border);
+}
+.metric:first-of-type {
+  padding-top: 0;
+  border-top: 0;
+}
+.metric-name {
+  display: block;
+  margin-bottom: 5px;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.metric-copy {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.metric-rail {
+  display: block;
+  height: 4px;
+  margin-top: 14px;
+  overflow: hidden;
+  border-radius: var(--r-pill);
+  background: var(--track);
+}
+.metric-rail::after {
+  content: "";
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--primary);
+}
+.number-panel {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 24px;
+  border: 1px solid var(--primary-soft-border);
+  background: var(--primary-soft);
+}
+.number-heading {
+  margin-bottom: 22px;
+  color: var(--primary-ink);
+}
+.numbers {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+}
+.number {
+  padding-top: 14px;
+  border-top: 1px solid var(--primary-soft-border);
+}
+.number-value {
+  display: block;
+  margin-bottom: 7px;
+  font-family: var(--font-mono);
+  font-size: clamp(1.8rem, 4vw, 2.7rem);
+  line-height: 1;
+  letter-spacing: -0.06em;
+}
+.number-label {
+  display: block;
+  color: var(--primary-ink);
+}
+.number-note {
+  margin-top: 26px;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+/* Structural facts are kept separate from scores: they describe the build,
+   not a benchmark result. The class names also keep the existing truth tests
+   anchored to the page's verifiable corpus and vector counts. */
+.fact-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 34px;
+  border: 1px solid var(--border);
+  background: var(--border);
+  gap: 1px;
+}
+.fact {
+  padding: 20px;
+  background: var(--panel);
+}
+.tile-id {
+  display: block;
+  margin-bottom: 14px;
+  color: var(--primary-ink);
+}
+.tile-num {
+  display: block;
+  margin-bottom: 10px;
+  font-family: var(--font-mono);
+  font-size: clamp(2rem, 4vw, 3rem);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.05em;
+  font-variant-numeric: tabular-nums;
+}
+.tile-label { display: block; color: var(--primary-ink); }
+
+/* ---------- serverless boundary ---------- */
+
+.constraint {
+  min-height: 150px;
+  padding: 21px 19px;
+}
+.constraint .item-label { margin-bottom: 20px; }
+.constraint .item-copy { font-size: var(--text-sm); }
+
+/* ---------- close and footer ---------- */
+
+.finale { padding: clamp(58px, 8vw, 90px) 0; }
+.finale-inner {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 28px;
+}
+.finale-title {
+  max-width: 650px;
+  margin-bottom: 12px;
+  font-family: var(--font-mono);
+  font-size: clamp(1.8rem, 4vw, 3.2rem);
+  line-height: 1.05;
+  letter-spacing: -0.05em;
+}
+.finale-copy { color: var(--muted); }
+.footer {
+  padding: 28px 0 42px;
+  border-top: 1px solid var(--border);
+}
+.footer-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 18px;
 }
-.card {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-  padding: 26px 24px;
-  /* The reference's notched corner. One clipped corner reads as machined;
-     four reads as a decorative shape, which is a different and worse thing. */
-  clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 16px, 100% 100%, 0 100%);
-}
-.card-title {
-  font-size: 1.06rem; font-weight: 650; margin-bottom: 10px;
-  letter-spacing: -0.01em;
-}
-.card-text { color: var(--muted); font-size: var(--text-prose); }
-.card-text code {
-  font-family: var(--font-mono);
-  font-size: 0.92em;
-  background: var(--panel-sunken);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 1px 5px;
+.faint { color: var(--faint-aa); }
+
+@media (max-width: 880px) {
+  .band-head,
+  .metric-layout { grid-template-columns: 1fr; }
+  .agent-grid,
+  .constraint-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .number-panel { min-height: 0; gap: 24px; }
 }
 
-/* ---------- footer ---------- */
-
-.foot {
-  border-top: 1px solid var(--border);
-  padding: 40px 0 60px;
-  display: flex; flex-wrap: wrap; gap: 16px;
-  align-items: center; justify-content: space-between;
-}
-/* Footer links are the page's smallest targets. `inline-flex` + min-height
-   gives them a 44px tap area without changing where the text sits, and the
-   negative margin keeps the row the same height it was — padding alone would
-   have made the footer taller on every viewport to fix a touch-only problem.
-
-   WIDTH is left alone deliberately: "API" is 22px wide and padding it to 44
-   would detach it from its neighbours to solve a problem the 20px gap already
-   solves. The guideline exists to prevent mis-taps, and separation prevents
-   them as well as size does. */
-.foot-links { display: flex; gap: 20px; flex-wrap: wrap; align-items: center; }
-.foot a {
-  color: var(--muted); text-decoration: none;
-  display: inline-flex; align-items: center;
-  min-height: 44px; margin-block: -10px;
-}
-.foot a:hover { color: var(--primary-ink); }
-
-/* ---------- theme toggle ---------- */
-
-.theme-toggle {
-  position: fixed; top: 18px; right: 18px; z-index: 10;
-  width: 44px; height: 44px;
-  display: grid; place-items: center;
-  border-radius: var(--r-md);
-  border: 1px solid var(--border-strong);
-  background: var(--panel);
-  color: var(--text);
-  font-size: 15px;
-  cursor: pointer;
-}
-.theme-toggle:hover { background: var(--btn-hover); }
-
-@media (max-width: 640px) {
-  section { padding: 60px 0; }
-  .hero { padding: 76px 0 64px; }
-  .trace-step.is-aside .trace-box { margin-left: 24px; }
-  .trace-step.is-aside::after { left: 50px; }
-  .trace-step.is-aside::before { left: 46.5px; }
-  .tile { border-right: 0; border-bottom: 1px solid var(--border); }
-  .tile:last-child { border-bottom: 0; }
-  .theme-toggle { top: 12px; right: 12px; }
+@media (max-width: 600px) {
+  .wrap { width: min(100% - 32px, 1120px); }
+  .topbar-inner { min-height: 60px; }
+  .hero { padding-top: 68px; }
+  .trace-line::before { left: 16px; right: 16px; }
+  .agent-grid,
+  .metric-groups,
+  .constraint-grid,
+  .fact-strip { grid-template-columns: 1fr; }
+  .metric-group + .metric-group {
+    border-top: 1px solid var(--border);
+    border-left: 0;
+  }
+  .numbers { gap: 12px; }
+  .number-value { font-size: 1.8rem; }
+  .finale-inner,
+  .footer-inner {
+    align-items: flex-start;
+    flex-direction: column;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  * { animation: none !important; transition: none !important; }
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { transition: none !important; }
 }
-
-
-/* ---------- the build write-up (/built) ---------- */
-
-/* A shorter hero: this page is a read, not a pitch, and a full-height opener
-   would put the first sentence below the fold on a laptop. */
-.hero-compact { padding-block: clamp(56px, 9vw, 96px) clamp(36px, 6vw, 64px); }
-.hero-compact .hero-title { margin-top: 18px; }
-a.hero-mark { text-decoration: none; }
-
-/* Three across rather than the default two, because these are teasers and a
-   two-column grid would leave one card orphaned on its own row. */
-.cards-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-/* Four across, explicitly. auto-fit fitted three and dropped the fourth to a
-   row of its own, which reads as "and one more thing" rather than as four
-   equal points. */
-.cards-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-@media (max-width: 1180px) { .cards-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 860px)  { .cards-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 620px)  {
-  .cards-3, .cards-4 { grid-template-columns: minmax(0, 1fr); }
-}
-
-/* A card that is a link needs to look like one without becoming a button. */
-a.card-link {
-  text-decoration: none; color: inherit;
-  display: flex; flex-direction: column; gap: 10px;
-  transition: border-color 0.15s ease, transform 0.15s ease;
-}
-a.card-link:hover { border-color: var(--primary); transform: translateY(-2px); }
-a.card-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
-.card-more {
-  margin-top: auto; padding-top: 4px;
-  font-family: var(--font-mono); font-size: var(--text-nano);
-  letter-spacing: 0.06em; text-transform: uppercase; color: var(--primary-ink);
-}
-@media (prefers-reduced-motion: reduce) { a.card-link:hover { transform: none; } }
-
-/* The production-lessons grid: same note treatment as the pipeline gutter, but
-   free-standing rather than beside a rail, so it needs its own columns. */
-/* The production-lessons grid. Free-standing: it was previously nested inside
-   .trace, whose first column is the 268px pipeline RAIL — so six notes were
-   laid out in a 268px column and ran 1,452px down the page in a single strip.
-   Three across, two rows, with the hairline rule that separates notes kept. */
-.lessons {
-  display: grid; gap: 0 30px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-.lessons .trace-note { padding: 13px 0 26px; border-top: 1px solid var(--border); }
-/* The base rule drops the border on the FIRST note only, which is right for one
-   column and wrong for a grid — the whole top row needs it back. */
-.lessons .trace-note:first-child { border-top: 1px solid var(--border); padding-top: 13px; }
-.lessons .trace-note p { max-width: none; }
-@media (max-width: 1000px) { .lessons { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 620px)  { .lessons { grid-template-columns: minmax(0, 1fr); } }
-
-/* On /built the wordmark is a LINK — the way back to the landing page, and the
-   only navigation on that page. At 30px it was under the 44px minimum this
-   project sets for touch. The landing page's copy is a plain div, where the
-   extra padding is invisible. */
-@media (max-width: 767px) {
-  .hero-mark { min-height: 44px; padding: 7px 0; }
-}
-
-
-/* ---------- small type, made legible ----------
-   Every label below was 12px in muted grey. Small AND low contrast is the one
-   combination nobody reads — a reader either leans in or skips it, and on a
-   showcase page they skip it. Lime at 13px keeps them quiet in the hierarchy
-   while making them readable at a glance, which is what a label is for. */
-.trace-key,
-.card-more { font-size: var(--text-xs); color: var(--primary-ink); }
-.tile-id { color: var(--primary-ink); }
-
-/* ---------- the way through to the build write-up ----------
-   Replaced a three-card teaser section: that meant writing the same findings
-   twice and keeping both in step. One line, attached to the numbers that earn
-   the click, with the arrow doing the pointing. */
-.handoff {
-  display: flex; align-items: center; gap: 16px;
-  margin-top: 34px; padding: 18px 22px;
-  border: 1px solid var(--border);
-  border-left: 2px solid var(--primary);
-  border-radius: var(--r-md);
-  background: var(--panel);
-  text-decoration: none;
-  transition: border-color 0.15s ease, background 0.15s ease;
-}
-.handoff:hover { background: var(--btn-hover); border-color: var(--primary); }
-.handoff:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
-.handoff-text {
-  color: var(--primary-ink);
-  font-size: var(--text-prose); line-height: 1.5;
-}
-.handoff-go {
-  margin-left: auto; flex-shrink: 0;
-  font-family: var(--font-mono); font-size: 20px; color: var(--primary-ink);
-  transition: transform 0.15s ease;
-}
-.handoff:hover .handoff-go { transform: translateX(4px); }
-@media (prefers-reduced-motion: reduce) { .handoff-go { transition: none; } }
-
-
-/* ---------- reading order, made visible ----------
-   Four numbered sections in a column read as four unrelated blocks: nothing
-   says the second follows from the first, so a reader treats each as optional
-   and most stop at the second. A lime rule dropping out of each section number
-   gives the eye somewhere to go, which is the whole job — it is decoration only
-   if the order is arbitrary, and here it is not: measure it, then run it, then
-   learn what the platform forces, then admit what is unfinished.
-
-   Drawn on the label rather than between sections so it cannot end up dangling
-   after the last one. */
-.section-label { position: relative; }
-.flows .section-label::after {
-  content: "";
-  position: absolute; left: 9px; top: calc(100% + 6px);
-  width: 1px; height: 26px;
-  background: linear-gradient(var(--primary), transparent);
-}
-.flows section:last-of-type .section-label::after { display: none; }
-
-/* The number itself carries the accent, so the rule reads as coming FROM it. */
-.flows .section-num { color: var(--primary-ink); }
-
-
-/* The one lesson on the build page worth reading first: the distance was the
-   cost, not the code. Accent rule and a touch more weight; nothing else on
-   that grid competes. */
-.lessons .trace-note.is-headline { border-top: 2px solid var(--primary); }
-.lessons .trace-note.is-headline .trace-key { color: var(--primary-ink); }

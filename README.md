@@ -5,7 +5,6 @@ passage behind them. Upload PDFs, notes or reports; every claim points at the
 text it came from, so checking it takes one click.
 
 **Live:** [rag-gel.vercel.app](https://rag-gel.vercel.app) ·
-[how it was built](https://rag-gel.vercel.app/built) ·
 [health](https://rag-gel.vercel.app/api/health)
 
 No sign-up needed — you get a private workspace immediately, and signing in
@@ -17,7 +16,7 @@ later brings your work with you.
 
 | Layer | Choice | What it does |
 |---|---|---|
-| **Frontend** | Vanilla JS + Vite, 3 pages | Landing (`/`), workspace (`/app`), build write-up (`/built`). No framework, no runtime dependencies. |
+| **Frontend** | Vanilla JS + Vite, 2 pages | Merged landing (`/`) and workspace (`/app`). No framework, no runtime dependencies. |
 | **Backend** | FastAPI, one Vercel function | Every route in a single serverless function. 60s ceiling, frozen the instant it responds. |
 | **Hosting** | Vercel, pinned to `sin1` | The function runs in the same region as the database. Across the Pacific a round trip cost 420ms; alongside it, 3ms. |
 | **App database** | Neon Postgres + SQLAlchemy | Users, documents, chats, messages, saved settings, benchmark runs. |
@@ -44,7 +43,7 @@ later brings your work with you.
 ```mermaid
 flowchart TB
     subgraph client [" Browser "]
-        UI["Vanilla JS · 3 pages<br/>landing · workspace · build notes"]
+        UI["Vanilla JS · 2 pages<br/>landing · workspace"]
     end
 
     subgraph fn [" One Vercel function — FastAPI "]
@@ -99,8 +98,7 @@ flowchart TB
 **The constraint that shapes it:** the function is frozen the instant it sends
 a response and has 60 seconds to work in. So long jobs are sliced across
 requests, nothing periodic runs inside the app, and every durable byte goes to
-Postgres. The [build write-up](https://rag-gel.vercel.app/built) covers why in
-full.
+Postgres. The landing page shows how that boundary shapes the product.
 
 ---
 
@@ -158,14 +156,14 @@ pairs; `eval/thresholds.json` stores it per model with its error rates.
 cd frontend && npm install && npm run dev
 ```
 
-In dev the pages are at `/`, `/app.html` and `/built.html` — the clean `/app`
-and `/built` paths are Vercel rewrites and do not exist on the Vite server.
+In dev the pages are at `/` and `/app.html` — the clean `/app` path is a
+Vercel rewrite and does not exist on the Vite server.
 
 ```bash
 # Tests — no network, ~21s
 .venv/Scripts/python -m pytest tests/ -q
 
-# Screenshots: 3 pages x 5 breakpoints x 2 themes. Fails on overflow,
+# Screenshots: 2 pages x 5 breakpoints x 2 themes. Fails on overflow,
 # page errors, or a grid left with one item under a full row.
 node shot.mjs http://localhost:5173
 
@@ -253,10 +251,9 @@ eval/
 frontend/
   index.html         landing        →  /
   app.html           workspace      →  /app
-  built.html         build write-up →  /built
   app.js, styles.css, landing.css, tokens.css
 tests/               361 tests, no network, ~21s
-shot.mjs             screenshots: 3 pages x 5 breakpoints x 2 themes
+shot.mjs             screenshots: 2 pages x 5 breakpoints x 2 themes
 layout_check.mjs     workspace layout behaviour a screenshot cannot see
 package.json         playwright, for those two checks only — not the app
 .github/workflows/   retrieval gate (push) · guest sweeper (every 5 min)
