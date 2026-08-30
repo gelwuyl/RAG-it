@@ -21,5 +21,6 @@ shot_*.png
 # Session-to-session handoff notes — machine-specific and operational
 # (credential state, deploy settings). Not repo documentation.
 HANDOFF.md
+HANDOFF.md.backup-*
 # Archived branch minutes (moved out of the root, 2026-08-30 housekeeping).
 docs/handoff-archive/
