@@ -1949,7 +1949,8 @@ fieldset legend {
 
   /* Collapsing is a horizontal-space device with no meaning when a pane owns the
      whole screen — the tab bar IS the show/hide control now. */
-  #sources-toggle, #eval-toggle, #chats-collapse, .chats-rail { display: none; }
+  #sources-toggle, #eval-toggle, #chats-collapse { display: none; }
+  .chats-collapsed .chats-rail { display: none; }
   .chats-collapsed .chats-pane > .pane-head,
   .chats-collapsed .chats-pane > .pane-scroll { display: flex; }
 

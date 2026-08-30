@@ -116,11 +116,15 @@ const MESSAGES = [
       expected_answer: "Espresso is 3.20 …", expected_source: "draft",
       cited_rank: 2, pool_n: 4,
       latency_ms: 1400, top_sim: 0.58, deep_n: 0, retry_after_ms: 60_000 } },
-  // E. judge graded binary WITHOUT a score — the fallback the primary panel
-  // renders as the passed/failed word over a 100/0 fill.
+  // E. terminal partial result: generation judges returned scoreless binary
+  // verdicts, while retrieval could not be graded. `grade_exhausted` makes the
+  // terminal state explicit; without it this fixture looks like a completed
+  // binary case even though the missing retrieval readings would be retried.
   { id: "m5", role: "assistant", content: "Espresso is 3.20 … [1]", citations: [],
     eval_line: "top sim 0.60 - 1000 ms",
-    eval_data: { pending: false, faithful: true, relevant: false,
+    eval_data: { pending: false, grade_exhausted: true,
+      judge_error: "retrieval readings unavailable after bounded retries",
+      faithful: true, relevant: false,
       context_precision: null, context_recall: null,
       cited_rank: 1, pool_n: 4, latency_ms: 1000, top_sim: 0.60, deep_n: 0 } },
   // F. known-unanswerable, refused
@@ -193,14 +197,118 @@ await page.route("**/api/chats", (route) =>
   route.fulfill({ json: [{ id: "c1", title: "Demo chat" }] }));
 await page.route("**/api/chats/c1/grade**", (route) =>
   route.fulfill({ json: { eval: null, eval_line: "" } }));
-await page.route("**/api/chats/c1**", (route) => {
+// Hold m10's settled grade at the route boundary until the test has selected
+// Eval. This makes the active-pane behaviour deterministic without submitting
+// through the hidden composer.
+let releaseM10Settled;
+const m10Settled = new Promise((resolve) => { releaseM10Settled = resolve; });
+let releaseM10Partial;
+const m10Partial = new Promise((resolve) => { releaseM10Partial = resolve; });
+// The mobile pass below drives one answer through the same bounded retry states
+// as the real grade endpoint. Keep the queue in the mock, rather than using a
+// timing-dependent response, so each state is observable and reproducible.
+const mobileGradeResponses = new Map();
+const mobileAskResponses = [
+  {
+    answer: "The ordinary ask path returned this grounded answer. [1]",
+    citations: [], eval_line: "top sim 0.61 - 900 ms", message_id: "m10",
+    eval: {
+      pending: true, faithful: null, relevant: null,
+      context_precision: null, context_recall: null,
+      expected_answer: "The ordinary ask path returned this grounded answer.",
+      expected_source: "draft", latency_ms: 900, top_sim: 0.61, deep_n: 0,
+      retry_after_ms: 250,
+    },
+  },
+  {
+    answer: "A second ordinary ask arrived after the scorecard check. [1]",
+    citations: [], eval_line: "top sim 0.59 - 850 ms", message_id: "m11",
+    eval: {
+      pending: false, faithful: true, faithful_score: 0.91,
+      relevant: true, relevant_score: 0.89,
+      context_precision: true, context_precision_score: 0.74,
+      context_recall: true, context_recall_score: 0.81,
+      latency_ms: 850, top_sim: 0.59, deep_n: 0, grade_ms: 240,
+    },
+  },
+  {
+    answer: "The judge was unavailable for this answer. [1]",
+    citations: [], eval_line: "top sim 0.57 - 700 ms", message_id: "m12",
+    eval: {
+      pending: false, grade_unavailable: "Judge disabled in the mock",
+      faithful: null, relevant: null, context_precision: null,
+      context_recall: null, latency_ms: 700, top_sim: 0.57, deep_n: 0,
+    },
+  },
+  {
+    answer: "This answer has no stored precision passages. [1]",
+    citations: [], eval_line: "top sim 0.56 - 650 ms", message_id: "m13",
+    eval: {
+      pending: false, precision_data_gap: true,
+      faithful: true, faithful_score: 0.87,
+      relevant: true, relevant_score: 0.86,
+      context_precision: null, context_recall: true, context_recall_score: 0.78,
+      latency_ms: 650, top_sim: 0.56, deep_n: 0, grade_ms: 210,
+    },
+  },
+  {
+    answer: "The judge gave up on this answer after bounded retries. [1]",
+    citations: [], eval_line: "top sim 0.54 - 630 ms", message_id: "m15",
+    eval: {
+      pending: false, grade_exhausted: true,
+      judge_error: "retrieval readings unavailable after bounded retries",
+      faithful: true, faithful_score: 0.84, relevant: true, relevant_score: 0.85,
+      context_precision: null, context_recall: null,
+      latency_ms: 630, top_sim: 0.54, deep_n: 0, grade_ms: 220,
+    },
+  },
+  {
+    answer: "A final ordinary ask from Chat created this settled grade. [1]",
+    citations: [], eval_line: "top sim 0.55 - 640 ms", message_id: "m14",
+    eval: {
+      pending: false, faithful: true, faithful_score: 0.9,
+      relevant: true, relevant_score: 0.88,
+      context_precision: true, context_precision_score: 0.76,
+      context_recall: true, context_recall_score: 0.8,
+      latency_ms: 640, top_sim: 0.55, deep_n: 0, grade_ms: 230,
+    },
+  },
+];
+await page.route("**/api/chats/c1**", async (route) => {
   const url = route.request().url();
   if (url.includes("/grade")) {
     const mid = url.split("/messages/")[1]?.split("/")[0];
+    const queue = mobileGradeResponses.get(mid);
+    if (queue?.length) {
+      const response = queue.shift();
+      // Both m10 grade responses are held behind explicit test gates, so the
+      // pending → partial → settled assertions observe exactly the state the
+      // test intends and no wall-clock delay can reorder them.
+      if (mid === "m10" && response.eval?.context_precision == null) {
+        await m10Partial;
+      }
+      if (mid === "m10" && response.eval?.context_precision != null) {
+        await m10Settled;
+      }
+      return route.fulfill({ json: response });
+    }
     const m = MESSAGES.find((x) => x.id === mid);
     return route.fulfill({ json: { eval: m?.eval_data || {}, eval_line: m?.eval_line || "" } });
   }
   return route.fulfill({ json: { id: "c1", title: "Demo chat", messages: MESSAGES } });
+});
+const mobileAskCalls = [];
+await page.route("**/api/chats/c1/ask", async (route) => {
+  const call = {
+    question: route.request().postDataJSON()?.question,
+    response: null,
+  };
+  mobileAskCalls.push(call);
+  const response = mobileAskResponses[Math.min(mobileAskCalls.length - 1, mobileAskResponses.length - 1)];
+  await route.fulfill({ json: response });
+  // Keep request and response accounting together so the mobile helper can
+  // prove that one submit did not consume two responses or leave one pending.
+  call.response = response;
 });
 await page.route("**/api/eval/baseline", (route) => route.fulfill({ json: { baseline: {} } }));
 await page.route("**/api/eval", (route) => route.fulfill({ json: EVAL_DONE }));
@@ -366,6 +474,9 @@ check("E: a scoreless fail reads the word and empties the bar",
 check("E: ungraded retrieval rows show a dash with no tag (no reference yet)",
   (await chipOf(pRow, "Context precision")).includes("—") &&
     (await tagCount(pRow, "Context precision")) === 0);
+check("E: exhausted partial grading is explicitly unavailable, not pending",
+  (await page.locator(".eval-judge-error").innerText()).toLowerCase().includes("unavailable") &&
+    !(await chipOf(pRow, "Stuck to the sources")).includes("grading"));
 
 // ---------- I. a graded definitional verdict explains itself ----------
 await clickChip("m9");
@@ -460,6 +571,196 @@ for (const [theme, benchRGB, liveRGB] of [
 }
 await page.evaluate(() =>
   document.documentElement.setAttribute("data-theme", "dark"));
+
+// ---------- mobile grading lifecycle at the reader breakpoint ----------
+// This is intentionally a second, isolated scenario: the desktop provenance
+// assertions above use stored answers, while this pass drives the ordinary ask
+// path and the deferred grade endpoint through every reader-visible state.
+const mobileTab = (name) => page.locator(`.tab[data-tab="${name}"]`);
+const evalBadge = () => page.locator("#tab-count-eval");
+const selectedTab = async (name) =>
+  (await mobileTab(name).getAttribute("aria-selected")) === "true";
+const badgeHidden = async () => (await evalBadge().getAttribute("class"))?.includes("hidden");
+await page.setViewportSize({ width: 375, height: 812 });
+await page.waitForTimeout(350);
+await page.locator('.msg[data-message-id="m5"] .eval-chip').click();
+check("mobile grade_exhausted stays terminal and exposes the outage",
+  await selectedTab("eval") &&
+    (await page.locator(".eval-judge-error").innerText()).toLowerCase().includes("unavailable"));
+await mobileTab("chat").click();
+mobileGradeResponses.set("m10", [
+  // /ask already returned the pending state. The separate /grade queue starts
+  // with a partial response, then settles on the next bounded retry.
+  { eval: {
+    pending: false, faithful: true, faithful_score: 0.88,
+    relevant: true, relevant_score: 0.91,
+    // Both retrieval readings are absent in this partial response. It is not a
+    // settled grade and must remain retryable until the bounded run settles.
+    context_precision: null, context_recall: null,
+    expected_source: "draft", latency_ms: 900, top_sim: 0.61,
+    retry_after_ms: 250,
+  } },
+  { eval: {
+    pending: false, faithful: true, faithful_score: 0.88,
+    relevant: true, relevant_score: 0.91,
+    context_precision: true, context_precision_score: 0.73,
+    context_recall: false, context_recall_score: 0.52,
+    expected_source: "draft", latency_ms: 900, top_sim: 0.61, deep_n: 0,
+    grade_ms: 260,
+  } },
+]);
+
+async function askOnMobile(id, question) {
+  // Keep both mobile submission branches honest. Chat is visible for the
+  // native requestSubmit path; when Eval owns the phone, invoke the existing
+  // submit handler directly with a real event because Playwright rejects clicks
+  // on the hidden chat pane.
+  const evalVisible = await selectedTab("eval");
+  const before = mobileAskCalls.length;
+  if (evalVisible) {
+    // fill({ force: true }) silently no-ops on the display:none chat-pane
+    // input, and the submit handler early-returns on an empty question. Set
+    // the value directly so the handler sees the real question, then invoke
+    // the same submit event a reader's Enter key would produce.
+    await page.locator("#question-input").evaluate((el, q) => {
+      el.value = q;
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+    }, question);
+    await page.locator("#ask-form").evaluate((form) => {
+      form.dispatchEvent(new SubmitEvent("submit", {
+        bubbles: true,
+        cancelable: true,
+        submitter: form.querySelector("#ask-btn"),
+      }));
+    });
+  } else {
+    await page.locator("#question-input").fill(question);
+    await page.locator("#ask-form").evaluate((form) => form.requestSubmit());
+  }
+  await page.locator(`.msg[data-message-id="${id}"]`).waitFor({ state: "attached" });
+  await page.locator(`.msg[data-message-id="${id}"] .eval-block`).waitFor({ state: "attached" });
+
+  const calls = mobileAskCalls.slice(before);
+  check(`mobile ${id}: ${evalVisible ? "hidden Eval fallback" : "visible Chat requestSubmit"} makes exactly one request and response`,
+    calls.length === 1 && calls[0].response?.message_id === id,
+    `requests=${calls.length} responses=${calls.filter((call) => call.response).length}`);
+}
+
+await askOnMobile("m10", "What does the ordinary ask path return?");
+check("mobile pending: ordinary ask keeps the reader on CHAT",
+  await selectedTab("chat") && !(await selectedTab("eval")));
+check("mobile pending: no attention marker before a settled reading",
+  await badgeHidden(), await evalBadge().getAttribute("class"));
+const m10Chip = page.locator('.msg[data-message-id="m10"] .eval-state');
+check("mobile pending: answer chip says grading",
+  (await m10Chip.innerText()).toLowerCase().includes("grading"), await m10Chip.innerText());
+
+// The pending chip is asserted while the partial grade is still gated above;
+// only now is it allowed to arrive.
+releaseM10Partial();
+
+await m10Chip.waitFor({ state: "visible" });
+// The partial response can already say "grounded" because its generation
+// readings landed first. Retrieval dashes are the observable boundary that
+// distinguishes that retryable state from the later settled grade.
+await page.waitForFunction(() => {
+  const chip = document.querySelector('.msg[data-message-id="m10"] .eval-state');
+  const rows = [...document.querySelectorAll("#eval-scorecard .score-row")];
+  const reading = (label) => rows.find((row) => row.textContent.includes(label))
+    ?.querySelector(".score-val")?.textContent;
+  return chip?.textContent.toLowerCase().includes("grounded") &&
+    reading("Context precision")?.includes("—") &&
+    reading("Context recall")?.includes("—");
+});
+check("mobile partial: faithful/relevant state remains honest without a partial label",
+  (await m10Chip.innerText()).toLowerCase().includes("grounded") &&
+    await selectedTab("chat") && await badgeHidden(), await m10Chip.innerText());
+check("mobile partial: missing precision and recall are not settled",
+  (await chipOf(pRow, "Context precision")).includes("—") &&
+    (await chipOf(pRow, "Context recall")).includes("—") &&
+    await badgeHidden(),
+  `${await chipOf(pRow, "Context precision")} / ${await chipOf(pRow, "Context recall")}`);
+
+// Release the queued settled response while the reader is STILL on CHAT. The
+// gate is explicit, so this cannot race the tab. This is the pin for the
+// delayed grade path: a settled grade arriving mid-read must not yank the
+// reader to Eval — it must raise exactly one unread marker instead.
+releaseM10Settled();
+// Do not key this wait off the verdict chip: "grounded" is also the partial
+// generation verdict. A non-dash retrieval reading proves the queued grade
+// has settled.
+await page.waitForFunction(() => {
+  const rows = [...document.querySelectorAll("#eval-scorecard .score-row")];
+  const reading = (label) => rows.find((row) => row.textContent.includes(label))
+    ?.querySelector(".score-val")?.textContent;
+  const precision = reading("Context precision");
+  const recall = reading("Context recall");
+  return precision && recall && !precision.includes("—") && !recall.includes("—");
+});
+check("mobile settled arrival: reader stays on CHAT with one Eval marker",
+  await selectedTab("chat") && !(await badgeHidden()) &&
+    (await evalBadge().innerText()) === "1",
+  `tab=${await selectedTab("chat")} badge=${await evalBadge().innerText()}`);
+
+// Opening Eval consumes the marker; the settled readings are already on the
+// scorecard under the selected answer.
+await mobileTab("eval").click();
+await page.waitForTimeout(100);
+check("mobile Eval opening clears its attention marker",
+  await selectedTab("eval") && await badgeHidden());
+check("mobile settled: retrieval readings arrive under the selected answer",
+  (await chipOf(pRow, "Context precision")).includes("73%") &&
+    (await chipOf(pRow, "Context recall")).includes("52%"),
+  `${await chipOf(pRow, "Context precision")} / ${await chipOf(pRow, "Context recall")}`);
+
+// A settled reading that arrives while Eval is ALREADY selected is consumed in
+// place: it must not create a marker for a pane the reader is looking at. This
+// ask drives the hidden-composer fallback submission path while it is at it.
+await askOnMobile("m11", "Ask again after the scorecard check.");
+check("mobile settled while Eval selected: consumed in place, no marker",
+  await selectedTab("eval") && await badgeHidden(),
+  `tab=${await selectedTab("eval")} badge=${await evalBadge().innerText()}`);
+
+// Terminal backend states are not retryable and are shown as data/status gaps,
+// never as a false binary verdict or an endless pending chip. They are asked
+// from CHAT deliberately: on EVAL the unread reset would mask a broken
+// notification predicate, while from CHAT a false positive would raise the
+// marker and fail these checks. The hidden-composer fallback is already
+// exercised above by m11.
+await mobileTab("chat").click();
+await askOnMobile("m12", "Show an unavailable grading result.");
+check("mobile grade_unavailable is terminal, explained, and unannounced",
+  (await page.locator('.msg[data-message-id="m12"] .eval-judge-error').innerText())
+    .toLowerCase().includes("judge disabled") && await badgeHidden());
+await askOnMobile("m13", "Show a precision data gap.");
+check("mobile precision_data_gap is terminal without a retry marker",
+  (await page.locator('.msg[data-message-id="m13"] .eval-state').innerText())
+    .toLowerCase().includes("grounded") &&
+    (await chipOf(pRow, "Context precision")).includes("—") &&
+    await badgeHidden());
+await askOnMobile("m15", "Show an exhausted grading run.");
+check("mobile grade_exhausted is terminal, explained, and unannounced",
+  (await page.locator('.msg[data-message-id="m15"] .eval-judge-error').innerText())
+    .toLowerCase().includes("unavailable") && await badgeHidden());
+// One final ordinary ask. Its visible composer and settled response must
+// create exactly one unread Eval marker.
+await askOnMobile("m14", "Ask once more from Chat for the unread marker.");
+check("mobile ordinary ask: settled arrival creates exactly one Eval marker",
+  await selectedTab("chat") && !(await badgeHidden()) &&
+    (await evalBadge().innerText()) === "1",
+  `tab=${await selectedTab("chat")} badge=${await evalBadge().innerText()}`);
+check("mobile asks consume exactly one response each",
+  mobileAskCalls.length === 6 && mobileAskCalls.every((call, i) =>
+    call.response?.message_id === ["m10", "m11", "m12", "m13", "m15", "m14"][i]),
+  mobileAskCalls.map((call) => call.response?.message_id || "no response").join(", "));
+
+// Chip navigation is the intentional compare affordance: it may move from the
+// reader tab to Eval, unlike a deferred response which must never do so.
+await page.locator('.msg[data-message-id="m14"] .eval-chip').click();
+await page.waitForTimeout(100);
+check("mobile direct scorecard chip navigation opens Eval",
+  await selectedTab("eval") &&
+    (await chipOf(pRow, "Context precision")).includes("76%"));
 
 // ---------- layout: no horizontal overflow at desktop and 375px ----------
 for (const [w, h, name] of [[1600, 900, "desktop"], [375, 812, "375px"]]) {

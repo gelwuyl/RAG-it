@@ -30,6 +30,7 @@ const state = {
   deepSearch: true,
   webSearch: false,
   answerEvalId: null,   // which answer's readings the benchmark bars show
+  evalUnread: 0,        // readings that arrived while the phone was on another tab
   webAvailable: false,   // server-reported: needs a key AND an account
   // Documents currently in the workspace. Only the COUNT is kept:
   // it is what the empty conversation needs to say something true, and holding
@@ -1913,8 +1914,22 @@ function gradeNeedsRetry(evalData) {
   if (evalData.pending) return true;
   // Older partial results were mistakenly stored as final. They are safe to
   // resume because the server preserves completed booleans and marks exhaustion.
-  return Object.hasOwn(evalData, "faithful") &&
-    (evalData.faithful == null || evalData.relevant == null);
+  // Precision has one intentional terminal gap: answers without their ordered
+  // passages cannot ever finish that reading, so do not keep retrying it. The
+  // other three readings, including recall, still make a partial grade live.
+  const missing = ["faithful", "relevant", "context_precision", "context_recall"]
+    .some((field) => evalData[field] == null &&
+      !(field === "context_precision" && evalData.precision_data_gap));
+  return Object.hasOwn(evalData, "faithful") && missing;
+}
+
+// Retryability and notification eligibility are deliberately separate. A
+// terminal grading/status gap still needs to redraw its honest dash/error state,
+// but it is not a new reading for the mobile Eval tab to announce.
+function gradeCanNotify(evalData) {
+  return !!evalData && !gradeNeedsRetry(evalData) &&
+    !evalData.grade_exhausted && !evalData.grade_unavailable &&
+    !evalData.precision_data_gap;
 }
 
 async function openChat(chatId) {
@@ -2345,7 +2360,7 @@ function buildEvalBlock(evalData, evalLine) {
 
 // Put one answer's readings on the scorecards and mark which chip they came
 // from, so the pane is never ambiguous about whose numbers are on screen.
-function showAnswerOnScorecard(evalData, chip, messageId = null) {
+function showAnswerOnScorecard(evalData, chip, messageId = null, deferred = false) {
   state.answerEval = evalData;
   // WHICH answer owns the bars, held in state rather than only as a class on a
   // chip. The class alone was the bug behind "grading…" sticking forever: the
@@ -2367,9 +2382,15 @@ function showAnswerOnScorecard(evalData, chip, messageId = null) {
   // the benchmark detail carries this answer's gold readings when it has any.
   renderRagasScorecard();
   if (data) renderScorecard(data.metrics || {}, data.mode);
-  // On a phone the panes are tabs, so the bars this just updated are on a
-  // screen the reader cannot see. Bring them to it.
-  if (MOBILE.matches) setMobileTab("eval");
+  // A delayed judge response must not interrupt a reader mid-answer. Mark the
+  // tab instead; an intentional compare still opens the scorecard as before.
+  if (MOBILE.matches) {
+    if (deferred) {
+      // Partial/pending responses redraw the selected answer but are not a new
+      // reading yet; only a settled judge response earns the tab nudge.
+      if (gradeCanNotify(evalData)) noteEvalReadings();
+    } else setMobileTab("eval");
+  }
 }
 
 // Fetch the verdicts for an answer already on screen, and fold them in.
@@ -2412,9 +2433,13 @@ async function fetchGrade(chatId, messageId, msgEl) {
 
     // Re-find the message rather than trusting the element we started with:
     // ten seconds is long enough for a chat refresh to have replaced it.
+    const notify = gradeCanNotify(graded);
     const el =
       document.querySelector(`.msg[data-message-id="${messageId}"]`) || msgEl;
-    if (!el || !el.isConnected) return;
+    if (!el || !el.isConnected) {
+      if (notify) noteEvalReadings();
+      return;
+    }
 
     // Does this answer own the bars? Asked of STATE, not of the DOM. A class on
     // a chip does not survive the thread re-render that follows every answer,
@@ -2431,7 +2456,11 @@ async function fetchGrade(chatId, messageId, msgEl) {
     // reader has since asked something else, updating the pane underneath them
     // would label a newer answer with an older answer's verdict.
     if (ownsBars) {
-      showAnswerOnScorecard(graded, el.querySelector(".eval-chip"), messageId);
+      showAnswerOnScorecard(
+        graded, el.querySelector(".eval-chip"), messageId, true,
+      );
+    } else if (notify) {
+      noteEvalReadings();
     }
   } catch (err) {
     // A failed grade leaves the answer ungraded, which is a state the UI
@@ -2516,7 +2545,7 @@ $("ask-form").onsubmit = async (e) => {
     // lookup, which would break the moment anything else is appended after it.
     if (result.eval) {
       showAnswerOnScorecard(
-        result.eval, msg?.querySelector(".eval-chip"), result.message_id || null,
+        result.eval, msg?.querySelector(".eval-chip"), result.message_id || null, true,
       );
     }
     // Not awaited: the answer is already readable, and the reader is free to
@@ -3173,19 +3202,41 @@ function applyMobileTab() {
 function setMobileTab(name) {
   if (!TABS[name]) return;
   mobileTab = name;
+  if (name === "eval") state.evalUnread = 0;
   applyMobileTab();
+  paintTabCounts();
 }
 
 for (const btn of document.querySelectorAll(".tab")) {
   btn.onclick = () => setMobileTab(btn.dataset.tab);
 }
 
+// A deferred reading is useful only as a nudge: it must never change the pane
+// under a reader. Opening Eval consumes all readings that arrived elsewhere.
+function noteEvalReadings() {
+  if (!MOBILE.matches) return;
+  if (mobileTab === "eval") state.evalUnread = 0;
+  else state.evalUnread += 1;
+  paintTabCounts();
+}
+
 // Counts on the tabs, so switching away from Sources does not mean losing track
 // of what is in it. Called from the same refreshes that paint the pane heads.
 function paintTabCounts() {
+  // Eval has no static count because its badge is meaningful only after a judge
+  // response arrives. Create it here so the existing count styling and pattern
+  // apply without changing the shared tab markup.
+  const evalTab = document.querySelector('.tab[data-tab="eval"]');
+  if (evalTab && !$("tab-count-eval")) {
+    const count = document.createElement("span");
+    count.id = "tab-count-eval";
+    count.className = "tab-count hidden";
+    evalTab.appendChild(count);
+  }
   const pairs = [
     ["tab-count-sources", state.sourceCount],
     ["tab-count-chats", state.chats.length],
+    ["tab-count-eval", state.evalUnread],
   ];
   for (const [id, n] of pairs) {
     const el = $(id);
